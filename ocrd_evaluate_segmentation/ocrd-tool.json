@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "git_url": "https://github.com/OCR-D/ocrd_evaluate_segmentation",
+  "tools": {
+    "ocrd-evaluate-segmentation": {
+      "executable": "ocrd-evaluate-segmentation",
+      "categories": ["Image preprocessing"],
+      "description": "Evaluate regions",
+      "input_file_grp": [
+        "OCR-D-IMG",
+        "OCR-D-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-EVAL-BLOCK"
+      ],
+      "steps": ["preprocessing/optimization/deskewing"]
+    }
+  }
+}
