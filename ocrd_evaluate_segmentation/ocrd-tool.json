@@ -13,7 +13,14 @@
       "output_file_grp": [
         "OCR-D-EVAL-BLOCK"
       ],
-      "steps": ["preprocessing/optimization/deskewing"]
+      "steps": ["preprocessing/optimization/deskewing"],
+      "parameters": {
+        "plausibilize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Modify the region segmentation to make it (more) plausible"
+        }
+      }
     }
   }
 }

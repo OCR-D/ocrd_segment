@@ -41,6 +41,7 @@ class EvaluateSegmentation(Processor):
         Return information on the plausibility of the segmentation into
         regions on the logging level.
         """
+        plausibilize = self.parameter['plausibilize']
         
         for (n, input_file) in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
@@ -58,20 +59,48 @@ class EvaluateSegmentation(Processor):
                                                                      value=self.parameter[name])
                                                            for name in self.parameter.keys()])]))
             page = pcgts.get_Page()
-            
-            for region1 in page.get_TextRegion():
-                for region2 in page.get_TextRegion():
-                    if region1.id == region2.id:
-                        continue
-                    LOG.info('Comparing regions "%s" and "%s"', region1.id, region2.id)
-                    region_poly1 = Polygon(polygon_from_points(region1.get_Coords().points))
-                    region_poly2 = Polygon(polygon_from_points(region2.get_Coords().points))
-                    LOG.info('Intersection %i', region_poly1.intersects(region_poly2))
-                    LOG.info('Containment %i', region_poly1.contains(region_poly2))
-                    if region_poly1.intersects(region_poly2):
-                        LOG.info('Area 1 %d', region_poly1.area)
-                        LOG.info('Area 2 %d', region_poly2.area)
-                        LOG.info('Area intersect %d', region_poly1.intersection(region_poly2).area)
+
+            regions = page.get_TextRegion()
+
+            mark_for_deletion = set()
+            mark_for_merging = set()
+
+            for i in range(0,len(regions)):
+                for j in range(i+1,len(regions)):
+                    LOG.info('Comparing regions "%s" and "%s"', regions[i].id, regions[j].id)
+                    region_poly1 = Polygon(polygon_from_points(regions[i].get_Coords().points))
+                    region_poly2 = Polygon(polygon_from_points(regions[j].get_Coords().points))
+                    
+                    LOG.debug('Checking for equality ...')
+                    equality = region_poly1.almost_equals(region_poly2)
+                    if equality:
+                        LOG.warn('Warning: regions %s and %s cover the same area.' % (regions[i].id, regions[j].id))
+                        mark_for_deletion.add(j)
+
+                    LOG.debug('Checking for containment ...')
+                    containment_r = region_poly1.contains(region_poly2)
+                    containment_l = region_poly2.contains(region_poly1)
+                    if containment_r:
+                        LOG.warn('Warning: %s contains %s' % (regions[i].id, regions[j].id))
+                        mark_for_deletion.add(j)
+                    if containment_l:
+                        LOG.warn('Warning: %s contains %s' % (regions[j].id, regions[i].id))
+                        mark_for_deletion.add(i)
+
+            if plausibilize:
+                new_regions = []
+                for i in range(0,len(regions)):
+                    if not i in mark_for_deletion:
+                        new_regions.append(regions[i])
+                page.set_TextRegion(new_regions)
+
+
+                    #LOG.info('Intersection %i', region_poly1.intersects(region_poly2))
+                    #LOG.info('Containment %i', region_poly1.contains(region_poly2))
+                    #if region_poly1.intersects(region_poly2):
+                    #    LOG.info('Area 1 %d', region_poly1.area)
+                    #    LOG.info('Area 2 %d', region_poly2.area)
+                    #    LOG.info('Area intersect %d', region_poly1.intersection(region_poly2).area)
                         
 
             # Use input_file's basename for the new file -
