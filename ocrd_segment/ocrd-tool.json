@@ -5,7 +5,7 @@
     "ocrd-segment-repair": {
       "executable": "ocrd-segment-repair",
       "categories": ["Image preprocessing"],
-      "description": "Evaluate and repair region segmentation",
+      "description": "Analyse and repair region segmentation",
       "input_file_grp": [
         "OCR-D-IMG",
         "OCR-D-SEG-BLOCK"
