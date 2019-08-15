@@ -1,11 +1,11 @@
 {
   "version": "0.0.1",
-  "git_url": "https://github.com/OCR-D/ocrd_evaluate_segmentation",
+  "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
-    "ocrd-evaluate-segmentation": {
-      "executable": "ocrd-evaluate-segmentation",
+    "ocrd-segment-repair": {
+      "executable": "ocrd-segment-repair",
       "categories": ["Image preprocessing"],
-      "description": "Evaluate regions",
+      "description": "Analyse and repair region segmentation",
       "input_file_grp": [
         "OCR-D-IMG",
         "OCR-D-SEG-BLOCK"

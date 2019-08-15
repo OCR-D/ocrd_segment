@@ -21,15 +21,15 @@ from .config import OCRD_TOOL
 
 from shapely.geometry import Polygon
 
-TOOL = 'ocrd-evaluate-segmentation'
-LOG = getLogger('processor.EvaluateSegmentation')
+TOOL = 'ocrd-segment-repair'
+LOG = getLogger('processor.RepairSegmentation')
 
-class EvaluateSegmentation(Processor):
+class RepairSegmentation(Processor):
 
     def __init__(self, *args, **kwargs):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
-        super(EvaluateSegmentation, self).__init__(*args, **kwargs)
+        super(RepairSegmentation, self).__init__(*args, **kwargs)
 
 
     def process(self):

@@ -2,20 +2,20 @@
 """
 Installs:
 
-    - ocrd-evaluate-segmentation
+    - ocrd-segment-repair
 """
 import codecs
 
 from setuptools import setup, find_packages
 
 setup(
-    name='ocrd_evaluate_segmentation',
+    name='ocrd_segment',
     version='0.0.1',
-    description='Segmentation evaluation',
+    description='Page segmentation and segmentation evaluation',
     long_description=codecs.open('README.md', encoding='utf-8').read(),
     author='Konstantin Baierer, Kay-Michael Würzner, Robert Sachunsky',
     author_email='unixprog@gmail.com, wuerzner@gmail.com, sachunsky@informatik.uni-leipzig.de',
-    url='https://github.com/OCR-D/ocrd_evaluate_segmentation',
+    url='https://github.com/OCR-D/ocrd_segment',
     license='Apache License 2.0',
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=open('requirements.txt').read().split('\n'),
@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'ocrd-evaluate-segmentation=ocrd_evaluate_segmentation.cli:ocrd_evaluate_segmentation',
+            'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
         ]
     },
 )
