@@ -13,7 +13,7 @@ from ocrd_models.ocrd_page import (
     CoordsType,
     LabelType, LabelsType,
     MetadataItemType,
-    TextLineType,
+    RegionRefIndexedType,
     to_xml
 )
 
@@ -89,9 +89,20 @@ class RepairSegmentation(Processor):
 
             if plausibilize:
                 new_regions = []
+                reading_order = {}
+                # the reading order does not have to include all regions
+                # but it may include all types of regions!
+                for elem in page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed():
+                    reading_order[elem.get_regionRef()] = elem
                 for i in range(0,len(regions)):
                     if not i in mark_for_deletion:
                         new_regions.append(regions[i])
+                    else:
+                        if regions[i].get_id() in reading_order:
+                            page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed().remove(reading_order[regions[i].get_id()])
+                page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed().sort(key=RegionRefIndexedType.get_index)
+                for i in range(0, len(page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed())):
+                    page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed()[i].set_index(i)
                 page.set_TextRegion(new_regions)
 
 
