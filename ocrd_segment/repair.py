@@ -101,6 +101,8 @@ class RepairSegmentation(Processor):
                         if regions[i].get_id() in reading_order:
                             page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed().remove(reading_order[regions[i].get_id()])
                 page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed().sort(key=RegionRefIndexedType.get_index)
+
+                # re-index the reading order!
                 for i in range(0, len(page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed())):
                     page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed()[i].set_index(i)
                 page.set_TextRegion(new_regions)
