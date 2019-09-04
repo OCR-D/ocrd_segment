@@ -6,6 +6,7 @@ from ocrd import Processor
 from ocrd_utils import (
     getLogger, concat_padded,
     polygon_from_points,
+    points_from_polygon,
     MIMETYPE_PAGE
 )
 from ocrd_modelfactory import page_from_file
@@ -20,6 +21,7 @@ from ocrd_models.ocrd_page import (
 from .config import OCRD_TOOL
 
 from shapely.geometry import Polygon
+from shapely.ops import cascaded_union
 
 TOOL = 'ocrd-segment-repair'
 LOG = getLogger('processor.RepairSegmentation')
@@ -41,6 +43,7 @@ class RepairSegmentation(Processor):
         Return information on the plausibility of the segmentation into
         regions on the logging level.
         """
+        sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
         
         for (n, input_file) in enumerate(self.input_files):
@@ -62,6 +65,22 @@ class RepairSegmentation(Processor):
 
             regions = page.get_TextRegion()
 
+            #
+            # sanitize regions
+            #
+            if sanitize:
+                for i in range(0,len(regions)):
+                    region_poly = Polygon()
+                    lines = regions[i].get_TextLine()
+                    poly_lines = []
+                    for line in lines:
+                        poly_lines.append(Polygon(polygon_from_points(line.get_Coords().points)))
+                    region_poly = cascaded_union(poly_lines).convex_hull
+                    regions[i].get_Coords().points = points_from_polygon(region_poly.exterior.coords)
+                
+            #
+            # plausibilize segmentation
+            #
             mark_for_deletion = set()
             mark_for_merging = set()
 
