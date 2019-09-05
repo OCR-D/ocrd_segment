@@ -21,7 +21,11 @@ from ocrd_models.ocrd_page import (
 from .config import OCRD_TOOL
 
 from shapely.geometry import Polygon
-from shapely.ops import cascaded_union
+from shapely.geometry import MultiPolygon
+from shapely.geometry import CAP_STYLE
+from shapely.geometry import JOIN_STYLE
+from shapely.ops import unary_union
+from shapely.affinity import scale
 
 TOOL = 'ocrd-segment-repair'
 LOG = getLogger('processor.RepairSegmentation')
@@ -70,13 +74,20 @@ class RepairSegmentation(Processor):
             #
             if sanitize:
                 for i in range(0,len(regions)):
+                    LOG.info('Sanitizing region "%s"', regions[i].id)
                     region_poly = Polygon()
                     lines = regions[i].get_TextLine()
-                    poly_lines = []
-                    for line in lines:
-                        poly_lines.append(Polygon(polygon_from_points(line.get_Coords().points)))
-                    region_poly = cascaded_union(poly_lines).convex_hull
-                    regions[i].get_Coords().points = points_from_polygon(region_poly.exterior.coords)
+                    poly_from_lines = Polygon()
+                    for j in range(0,len(lines)):
+                        scaling_factor = 1
+                        poly_from_line = Polygon(polygon_from_points(lines[j].get_Coords().points))
+                        poly_from_lines_chk = poly_from_lines.union(poly_from_line)
+                        while isinstance(poly_from_lines_chk, MultiPolygon):
+                            scaling_factor += 0.1
+                            LOG.debug("Gap in region %s between lines %s and %s. Scaling line %s with factor %f", regions[i].id, lines[j-1].id, lines[j].id, lines[j].id, scaling_factor)
+                            poly_from_lines_chk = poly_from_lines.union(scale(poly_from_line,yfact=scaling_factor))
+                        poly_from_lines = poly_from_lines_chk
+                    regions[i].get_Coords().points = points_from_polygon(poly_from_lines.exterior.coords)
                 
             #
             # plausibilize segmentation
