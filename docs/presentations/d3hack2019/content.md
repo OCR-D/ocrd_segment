@@ -21,7 +21,7 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 
 # The task
 
-<center><img src="img/ex1.png" style="position:absolute;top:200px;left:0;;height:1200px" /></center>
+<center><img src="img/ex1.png" style="position:absolute;top:200px;left:0;height:1200px" /></center>
 
 ---
 
