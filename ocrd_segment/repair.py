@@ -84,8 +84,12 @@ class RepairSegmentation(Processor):
                         poly_from_lines_chk = poly_from_lines.union(poly_from_line)
                         while isinstance(poly_from_lines_chk, MultiPolygon):
                             scaling_factor += 0.1
-                            LOG.debug("Gap in region %s between lines %s and %s. Scaling line %s with factor %f", regions[i].id, lines[j-1].id, lines[j].id, lines[j].id, scaling_factor)
-                            poly_from_lines_chk = poly_from_lines.union(scale(poly_from_line,yfact=scaling_factor))
+                            if scaling_factor > 2.0:
+                                LOG.debug("Gap in region %s between lines %s and %s. Scaling failed, falling back to convex_hull!", regions[i].id, lines[j-1].id, lines[j].id)
+                                poly_from_lines_chk = poly_from_lines.union(poly_from_line).convex_hull
+                            else:
+                                LOG.debug("Gap in region %s between lines %s and %s. Scaling line %s with factor %f", regions[i].id, lines[j-1].id, lines[j].id, lines[j].id, scaling_factor)
+                                poly_from_lines_chk = poly_from_lines.union(scale(poly_from_line,yfact=scaling_factor))
                         poly_from_lines = poly_from_lines_chk
                     regions[i].get_Coords().points = points_from_polygon(poly_from_lines.exterior.coords)
                 
