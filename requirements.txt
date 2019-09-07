@@ -2,7 +2,9 @@ ocrd >= 1.0.0b11
 click
 shapely
 
+autopep8
 fastai
 jupyter
 jupyter_nbextensions_configurator
 ipykernel
+seaborn
