@@ -1,3 +1,8 @@
 ocrd >= 1.0.0b11
 click
 shapely
+
+fastai
+jupyter
+jupyter_nbextensions_configurator
+ipykernel
