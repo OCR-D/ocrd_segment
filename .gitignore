@@ -110,3 +110,4 @@ venv.bak/
 # Input files
 /input
 /downscale*
+/masks*
