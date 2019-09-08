@@ -5,7 +5,8 @@ shapely
 autopep8
 display_xml
 fastai
+ipykernel
 jupyter
 jupyter_nbextensions_configurator
-ipykernel
+loguru
 seaborn
