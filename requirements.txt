@@ -3,6 +3,7 @@ click
 shapely
 
 autopep8
+display_xml
 fastai
 jupyter
 jupyter_nbextensions_configurator
