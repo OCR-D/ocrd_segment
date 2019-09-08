@@ -4,6 +4,7 @@ shapely
 
 autopep8
 display_xml
+dvc[ssh]
 fastai
 ipykernel
 jupyter
