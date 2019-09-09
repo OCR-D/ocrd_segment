@@ -3,7 +3,11 @@
 Installs:
 
     - ocrd-segment-repair
+<<<<<<< HEAD
     - ocrd-segment-extract-gt
+=======
+    - ocrd-segment-evaluate
+>>>>>>> upstream/master
 """
 import codecs
 
@@ -11,7 +15,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ocrd_segment',
-    version='0.0.1',
+    version='0.0.2',
     description='Page segmentation and segmentation evaluation',
     long_description=codecs.open('README.md', encoding='utf-8').read(),
     author='Konstantin Baierer, Kay-Michael Würzner, Robert Sachunsky',
@@ -26,7 +30,11 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
+<<<<<<< HEAD
             'ocrd-segment-extract-gt=ocrd_segment.cli:ocrd_segment_extract_gt',
+=======
+            'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
+>>>>>>> upstream/master
         ]
     },
 )
