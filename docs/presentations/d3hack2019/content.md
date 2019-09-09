@@ -30,7 +30,7 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 1. 180,000 annotated pages from the periodical *Die Grenzboten* (1841-1922)
   - Homogeneous layout
   - Completely annotated on page **and** volume level
-2. 25,000 annotated pages from XXX volumes of the *German Text Archive* (1506-1899)
+2. 25,000 annotated pages from 3900 volumes of the *German Text Archive* (1506-1899)
   - Heterogeneous layout
   - Incompletely annotated on page **and** volume level
 3. 1,000 annotated pages from 230 volumes of the *German Text Archive* (????-????)
@@ -43,10 +43,11 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 
 Build a data-driven framework with neural networks which performs the task of page segmentation and segment classification.
 
-- Level of representation (pixel, coordinates ...)?
+- Level of representation (pixel, bbox/polygon coordinates)?
 - General architecture (one or multiple classifiers)?
 - Network architecture?
-- Preprocessing and/or augmentation methods?
+- Postprocessing (morphology, component analysis)?
+- Preprocessing (binarization, deskewing, denoising, dewarping) and/or augmentation methods?
 
 ---
 
@@ -54,7 +55,7 @@ Build a data-driven framework with neural networks which performs the task of pa
 
 - Robert
 
-  is a XXX from Dresden who primarily works on OCR and in particular on OCR post correction.
+  is a computational linguist from Dresden with backgrounds in speech signal processing and machine translation who works on OCR.
 
 - Janek
 
