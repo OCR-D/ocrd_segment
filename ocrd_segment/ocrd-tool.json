@@ -21,6 +21,18 @@
           "description": "Modify the region segmentation to make it (more) plausible"
         }
       }
+    },
+    "ocrd-segment-extract-gt": {
+      "executable": "ocrd-segment-extract-gt",
+      "categories": ["Image preprocessing"],
+      "description": "Extract region segmentation",
+      "input_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG"
+      ],
+      "steps": ["preprocessing/optimization/deskewing"]
     }
   }
 }

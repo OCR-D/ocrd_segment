@@ -3,6 +3,7 @@
 Installs:
 
     - ocrd-segment-repair
+    - ocrd-segment-extract-gt
 """
 import codecs
 
@@ -25,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
+            'ocrd-segment-extract-gt=ocrd_segment.cli:ocrd_segment_extract_gt',
         ]
     },
 )
