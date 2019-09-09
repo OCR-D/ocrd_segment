@@ -44,6 +44,7 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 Build a data-driven framework with neural networks which performs the task of page segmentation and segment classification.
 
 - Level of representation (pixel, bbox/polygon coordinates)?
+- Image resolution (downscaling vs. exact coordinates)?
 - General architecture (one or multiple classifiers)?
 - Network architecture?
 - Postprocessing (morphology, component analysis)?
