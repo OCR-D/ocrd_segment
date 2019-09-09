@@ -65,3 +65,19 @@ Build a data-driven framework with neural networks which performs the task of pa
 - Kay
 
   is a computational linguist from Dresden who works on OCR and is interested in natural language processing in general.
+
+---
+
+# Our project
+
+- DFG-funded initiative OCR-D
+  + Improvement of methods and tooling for OCR of historical printings
+  + Coordination project + 8 module projects
+  + Working on
+    * Format standards
+    * Ground Truth data
+    * Different processing stages of layout and text recognition
+- Software stack at [github.com/OCR-D](https://github.com/OCR-D)
+  + Specifications
+  + Base API
+  + Sample processors ([ocrd_segment](https://github.com/OCR-D/ocrd_segment) for this workshop)
