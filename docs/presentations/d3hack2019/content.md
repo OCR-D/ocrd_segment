@@ -21,21 +21,21 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 
 # The task
 
-<center><img src="img/ex1.png" style="height:600px" /></center>
+<center><img src="img/ex1.png" style="height:500px" /></center>
 
 ---
 
 # The data
 
 1. 180,000 annotated pages from the periodical *Die Grenzboten* (1841-1922)
-  - Homogeneous layout
-  - Completely annotated on page **and** volume level
+    - Homogeneous layout
+    - Completely annotated on page **and** volume level
 2. 25,000 annotated pages from 3900 volumes of the *German Text Archive* (1506-1899)
-  - Heterogeneous layout
-  - Incompletely annotated on page **and** volume level
+    - Heterogeneous layout
+    - Incompletely annotated on page **and** volume level
 3. 1,000 annotated pages from 230 volumes of the *German Text Archive* (????-????)
-  - Heterogeneous layout
-  - Completely annotated on page (but not on volume) level
+    - Heterogeneous layout
+    - Completely annotated on page (but not on volume) level
 
 ---
 
@@ -71,13 +71,13 @@ Build a data-driven framework with neural networks which performs the task of pa
 # Our project
 
 - DFG-funded initiative OCR-D
-  + Improvement of methods and tooling for OCR of historical printings
-  + Coordination project + 8 module projects
-  + Working on
-    * Format standards
-    * Ground Truth data
-    * Different processing stages of layout and text recognition
+    + Improvement of methods and tooling for OCR of historical printings
+    + Coordination project + 8 module projects
+    + Working on
+        * Format standards
+        * Ground Truth data
+        * Different processing stages of layout and text recognition
 - Software stack at [github.com/OCR-D](https://github.com/OCR-D)
-  + Specifications
-  + Base API
-  + Sample processors ([ocrd_segment](https://github.com/OCR-D/ocrd_segment) for this workshop)
+    + Specifications
+    + Base API
+    + Sample processors ([ocrd_segment](https://github.com/OCR-D/ocrd_segment) for this workshop)
