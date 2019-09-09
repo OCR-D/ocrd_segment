@@ -15,6 +15,11 @@
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
+        "sanitize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shrink and/or expand a region in such a way that it coordinates include those of all its lines"
+        },
         "plausibilize": {
           "type": "boolean",
           "default": false,
