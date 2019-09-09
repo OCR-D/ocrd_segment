@@ -30,10 +30,10 @@ Janek Schleicher, Robert Sachunsky, Kay-Michael Würzner
 1. 180,000 annotated pages from the periodical *Die Grenzboten* (1841-1922)
     - Homogeneous layout
     - Completely annotated on page **and** volume level
-2. 25,000 annotated pages from 3900 volumes of the *German Text Archive* (1506-1899)
+2. 25,000 annotated pages from 3900 volumes of the *German Text Archive* (1506-1905)
     - Heterogeneous layout
     - Incompletely annotated on page **and** volume level
-3. 1,000 annotated pages from 230 volumes of the *German Text Archive* (????-????)
+3. 1,000 annotated pages from 230 volumes of the *German Text Archive* (1738-1905)
     - Heterogeneous layout
     - Completely annotated on page (but not on volume) level
 
