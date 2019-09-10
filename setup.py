@@ -3,11 +3,8 @@
 Installs:
 
     - ocrd-segment-repair
-<<<<<<< HEAD
     - ocrd-segment-extract-gt
-=======
     - ocrd-segment-evaluate
->>>>>>> upstream/master
 """
 import codecs
 
@@ -30,11 +27,8 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
-<<<<<<< HEAD
             'ocrd-segment-extract-gt=ocrd_segment.cli:ocrd_segment_extract_gt',
-=======
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
->>>>>>> upstream/master
         ]
     },
 )
