@@ -45,7 +45,22 @@ class ExtractGT(Processor):
         super(ExtractGT, self).__init__(*args, **kwargs)
 
     def process(self):
-        """
+        """Extract region images and coordinates to files not managed in the workspace.
+        
+        Open and deserialize PAGE input files and their respective images,
+        then iterate over the element hierarchy down to the region level.
+        
+        Get all regions with their types and coordinates relative to the page
+        (possibly cropped and/or deskewed). Extract the page image, both in
+        binarized and non-binarized form. In addition, create a page image
+        which color-codes all regions. Create a JSON file with region types and
+        coordinates.
+        
+        Write all files in the directory of the output file group, named like so:
+        * ID + '.png': raw image
+        * ID + '.bin.png': binarized image
+        * ID + '.dbg.png': debug image
+        * ID + '.json': region coordinates
         """
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
@@ -60,13 +75,13 @@ class ExtractGT(Processor):
                                                        file_id,
                                                        page_id=page_id,
                                                        file_grp=self.output_file_grp)
-            page_image, page_xywh, _ = self.workspace.image_from_page(
-                page, page_id)
-            self.workspace.save_image_file(page_image,
+            page_image_bin, page_xywh, _ = self.workspace.image_from_page(
+                page, page_id, feature_selector='binarized')
+            self.workspace.save_image_file(page_image_bin,
                                            file_id + '.bin',
                                            page_id=page_id,
                                            file_grp=self.output_file_grp)
-            debug_image = PIL.Image.new(mode='RGB', size=page_image.size, color=0)
+            page_image_dbg = PIL.Image.new(mode='RGB', size=page_image.size, color=0)
             regions = { 'text': page.get_TextRegion(),
                         'table': page.get_TableRegion(),
                         'chart': page.get_ChartRegion(),
@@ -89,11 +104,11 @@ class ExtractGT(Processor):
                         { 'type': rtype,
                           'coords': coords
                     })
-                    PIL.ImageDraw.Draw(debug_image).polygon(list(map(tuple,coords)), fill=CLASSES[rtype])
-                    PIL.ImageDraw.Draw(debug_image).line(list(map(tuple,coords + [coords[0]])), 
-                                                         fill=CLASSES['border'], width=3)
-            self.workspace.save_image_file(debug_image,
-                                           file_id + '.debug',
+                    PIL.ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple,coords)), fill=CLASSES[rtype])
+                    PIL.ImageDraw.Draw(page_image_dbg).line(list(map(tuple,coords + [coords[0]])), 
+                                                            fill=CLASSES['border'], width=3)
+            self.workspace.save_image_file(page_image_dbg,
+                                           file_id + '.dbg',
                                            page_id=page_id,
                                            file_grp=self.output_file_grp)
             file_path = file_path.replace('.png', '.json')
