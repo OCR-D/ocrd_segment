@@ -5,8 +5,11 @@ import os.path
 from ocrd import Processor
 from ocrd_utils import (
     getLogger, concat_padded,
+    coordinates_for_segment,
+    coordinates_of_segment,
     polygon_from_points,
     points_from_polygon,
+    xywh_from_polygon,
     MIMETYPE_PAGE
 )
 from ocrd_modelfactory import page_from_file
@@ -20,12 +23,11 @@ from ocrd_models.ocrd_page import (
 
 from .config import OCRD_TOOL
 
+from skimage import draw
+from scipy.ndimage import filters
+import cv2
+import numpy as np
 from shapely.geometry import Polygon
-from shapely.geometry import MultiPolygon
-from shapely.geometry import CAP_STYLE
-from shapely.geometry import JOIN_STYLE
-from shapely.ops import unary_union
-from shapely.affinity import scale
 
 TOOL = 'ocrd-segment-repair'
 LOG = getLogger('processor.RepairSegmentation')
@@ -73,25 +75,61 @@ class RepairSegmentation(Processor):
             # sanitize regions
             #
             if sanitize:
-                for i in range(0,len(regions)):
-                    LOG.info('Sanitizing region "%s"', regions[i].id)
-                    region_poly = Polygon()
-                    lines = regions[i].get_TextLine()
-                    poly_from_lines = Polygon()
-                    for j in range(0,len(lines)):
-                        scaling_factor = 1
-                        poly_from_line = Polygon(polygon_from_points(lines[j].get_Coords().points))
-                        poly_from_lines_chk = poly_from_lines.union(poly_from_line)
-                        while isinstance(poly_from_lines_chk, MultiPolygon):
-                            scaling_factor += 0.1
-                            if scaling_factor > 2.0:
-                                LOG.debug("Gap in region %s between lines %s and %s. Scaling failed, falling back to convex_hull!", regions[i].id, lines[j-1].id, lines[j].id)
-                                poly_from_lines_chk = poly_from_lines.union(poly_from_line).convex_hull
-                            else:
-                                LOG.debug("Gap in region %s between lines %s and %s. Scaling line %s with factor %f", regions[i].id, lines[j-1].id, lines[j].id, lines[j].id, scaling_factor)
-                                poly_from_lines_chk = poly_from_lines.union(scale(poly_from_line,yfact=scaling_factor))
-                        poly_from_lines = poly_from_lines_chk
-                    regions[i].get_Coords().points = points_from_polygon(poly_from_lines.exterior.coords)
+                page_image, page_xywh, _ = self.workspace.image_from_page(
+                    page, page_id)
+                for i, region in enumerate(regions):
+                    LOG.info('Sanitizing region "%s"', region.id)
+                    region_image, region_xywh = self.workspace.image_from_segment(
+                        region, page_image, page_xywh)
+                    lines = region.get_TextLine()
+                    heights = []
+                    # get labels:
+                    region_mask = np.zeros((region_xywh['h'], region_xywh['w']), dtype=np.uint8)
+                    for j, line in enumerate(lines):
+                        line_polygon = coordinates_of_segment(line, region_image, region_xywh)
+                        heights.append(xywh_from_polygon(line_polygon)['h'])
+                        region_mask[draw.polygon(line_polygon[:, 1],
+                                                 line_polygon[:, 0],
+                                                 region_mask.shape)] = 1
+                    # estimate scale:
+                    scale = int(np.median(np.array(heights)))
+                    # close labels:
+                    region_mask = np.pad(region_mask, scale) # protect edges
+                    region_mask = filters.maximum_filter(region_mask, (scale, 1), origin=0)
+                    region_mask = filters.minimum_filter(region_mask, (scale, 1), origin=0)
+                    region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
+                    # find outer contour (parts):
+                    contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    # determine areas of parts:
+                    areas = [cv2.contourArea(contour) for contour in contours]
+                    total_area = sum(areas)
+                    if not total_area:
+                        # ignore if too small
+                        LOG.warning('Zero contour area in region "%s"', region.id)
+                        continue
+                    # pick contour and convert to absolute:
+                    region_polygon = None
+                    for i, contour in enumerate(contours):
+                        area = areas[i]
+                        if area / total_area < 0.1:
+                            LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
+                                        i, area, total_area, region.id)
+                            continue
+                        # simplify shape:
+                        polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                        if len(polygon) < 4:
+                            LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
+                                        i, region.id)
+                            continue
+                        if region_polygon is not None:
+                            LOG.error('Skipping region "%s" due to non-contiguous contours',
+                                      region.id)
+                            region_polygon = None
+                            break
+                        region_polygon = coordinates_for_segment(polygon, region_image, region_xywh)
+                    if region_polygon is not None:
+                        LOG.info('Using new coordinates for region "%s"', region.id)
+                        region.get_Coords().points = points_from_polygon(region_polygon)
                 
             #
             # plausibilize segmentation
