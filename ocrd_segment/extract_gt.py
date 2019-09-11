@@ -75,7 +75,7 @@ class ExtractGT(Processor):
                                                        file_id,
                                                        page_id=page_id,
                                                        file_grp=self.output_file_grp)
-            page_image_bin, page_xywh, _ = self.workspace.image_from_page(
+            page_image_bin, _, _ = self.workspace.image_from_page(
                 page, page_id, feature_selector='binarized')
             self.workspace.save_image_file(page_image_bin,
                                            file_id + '.bin',
@@ -102,6 +102,7 @@ class ExtractGT(Processor):
                         region, page_image, page_xywh).tolist()
                     description.setdefault('regions', []).append(
                         { 'type': rtype,
+                          'subtype': region.get_type() if rtype in ['text', 'chart', 'graphic'] else None,
                           'coords': coords
                     })
                     PIL.ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple,coords)), fill=CLASSES[rtype])
