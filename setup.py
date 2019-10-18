@@ -3,7 +3,8 @@
 Installs:
 
     - ocrd-segment-repair
-    - ocrd-segment-extract-gt
+    - ocrd-segment-extract-regions
+    - ocrd-segment-extract-lines
     - ocrd-segment-evaluate
 """
 import codecs
@@ -27,7 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
-            'ocrd-segment-extract-gt=ocrd_segment.cli:ocrd_segment_extract_gt',
+            'ocrd-segment-extract-regions=ocrd_segment.cli:ocrd_segment_extract_regions',
+            'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
         ]
     },

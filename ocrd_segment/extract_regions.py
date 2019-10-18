@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import os.path
 import json
 import PIL.Image, PIL.ImageDraw
-import numpy as np
 
 from ocrd_utils import (
     getLogger, concat_padded,
@@ -11,17 +10,13 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_modelfactory import page_from_file
-from ocrd_models.ocrd_page import (
-    AlternativeImageType,
-    TextRegionType,
-    to_xml
-)
 from ocrd import Processor
 
 from .config import OCRD_TOOL
 
-TOOL = 'ocrd-segment-extract-gt'
-LOG = getLogger('processor.ExtractGT')
+TOOL = 'ocrd-segment-extract-regions'
+LOG = getLogger('processor.ExtractRegions')
+# region classes and their colours in debug images:
 CLASSES = { 'border': (255,255,255),
             'text': (200,0,0),
             'table': (0,100,20),
@@ -37,23 +32,24 @@ CLASSES = { 'border': (255,255,255),
             'unknown': (0,0,0)
         }
 
-class ExtractGT(Processor):
+class ExtractRegions(Processor):
 
     def __init__(self, *args, **kwargs):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
-        super(ExtractGT, self).__init__(*args, **kwargs)
+        super(ExtractRegions, self).__init__(*args, **kwargs)
 
     def process(self):
-        """Extract region images and coordinates to files not managed in the workspace.
+        """Extract page images and region descriptions (type and coordinates) from the workspace.
         
         Open and deserialize PAGE input files and their respective images,
         then iterate over the element hierarchy down to the region level.
         
-        Get all regions with their types and coordinates relative to the page
-        (possibly cropped and/or deskewed). Extract the page image, both in
-        binarized and non-binarized form. In addition, create a page image
-        which color-codes all regions. Create a JSON file with region types and
+        Get all regions with their types (region element class), sub-types (@type)
+        and coordinates relative to the page (which depending on the workflow could
+        already be cropped, deskewed, dewarped, binarized etc). Extract the image of
+        the page, both in binarized and non-binarized form. In addition, create a new
+        image which color-codes all regions. Create a JSON file with region types and
         coordinates.
         
         Write all files in the directory of the output file group, named like so:
@@ -61,6 +57,8 @@ class ExtractGT(Processor):
         * ID + '.bin.png': binarized image
         * ID + '.dbg.png': debug image
         * ID + '.json': region coordinates
+        
+        (This is intended for training and evaluation of region segmentation models.)
         """
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
@@ -69,18 +67,29 @@ class ExtractGT(Processor):
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             page = pcgts.get_Page()
-            page_image, page_xywh, _ = self.workspace.image_from_page(
-                page, page_id, feature_filter='binarized')
+            ptype = page.get_type()
+            page_image, page_coords, page_image_info = self.workspace.image_from_page(
+                page, page_id,
+                feature_filter='binarized',
+                transparency=self.parameter['transparency'])
+            if page_image_info.resolution != 1:
+                dpi = page_image_info.resolution
+                if page_image_info.resolutionUnit == 'cm':
+                    dpi = round(dpi * 2.54)
+            else:
+                dpi = None
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id,
-                                                       page_id=page_id,
-                                                       file_grp=self.output_file_grp)
+                                                       self.output_file_grp,
+                                                       page_id=page_id)
             page_image_bin, _, _ = self.workspace.image_from_page(
-                page, page_id, feature_selector='binarized')
+                page, page_id,
+                feature_selector='binarized',
+                transparency=self.parameter['transparency'])
             self.workspace.save_image_file(page_image_bin,
                                            file_id + '.bin',
-                                           page_id=page_id,
-                                           file_grp=self.output_file_grp)
+                                           self.output_file_grp,
+                                           page_id=page_id)
             page_image_dbg = PIL.Image.new(mode='RGB', size=page_image.size, color=0)
             regions = { 'text': page.get_TextRegion(),
                         'table': page.get_TableRegion(),
@@ -98,20 +107,27 @@ class ExtractGT(Processor):
             description = { 'angle': page.get_orientation() }
             for rtype, rlist in regions.items():
                 for region in rlist:
-                    coords = coordinates_of_segment(
-                        region, page_image, page_xywh).tolist()
+                    polygon = coordinates_of_segment(
+                        region, page_image, page_coords).tolist()
                     description.setdefault('regions', []).append(
                         { 'type': rtype,
                           'subtype': region.get_type() if rtype in ['text', 'chart', 'graphic'] else None,
-                          'coords': coords
+                          'coords': polygon,
+                          'features': page_coords['features'],
+                          'DPI': dpi,
+                          'region.ID': region.id,
+                          'page.ID': page_id,
+                          'page.type': ptype,
+                          'file_grp': self.input_file_grp,
+                          'METS.UID': self.workspace.mets.unique_identifier
                     })
-                    PIL.ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple,coords)), fill=CLASSES[rtype])
-                    PIL.ImageDraw.Draw(page_image_dbg).line(list(map(tuple,coords + [coords[0]])), 
+                    PIL.ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple,polygon)), fill=CLASSES[rtype])
+                    PIL.ImageDraw.Draw(page_image_dbg).line(list(map(tuple,polygon + [polygon[0]])), 
                                                             fill=CLASSES['border'], width=3)
             self.workspace.save_image_file(page_image_dbg,
                                            file_id + '.dbg',
-                                           page_id=page_id,
-                                           file_grp=self.output_file_grp)
+                                           self.output_file_grp,
+                                           page_id=page_id)
             file_path = file_path.replace('.png', '.json')
             json.dump(description, open(file_path, 'w'))
 
