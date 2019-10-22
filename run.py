@@ -1,9 +1,10 @@
 #! python
 # -*- coding: utf-8 -*-
 
-import click
 import pathlib
+import json
 import random
+import click
 from matplotlib import pyplot
 from matplotlib.patches import Rectangle
 
@@ -23,12 +24,14 @@ def cli():
     pass
 
 @cli.command()
-@click.argument('data', type=click.Path(dir_okay=True), required=True)
-@click.option('-w', '--weights', type=click.Path(file_okay=True), required=True)
-@click.option('-h', '--heads', is_flag=True, default=False)
+@click.argument('data', type=click.Path(exists=True, file_okay=False), required=True)
+@click.option('-w', '--weights', type=click.Path(exists=True, dir_okay=False), required=True,
+              help='initial weight/checkpoint file')
+@click.option('-h', '--heads', is_flag=True, default=False,
+              help='only train head layers')
 @click.option('-s', '--seed', type=int, default=0)
-def train(data,weights,heads,seed):
-
+def train(data, weights, heads, seed):
+    """Train model on DATA directory, loading from WEIGHTS."""
     #
     # prepare data
     #
@@ -41,17 +44,21 @@ def train(data,weights,heads,seed):
     random.seed(seed)
 
     # read GT
-    gt = list(pathlib.Path(data).glob('*/page/*.xml'))
-    train = set(random.sample(gt, k=len(gt)*80//100))
-    for page in gt:
-        page_path = pathlib.Path(page).resolve()
-        image_id = page_path.stem
-        img = str(page_path.parents[1]) + '/jpg/' + image_id + '.jpg'
-        if pathlib.Path(img).exists():
-            if page in train:
-                train_data.add_image('dataset', image_id=image_id, path=img, annotation=str(page_path))
-            else:
-                test_data.add_image('dataset', image_id=image_id, path=img, annotation=str(page_path))
+    gt = list(pathlib.Path(data).glob('*.json'))
+    tr = set(random.sample(gt, k=len(gt)*80//100))
+    for json_path in gt:
+        if json_path in tr:
+            dataset = train_data
+        else:
+            dataset = test_data
+        json_path = pathlib.Path(json_path).resolve()
+        annotation = None
+        with json_path.open('r') as json_file:
+            annotation = json.load(json_file)
+        image_id = json_path.stem
+        image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
+        if pathlib.Path(image_path).exists():
+            dataset.add_image('dataset', image_id=image_id, path=image_path, annotation=annotation)
 
     # compile data
     train_data.prepare()
@@ -70,18 +77,22 @@ def train(data,weights,heads,seed):
 
     # load weights (mscoco) and exclude the output layers
     if weights:
-        model.load_weights(weights, by_name=True, exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",  "mrcnn_bbox", "mrcnn_mask"])
-    if heads:
-        model.train(train_data, test_data, learning_rate=config.LEARNING_RATE, epochs=10, layers='heads')
-    else:
-        model.train(train_data, test_data, learning_rate=config.LEARNING_RATE, epochs=10, layers='all')
+        model.load_weights(weights, by_name=True,
+                           # train head layers from scratch each time:
+                           # todo: this probably only makes sense for the very first transfer (from COCO etc)
+                           exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", "mrcnn_bbox", "mrcnn_mask"])
+    model.train(train_data, test_data,
+                learning_rate=config.LEARNING_RATE,
+                epochs=10,
+                layers='heads' if heads else 'all')
 
 @cli.command()
-@click.argument('data', type=click.Path(dir_okay=True), required=True)
-@click.option('-w', '--weights', type=click.Path(file_okay=True), required=True)
+@click.argument('data', type=click.Path(exists=True, file_okay=False), required=True)
+@click.option('-w', '--weights', type=click.Path(exists=True, dir_okay=False), required=True,
+              help='weight/checkpoint file')
 @click.option('-s', '--seed', type=int, default=0)
-def evaluate(data,weights,seed):
-
+def evaluate(data, weights, seed):
+    """Evaluate model on DATA directory, loading from WEIGHTS."""
     #
     # prepare data
     #
@@ -93,15 +104,19 @@ def evaluate(data,weights,seed):
     random.seed(seed)
 
     # read GT
-    gt = list(pathlib.Path(data).glob('*/page/*.xml'))
+    gt = list(pathlib.Path(data).glob('*.json'))
     train = set(random.sample(gt, k=len(gt)*80//100))
-    for page in gt:
-        page_path = pathlib.Path(page).resolve()
-        image_id = page_path.stem
-        img = str(page_path.parents[1]) + '/jpg/' + image_id + '.jpg'
-        if pathlib.Path(img).exists():
-            if not page in train:
-                test_data.add_image('dataset', image_id=image_id, path=img, annotation=str(page_path))
+    for json_path in gt:
+        if json_path in train:
+            continue
+        json_path = pathlib.Path(json_path) #.resolve()
+        annotation = None
+        with json_path.open('r') as json_file:
+            annotation = json.load(json_file)
+        image_id = json_path.stem
+        image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
+        if pathlib.Path(image_path).exists():
+            test_data.add_image('dataset', image_id=image_id, path=image_path, annotation=annotation)
 
     # compile data
     test_data.prepare()
@@ -150,10 +165,11 @@ def evaluate(data,weights,seed):
     click.echo("Test mAP: %.3f" % mean(aps))
 
 @cli.command()
-@click.argument('images', type=click.Path(file_okay=True), required=True, nargs=-1)
-@click.option('-w', '--weights', type=click.Path(file_okay=True), required=True)
-def predict(images,weights):
-
+@click.argument('images', type=click.Path(exists=True, dir_okay=False), required=True, nargs=-1)
+@click.option('-w', '--weights', type=click.Path(exists=True, dir_okay=False), required=True,
+              help='weight/checkpoint file')
+def predict(images, weights):
+    """Predict model on IMAGES files, loading from WEIGHTS."""
     #
     # prepare data
     #
@@ -163,9 +179,9 @@ def predict(images,weights):
 
     # read images
     for image in images:
-        image_path = pathlib.Path(image).resolve()
+        image_path = pathlib.Path(image) #.resolve()
         image_id = image_path.stem
-        predict_data.add_image('dataset', image_id=image_id, path=str(image_path))
+        predict_data.add_image('dataset', image_id=image_id, path=image_path)
 
     # compile data
     predict_data.prepare()
