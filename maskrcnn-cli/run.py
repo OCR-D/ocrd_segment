@@ -18,6 +18,7 @@ from mrcnn.utils import compute_ap
 from mrcnn.model import load_image_gt
 from mrcnn.model import mold_image
 from mrcnn.model import MaskRCNN
+from keras.callbacks import EarlyStopping
 
 @click.group()
 def cli():
@@ -27,10 +28,12 @@ def cli():
 @click.argument('data', type=click.Path(exists=True, file_okay=False), required=True)
 @click.option('-w', '--weights', type=click.Path(exists=True, dir_okay=False), required=True,
               help='initial weight/checkpoint file')
+@click.option('-W', '--write-weights', type=click.Path(exists=False, dir_okay=False),
+              help='save final weight file')
 @click.option('-h', '--heads', is_flag=True, default=False,
               help='only train head layers')
 @click.option('-s', '--seed', type=int, default=0)
-def train(data, weights, heads, seed):
+def train(data, weights, write_weights, heads, seed):
     """Train model on DATA directory, loading from WEIGHTS."""
     #
     # prepare data
@@ -87,8 +90,12 @@ def train(data, weights, heads, seed):
         model.load_weights(weights, by_name=True, exclude=exclude)
     model.train(train_data, test_data,
                 learning_rate=config.LEARNING_RATE,
-                epochs=10,
+                epochs=40,
+                custom_callbacks=[EarlyStopping(patience=2, verbose=1, restore_best_weights=True)]
+                if write_weights else None,
                 layers='heads' if heads else 'all')
+    if write_weights:
+        model.keras_model.save_weights(write_weights)
 
 @cli.command()
 @click.argument('data', type=click.Path(exists=True, file_okay=False), required=True)
