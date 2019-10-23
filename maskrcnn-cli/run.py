@@ -5,11 +5,10 @@ import pathlib
 import json
 import random
 import click
-from matplotlib import pyplot
+from matplotlib import pyplot, cm
 from matplotlib.patches import Rectangle
 
-from numpy import expand_dims
-from numpy import mean, isnan
+import numpy as np
 
 from layout_dataset import LayoutDataset, LayoutTrainConfig, LayoutPredictConfig
 from mrcnn.visualize import display_instances
@@ -91,7 +90,7 @@ def train(data, weights, write_weights, heads, seed):
     model.train(train_data, test_data,
                 learning_rate=config.LEARNING_RATE,
                 epochs=40,
-                custom_callbacks=[EarlyStopping(patience=2, verbose=1, restore_best_weights=True)]
+                custom_callbacks=[EarlyStopping(patience=3, verbose=1, restore_best_weights=True)]
                 if write_weights else None,
                 layers='heads' if heads else 'all')
     if write_weights:
@@ -159,23 +158,23 @@ def evaluate(data, weights, seed):
     aps = []
     for image_id in test_data.image_ids:
         image_path = pathlib.Path(test_data.image_reference(image_id)).stem
-        click.echo("starting image: %s" % image_path)
+        click.echo("predicting image: %s" % image_path)
         # load image, bounding boxes and masks for the image id
         image, image_meta, gt_class_id, gt_bbox, gt_mask = load_image_gt(test_data, config, image_id, use_mini_mask=False)
         # convert pixel values (e.g. center)
         scaled_image = mold_image(image, config)
         # convert image into one sample
-        sample = expand_dims(scaled_image, 0)
+        sample = np.expand_dims(scaled_image, 0)
         # make prediction
         yhat = model.detect(sample, verbose=0)
         # extract results for first sample
         r = yhat[0]
         # calculate statistics, including AP
         ap, _, _, _ = compute_ap(gt_bbox, gt_class_id, gt_mask, r["rois"], r["class_ids"], r["scores"], r['masks'])
-        if not isnan(ap):
+        if not np.isnan(ap):
             aps.append(ap)
-        click.echo("AP: %.3f image %s" % (ap, image_path))
-    click.echo("Test mAP: %.3f" % mean(aps))
+        click.echo("AP: %.3f image: %s" % (ap, image_path))
+    click.echo("Test mAP: %.3f" % np.mean(aps))
 
 @cli.command()
 @click.argument('images', type=click.Path(exists=True, dir_okay=False), required=True, nargs=-1)
@@ -214,26 +213,45 @@ def predict(images, weights):
     # evaluate
     aps = []
     for image_id in predict_data.image_ids:
+        image_path = pathlib.Path(predict_data.image_reference(image_id)).stem
+        click.echo("predicting image: %s" % image_path)
         # load image
         image = predict_data.load_image(image_id)
         # convert pixel values (e.g. center)
         scaled_image = mold_image(image, config)
         # convert image into one sample
-        sample = expand_dims(scaled_image, 0)
+        sample = np.expand_dims(scaled_image, 0)
         # make prediction
         yhat = model.detect(sample, verbose=0)[0]
+        masks = yhat['masks']
+        click.echo("image has %d rois" % masks.shape[-1])
         # show result
+        pyplot.close() # clear axes from previous images
         pyplot.imshow(image)
         ax = pyplot.gca()
-        for box in yhat['rois']:
-            # get coordinates
+        for i, box in enumerate(yhat['rois']):
+            # get best class and score of best class
+            class_ = yhat['class_ids'][i]
+            score_ = yhat['scores'][i]
+            # get binary pixel mask for region
+            mask = masks[:,:,i]
+            # get coordinates of bounding box
             y1, x1, y2, x2 = box
             # calculate width and height of the box
             width, height = x2 - x1, y2 - y1
             # create the shape
-            rect = Rectangle((x1, y1), width, height, fill=False, color='red')
-            # draw the box
+            rect = Rectangle((x1, y1), width, height, fill=False,
+                             color=cm.tab10(class_, alpha=0.8))
+            # draw the box onto the image
             ax.add_patch(rect)
+            # draw the pixel mask onto the image (semi-transparent)
+            # but do not color-code zero (but make transparent)
+            ax.imshow(np.ma.array(mask * class_, mask=np.logical_not(mask)),
+                      cmap=cm.tab10, alpha=0.5)
+            # label the image with the file name
+            ax.legend([image_path])
+        pyplot.savefig(image_path + '.pred.png', dpi=300, bbox_inches='tight')
+    # show the very last plot interactively
     pyplot.show()
 
 cli.add_command(train)
