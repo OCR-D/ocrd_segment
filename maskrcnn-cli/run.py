@@ -77,10 +77,14 @@ def train(data, weights, heads, seed):
 
     # load weights (mscoco) and exclude the output layers
     if weights:
-        model.load_weights(weights, by_name=True,
-                           # train head layers from scratch each time:
-                           # todo: this probably only makes sense for the very first transfer (from COCO etc)
-                           exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", "mrcnn_bbox", "mrcnn_mask"])
+        if 'coco' in weights.lower():
+            # train head layers from scratch
+            # this only makes sense for the very first transfer (from COCO etc):
+            click.echo("Not loading final layers", err=True)
+            exclude = ["mrcnn_class_logits", "mrcnn_bbox_fc", "mrcnn_bbox", "mrcnn_mask"]
+        else:
+            exclude = None
+        model.load_weights(weights, by_name=True, exclude=exclude)
     model.train(train_data, test_data,
                 learning_rate=config.LEARNING_RATE,
                 epochs=10,
