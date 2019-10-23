@@ -1,16 +1,9 @@
 import sys
 from numpy import zeros
 from numpy import asarray
+from skimage import draw
 from mrcnn.utils import Dataset
 from mrcnn.config import Config
-
-NS = {
-    'pc': 'http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15',
-    'xlink' : "http://www.w3.org/1999/xlink",
-    're' : "http://exslt.org/regular-expressions",
-}
-PC = "{%s}" % NS['pc']
-XLINK = "{%s}" % NS['xlink']
 
 class LayoutTrainConfig(Config):
     # Give the configuration a recognizable name
@@ -67,13 +60,11 @@ class LayoutDataset(Dataset):
             class_ = region.get('type', 'text')
             subclass = region.get('subtype', '')
             polygon = region['coords']
-            # todo: use polygon_mask instead of bbox
-            box = bbox_from_polygon(polygon,
-                                    maxx=0, minx=width,
-                                    maxy=0, miny=height)
-            row_s, row_e = box[1], box[3]
-            col_s, col_e = box[0], box[2]
-            masks[row_s:row_e, col_s:col_e, i] = 1
+            polygon = asarray(polygon, dtype='int32')
+            rows, cols = draw.polygon(polygon[:,1], polygon[:,0], (height, width))
+            masks[rows, cols, i] = 1
+            rows, cols = draw.polygon_perimeter(polygon[:,1], polygon[:,0], (height, width))
+            masks[rows, cols, i] = 1
             # todo: use all classes
             #class_ids.append(self.class_names.index(class_))
             class_ids.append(self.class_names.index('text'))
