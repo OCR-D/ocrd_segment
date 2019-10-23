@@ -65,10 +65,6 @@ class LayoutDataset(Dataset):
         class_ids = list()
         for i, region in enumerate(regions):
             class_ = region.get('type', 'text')
-            if class_ != 'text':
-                # todo: use all classes
-                class_ids.append(0)
-                continue
             subclass = region.get('subtype', '')
             polygon = region['coords']
             # todo: use polygon_mask instead of bbox
@@ -78,7 +74,9 @@ class LayoutDataset(Dataset):
             row_s, row_e = box[1], box[3]
             col_s, col_e = box[0], box[2]
             masks[row_s:row_e, col_s:col_e, i] = 1
-            class_ids.append(self.class_names.index(class_))
+            # todo: use all classes
+            #class_ids.append(self.class_names.index(class_))
+            class_ids.append(self.class_names.index('text'))
         return masks, asarray(class_ids, dtype='int32')
 
 def bbox_from_polygon(polygon,
