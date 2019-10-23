@@ -73,8 +73,8 @@ class LayoutDataset(Dataset):
             polygon = region['coords']
             # todo: use polygon_mask instead of bbox
             box = bbox_from_polygon(polygon,
-                                    minx=0, maxx=width,
-                                    miny=0, maxy=height)
+                                    maxx=0, minx=width,
+                                    maxy=0, miny=height)
             row_s, row_e = box[1], box[3]
             col_s, col_e = box[0], box[2]
             masks[row_s:row_e, col_s:col_e, i] = 1
