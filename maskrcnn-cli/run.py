@@ -9,7 +9,7 @@ from matplotlib import pyplot
 from matplotlib.patches import Rectangle
 
 from numpy import expand_dims
-from numpy import mean
+from numpy import mean, isnan
 
 from layout_dataset import LayoutDataset, LayoutTrainConfig, LayoutPredictConfig
 from mrcnn.visualize import display_instances
@@ -105,9 +105,9 @@ def evaluate(data, weights, seed):
 
     # read GT
     gt = list(pathlib.Path(data).glob('*.json'))
-    train = set(random.sample(gt, k=len(gt)*80//100))
+    tr = set(random.sample(gt, k=len(gt)*80//100))
     for json_path in gt:
-        if json_path in train:
+        if json_path in tr:
             continue
         json_path = pathlib.Path(json_path) #.resolve()
         annotation = None
@@ -147,7 +147,8 @@ def evaluate(data, weights, seed):
     # evaluate
     aps = []
     for image_id in test_data.image_ids:
-        click.echo("Image %s start" % image_id)
+        image_path = pathlib.Path(test_data.image_reference(image_id)).stem
+        click.echo("starting image: %s" % image_path)
         # load image, bounding boxes and masks for the image id
         image, image_meta, gt_class_id, gt_bbox, gt_mask = load_image_gt(test_data, config, image_id, use_mini_mask=False)
         # convert pixel values (e.g. center)
@@ -160,8 +161,9 @@ def evaluate(data, weights, seed):
         r = yhat[0]
         # calculate statistics, including AP
         ap, _, _, _ = compute_ap(gt_bbox, gt_class_id, gt_mask, r["rois"], r["class_ids"], r["scores"], r['masks'])
-        aps.append(ap)
-        click.echo("Image %s done" % image_id)
+        if not isnan(ap):
+            aps.append(ap)
+        click.echo("AP: %.3f image %s" % (ap, image_path))
     click.echo("Test mAP: %.3f" % mean(aps))
 
 @cli.command()
