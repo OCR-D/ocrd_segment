@@ -224,11 +224,19 @@ def predict(images, weights):
         # make prediction
         yhat = model.detect(sample, verbose=0)[0]
         masks = yhat['masks']
-        click.echo("image has %d rois" % masks.shape[-1])
+        click.echo("image has %d rois with %d distinct classes" % \
+                   (masks.shape[-1], len(np.unique(yhat['class_ids']))))
         # show result
         pyplot.close() # clear axes from previous images
         pyplot.imshow(image)
         ax = pyplot.gca()
+        ax.set_axis_off()
+        ax.set_xmargin(0)
+        ax.set_ymargin(0)
+        ax.set_frame_on(0)
+        ax.set_position([0,0,1,1])
+        # label the image with the file name
+        #ax.set_title(image_path)
         for i, box in enumerate(yhat['rois']):
             # get best class and score of best class
             class_ = yhat['class_ids'][i]
@@ -246,10 +254,10 @@ def predict(images, weights):
             ax.add_patch(rect)
             # draw the pixel mask onto the image (semi-transparent)
             # but do not color-code zero (but make transparent)
-            ax.imshow(np.ma.array(mask * class_, mask=np.logical_not(mask)),
-                      cmap=cm.tab10, alpha=0.5)
-            # label the image with the file name
-            ax.legend([image_path])
+            # todo: colormap does not work with masked arrays
+            # (but a custom cmap with set_under('k',alpha=0) and vmin does not, either)
+            ax.imshow(np.ma.masked_where(mask == 0, mask * class_), cmap=cm.tab10, alpha=0.5)
+        # write to CWD (not input directory)
         pyplot.savefig(image_path + '.pred.png', dpi=300, bbox_inches='tight')
     # show the very last plot interactively
     pyplot.show()
