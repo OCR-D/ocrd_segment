@@ -57,6 +57,8 @@ def train(data, weights, write_weights, heads, seed):
         annotation = None
         with json_path.open('r') as json_file:
             annotation = json.load(json_file)
+        if not annotation.get('regions'):
+            continue
         image_id = json_path.stem
         image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
         if pathlib.Path(image_path).exists():
@@ -123,6 +125,8 @@ def evaluate(data, weights, seed):
         annotation = None
         with json_path.open('r') as json_file:
             annotation = json.load(json_file)
+        if not annotation.get('regions'):
+            continue
         image_id = json_path.stem
         image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
         if pathlib.Path(image_path).exists():
