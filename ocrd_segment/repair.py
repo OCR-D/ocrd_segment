@@ -75,22 +75,25 @@ class RepairSegmentation(Processor):
             # sanitize regions
             #
             if sanitize:
-                page_image, page_xywh, _ = self.workspace.image_from_page(
+                page_image, page_coords, _ = self.workspace.image_from_page(
                     page, page_id)
                 for i, region in enumerate(regions):
                     LOG.info('Sanitizing region "%s"', region.id)
-                    region_image, region_xywh = self.workspace.image_from_segment(
-                        region, page_image, page_xywh)
+                    region_image, region_coords = self.workspace.image_from_segment(
+                        region, page_image, page_coords)
                     lines = region.get_TextLine()
                     heights = []
                     # get labels:
-                    region_mask = np.zeros((region_xywh['h'], region_xywh['w']), dtype=np.uint8)
+                    region_mask = np.zeros((region_image.height, region_image.width), dtype=np.uint8)
                     for j, line in enumerate(lines):
-                        line_polygon = coordinates_of_segment(line, region_image, region_xywh)
+                        line_polygon = coordinates_of_segment(line, region_image, region_coords)
                         heights.append(xywh_from_polygon(line_polygon)['h'])
                         region_mask[draw.polygon(line_polygon[:, 1],
                                                  line_polygon[:, 0],
                                                  region_mask.shape)] = 1
+                        region_mask[draw.polygon_perimeter(line_polygon[:, 1],
+                                                           line_polygon[:, 0],
+                                                           region_mask.shape)] = 1
                     # estimate scale:
                     scale = int(np.median(np.array(heights)))
                     # close labels:
@@ -126,7 +129,7 @@ class RepairSegmentation(Processor):
                                       region.id)
                             region_polygon = None
                             break
-                        region_polygon = coordinates_for_segment(polygon, region_image, region_xywh)
+                        region_polygon = coordinates_for_segment(polygon, region_image, region_coords)
                     if region_polygon is not None:
                         LOG.info('Using new coordinates for region "%s"', region.id)
                         region.get_Coords().points = points_from_polygon(region_polygon)

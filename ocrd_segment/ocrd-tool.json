@@ -27,6 +27,46 @@
         }
       }
     },
+    "ocrd-segment-extract-regions": {
+      "executable": "ocrd-segment-extract-regions",
+      "categories": ["Image preprocessing"],
+      "description": "Extract region segmentation as image+JSON",
+      "input_file_grp": [
+        "OCR-D-SEG-BLOCK",
+        "OCR-D-GT-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-lines": {
+      "executable": "ocrd-segment-extract-lines",
+      "categories": ["Image preprocessing"],
+      "description": "Extract line segmentation as image+txt+JSON",
+      "input_file_grp": [
+        "OCR-D-SEG-LINE",
+        "OCR-D-GT-SEG-LINE"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
     "ocrd-segment-evaluate": {
       "executable": "ocrd-segment-evaluate",
       "categories": ["Layout analysis"],
