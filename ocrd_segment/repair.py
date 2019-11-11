@@ -69,70 +69,12 @@ class RepairSegmentation(Processor):
                                                            for name in self.parameter.keys()])]))
             page = pcgts.get_Page()
 
-            regions = page.get_TextRegion()
 
             #
             # sanitize regions
             #
             if sanitize:
-                page_image, page_coords, _ = self.workspace.image_from_page(
-                    page, page_id)
-                for i, region in enumerate(regions):
-                    LOG.info('Sanitizing region "%s"', region.id)
-                    region_image, region_coords = self.workspace.image_from_segment(
-                        region, page_image, page_coords)
-                    lines = region.get_TextLine()
-                    heights = []
-                    # get labels:
-                    region_mask = np.zeros((region_image.height, region_image.width), dtype=np.uint8)
-                    for j, line in enumerate(lines):
-                        line_polygon = coordinates_of_segment(line, region_image, region_coords)
-                        heights.append(xywh_from_polygon(line_polygon)['h'])
-                        region_mask[draw.polygon(line_polygon[:, 1],
-                                                 line_polygon[:, 0],
-                                                 region_mask.shape)] = 1
-                        region_mask[draw.polygon_perimeter(line_polygon[:, 1],
-                                                           line_polygon[:, 0],
-                                                           region_mask.shape)] = 1
-                    # estimate scale:
-                    scale = int(np.median(np.array(heights)))
-                    # close labels:
-                    region_mask = np.pad(region_mask, scale) # protect edges
-                    region_mask = filters.maximum_filter(region_mask, (scale, 1), origin=0)
-                    region_mask = filters.minimum_filter(region_mask, (scale, 1), origin=0)
-                    region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
-                    # find outer contour (parts):
-                    contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    # determine areas of parts:
-                    areas = [cv2.contourArea(contour) for contour in contours]
-                    total_area = sum(areas)
-                    if not total_area:
-                        # ignore if too small
-                        LOG.warning('Zero contour area in region "%s"', region.id)
-                        continue
-                    # pick contour and convert to absolute:
-                    region_polygon = None
-                    for i, contour in enumerate(contours):
-                        area = areas[i]
-                        if area / total_area < 0.1:
-                            LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
-                                        i, area, total_area, region.id)
-                            continue
-                        # simplify shape:
-                        polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
-                        if len(polygon) < 4:
-                            LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
-                                        i, region.id)
-                            continue
-                        if region_polygon is not None:
-                            LOG.error('Skipping region "%s" due to non-contiguous contours',
-                                      region.id)
-                            region_polygon = None
-                            break
-                        region_polygon = coordinates_for_segment(polygon, region_image, region_coords)
-                    if region_polygon is not None:
-                        LOG.info('Using new coordinates for region "%s"', region.id)
-                        region.get_Coords().points = points_from_polygon(region_polygon)
+                self.sanitize_page(page, page_id)
                 
             #
             # plausibilize segmentation
@@ -140,6 +82,7 @@ class RepairSegmentation(Processor):
             mark_for_deletion = set()
             mark_for_merging = set()
 
+            regions = page.get_TextRegion()
             for i in range(0,len(regions)):
                 for j in range(i+1,len(regions)):
                     LOG.info('Comparing regions "%s" and "%s"', regions[i].id, regions[j].id)
@@ -204,3 +147,65 @@ class RepairSegmentation(Processor):
                 local_filename=os.path.join(self.output_file_grp,
                                             file_id + '.xml'),
                 content=to_xml(pcgts))
+    
+    def sanitize_page(self, page, page_id):
+        regions = page.get_TextRegion()
+        page_image, page_coords, _ = self.workspace.image_from_page(
+            page, page_id)
+        for i, region in enumerate(regions):
+            LOG.info('Sanitizing region "%s"', region.id)
+            region_image, region_coords = self.workspace.image_from_segment(
+                region, page_image, page_coords)
+            lines = region.get_TextLine()
+            heights = []
+            # get labels:
+            region_mask = np.zeros((region_image.height, region_image.width), dtype=np.uint8)
+            for j, line in enumerate(lines):
+                line_polygon = coordinates_of_segment(line, region_image, region_coords)
+                heights.append(xywh_from_polygon(line_polygon)['h'])
+                region_mask[draw.polygon(line_polygon[:, 1],
+                                         line_polygon[:, 0],
+                                         region_mask.shape)] = 1
+                region_mask[draw.polygon_perimeter(line_polygon[:, 1],
+                                                   line_polygon[:, 0],
+                                                   region_mask.shape)] = 1
+            # estimate scale:
+            scale = int(np.median(np.array(heights)))
+            # close labels:
+            region_mask = np.pad(region_mask, scale) # protect edges
+            region_mask = filters.maximum_filter(region_mask, (scale, 1), origin=0)
+            region_mask = filters.minimum_filter(region_mask, (scale, 1), origin=0)
+            region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
+            # find outer contour (parts):
+            contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # determine areas of parts:
+            areas = [cv2.contourArea(contour) for contour in contours]
+            total_area = sum(areas)
+            if not total_area:
+                # ignore if too small
+                LOG.warning('Zero contour area in region "%s"', region.id)
+                continue
+            # pick contour and convert to absolute:
+            region_polygon = None
+            for i, contour in enumerate(contours):
+                area = areas[i]
+                if area / total_area < 0.1:
+                    LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
+                                i, area, total_area, region.id)
+                    continue
+                # simplify shape:
+                polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                if len(polygon) < 4:
+                    LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
+                                i, region.id)
+                    continue
+                if region_polygon is not None:
+                    LOG.error('Skipping region "%s" due to non-contiguous contours',
+                              region.id)
+                    region_polygon = None
+                    break
+                region_polygon = coordinates_for_segment(polygon, region_image, region_coords)
+            if region_polygon is not None:
+                LOG.info('Using new coordinates for region "%s"', region.id)
+                region.get_Coords().points = points_from_polygon(region_polygon)
+        
