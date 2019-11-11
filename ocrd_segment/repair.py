@@ -17,10 +17,17 @@ from ocrd_models.ocrd_page import (
     CoordsType,
     LabelType, LabelsType,
     MetadataItemType,
-    RegionRefIndexedType,
     to_xml
 )
-
+from ocrd_models.ocrd_page_generateds import (
+    RegionRefType,
+    RegionRefIndexedType,
+    OrderedGroupType,
+    OrderedGroupIndexedType,
+    UnorderedGroupType,
+    UnorderedGroupIndexedType,
+    ReadingOrderType
+)
 from .config import OCRD_TOOL
 
 from skimage import draw
@@ -79,7 +86,6 @@ class RepairSegmentation(Processor):
             #
             # plausibilize segmentation
             #
-            # FIXME: use set (but generateDS elements are unhashable)
             mark_for_deletion = list()
             mark_for_merging = list()
 
@@ -88,19 +94,16 @@ class RepairSegmentation(Processor):
                 for j in range(i+1,len(regions)):
                     region1 = regions[i]
                     region2 = regions[j]
-                    LOG.info('Comparing regions "%s" and "%s"', region1.id, region2.id)
+                    LOG.debug('Comparing regions "%s" and "%s"', region1.id, region2.id)
                     region1_poly = Polygon(polygon_from_points(region1.get_Coords().points))
                     region2_poly = Polygon(polygon_from_points(region2.get_Coords().points))
                     
-                    LOG.debug('Checking for equality ...')
                     equality = region1_poly.almost_equals(region2_poly)
                     if equality:
                         LOG.warn('Page "%s" regions "%s" and "%s" cover the same area.',
                                  page_id, region1.id, region2.id)
                         mark_for_deletion.append(region2)
 
-                    LOG.debug('Checking for containment ... %s vs %s',
-                              str(region1_poly), str(region2_poly))
                     if region1_poly.contains(region2_poly):
                         LOG.warn('Page "%s" region "%s" contains "%s"',
                                  page_id, region1.id, region2.id)
@@ -110,29 +113,6 @@ class RepairSegmentation(Processor):
                                  page_id, region2.id, region1.id)
                         mark_for_deletion.append(region1)
 
-            if plausibilize:
-                new_regions = []
-                reading_order = {}
-                # the reading order does not have to include all regions
-                # but it may include all types of regions!
-                regionrefs = page.get_ReadingOrder().get_OrderedGroup().get_RegionRefIndexed()
-                for elem in regionrefs:
-                    reading_order[elem.get_regionRef()] = elem
-                for region in regions:
-                    if not region in mark_for_deletion:
-                        new_regions.append(region)
-                    else:
-                        if region.get_id() in reading_order:
-                            # remove in-place
-                            regionrefs.remove(reading_order[region.get_id()])
-                regionrefs.sort(key=RegionRefIndexedType.get_index)
-
-                # re-index the reading order!
-                for i, regionref in enumerate(regionrefs):
-                    regionref.set_index(i)
-                page.set_TextRegion(new_regions)
-
-
                     #LOG.info('Intersection %i', region1_poly.intersects(region2_poly))
                     #LOG.info('Containment %i', region1_poly1.contains(region2_poly))
                     #if region1_poly.intersects(region2_poly):
@@ -140,6 +120,13 @@ class RepairSegmentation(Processor):
                     #    LOG.info('Area 2 %d', region2_poly.area)
                     #    LOG.info('Area intersect %d', region1_poly.intersection(region2_poly).area)
                         
+
+            if plausibilize:
+                # the reading order does not have to include all regions
+                # but it may include all types of regions!
+                ro = page.get_ReadingOrder()
+                _plausibilize_group(regions, ro.get_OrderedGroup() or ro.get_UnorderedGroup(),
+                                    mark_for_deletion)
 
             # Use input_file's basename for the new file -
             # this way the files retain the same basenames:
@@ -216,3 +203,41 @@ class RepairSegmentation(Processor):
                 LOG.info('Using new coordinates for region "%s"', region.id)
                 region.get_Coords().points = points_from_polygon(region_polygon)
         
+def _plausibilize_group(regions, rogroup, mark_for_deletion):
+    wait_for_deletion = list()
+    reading_order = dict()
+    ordered = False
+    if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
+        regionrefs = (rogroup.get_RegionRefIndexed() +
+                      rogroup.get_OrderedGroupIndexed() +
+                      rogroup.get_UnorderedGroupIndexed())
+        ordered = True
+    if isinstance(rogroup, (UnorderedGroupType, UnorderedGroupIndexedType)):
+        regionrefs = (rogroup.get_RegionRef() +
+                      rogroup.get_OrderedGroup() +
+                      rogroup.get_UnorderedGroup())
+    for elem in regionrefs:
+        reading_order[elem.get_regionRef()] = elem
+        if not isinstance(elem, (RegionRefType, RegionRefIndexedType)):
+            _plausibilize_group(regions, elem, mark_for_deletion)
+    for region in regions:
+        if (region in mark_for_deletion and
+            region.get_id() in reading_order):
+            wait_for_deletion.append(region)
+            regionref = reading_order[region.get_id()]
+            # TODO: re-assign regionref.continuation and regionref.type to other?
+            # could be any of the 6 types above:
+            regionrefs = rogroup.__getattribute__(regionref.__class__.__name__.replace('Type', ''))
+            # remove in-place
+            regionrefs.remove(regionref)
+
+    if ordered:
+        # re-index the reading order!
+        regionrefs.sort(key=RegionRefIndexedType.get_index)
+        for i, regionref in enumerate(regionrefs):
+            regionref.set_index(i)
+        
+    for region in wait_for_deletion:
+        if region in regions:
+            # remove in-place
+            regions.remove(region)
