@@ -1,6 +1,11 @@
 from __future__ import absolute_import
 
 import os.path
+from skimage import draw
+from scipy.ndimage import filters
+import cv2
+import numpy as np
+from shapely.geometry import Polygon, LineString
 
 from ocrd import Processor
 from ocrd_utils import (
@@ -30,12 +35,6 @@ from ocrd_models.ocrd_page_generateds import (
 )
 from .config import OCRD_TOOL
 
-from skimage import draw
-from scipy.ndimage import filters
-import cv2
-import numpy as np
-from shapely.geometry import Polygon, LineString
-
 TOOL = 'ocrd-segment-repair'
 LOG = getLogger('processor.RepairSegmentation')
 
@@ -63,18 +62,18 @@ class RepairSegmentation(Processor):
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            page = pcgts.get_Page()
             metadata = pcgts.get_Metadata() # ensured by from_file()
             metadata.add_MetadataItem(
                 MetadataItemType(type_="processingStep",
                                  name=self.ocrd_tool['steps'][0],
                                  value=TOOL,
-                                 # FIXME: externalRef is invalid by pagecontent.xsd, but ocrd does not reflect this
-                                 # what we want here is `externalModel="ocrd-tool" externalId="parameters"`
-                                 Labels=[LabelsType(#externalRef="parameters",
-                                                    Label=[LabelType(type_=name,
-                                                                     value=self.parameter[name])
-                                                           for name in self.parameter.keys()])]))
-            page = pcgts.get_Page()
+                                 Labels=[LabelsType(
+                                     externalModel="ocrd-tool",
+                                     externalId="parameters",
+                                     Label=[LabelType(type_=name,
+                                                      value=self.parameter[name])
+                                            for name in self.parameter.keys()])]))
 
             #
             # validate segmentation (warn of children extending beyond their parents)
@@ -94,8 +93,8 @@ class RepairSegmentation(Processor):
             mark_for_merging = list()
 
             regions = page.get_TextRegion()
-            for i in range(0,len(regions)):
-                for j in range(i+1,len(regions)):
+            for i in range(0, len(regions)):
+                for j in range(i+1, len(regions)):
                     region1 = regions[i]
                     region2 = regions[j]
                     LOG.debug('Comparing regions "%s" and "%s"', region1.id, region2.id)
@@ -104,17 +103,17 @@ class RepairSegmentation(Processor):
                     
                     equality = region1_poly.almost_equals(region2_poly)
                     if equality:
-                        LOG.warn('Page "%s" regions "%s" and "%s" cover the same area.',
-                                 page_id, region1.id, region2.id)
+                        LOG.warning('Page "%s" regions "%s" and "%s" cover the same area.',
+                                    page_id, region1.id, region2.id)
                         mark_for_deletion.append(region2)
 
                     if region1_poly.contains(region2_poly):
-                        LOG.warn('Page "%s" region "%s" contains "%s"',
-                                 page_id, region1.id, region2.id)
+                        LOG.warning('Page "%s" region "%s" contains "%s"',
+                                    page_id, region1.id, region2.id)
                         mark_for_deletion.append(region2)
                     elif region2_poly.contains(region1_poly):
-                        LOG.warn('Page "%s" region "%s" contains "%s"',
-                                 page_id, region2.id, region1.id)
+                        LOG.warning('Page "%s" region "%s" contains "%s"',
+                                    page_id, region2.id, region1.id)
                         mark_for_deletion.append(region1)
 
                     #LOG.info('Intersection %i', region1_poly.intersects(region2_poly))
@@ -150,7 +149,7 @@ class RepairSegmentation(Processor):
         regions = page.get_TextRegion()
         page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id)
-        for i, region in enumerate(regions):
+        for region in regions:
             LOG.info('Sanitizing region "%s"', region.id)
             region_image, region_coords = self.workspace.image_from_segment(
                 region, page_image, page_coords)
@@ -158,7 +157,7 @@ class RepairSegmentation(Processor):
             heights = []
             # get labels:
             region_mask = np.zeros((region_image.height, region_image.width), dtype=np.uint8)
-            for j, line in enumerate(lines):
+            for line in lines:
                 line_polygon = coordinates_of_segment(line, region_image, region_coords)
                 heights.append(xywh_from_polygon(line_polygon)['h'])
                 region_mask[draw.polygon(line_polygon[:, 1],
