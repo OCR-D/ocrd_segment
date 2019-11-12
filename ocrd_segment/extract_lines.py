@@ -6,8 +6,11 @@ import json
 from ocrd_utils import (
     getLogger, concat_padded,
     coordinates_of_segment,
-    polygon_from_points,
-    MIMETYPE_PAGE
+    polygon_from_points
+)
+from ocrd_models.ocrd_page import (
+    LabelsType, LabelType,
+    MetadataItemType
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
@@ -71,6 +74,17 @@ class ExtractLines(Processor):
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             page = pcgts.get_Page()
+            metadata = pcgts.get_Metadata() # ensured by from_file()
+            metadata.add_MetadataItem(
+                MetadataItemType(type_="processingStep",
+                                 name=self.ocrd_tool['steps'][0],
+                                 value=TOOL,
+                                 Labels=[LabelsType(
+                                     externalModel="ocrd-tool",
+                                     externalId="parameters",
+                                     Label=[LabelType(type_=name,
+                                                      value=self.parameter[name])
+                                            for name in self.parameter.keys()])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 transparency=self.parameter['transparency'])
@@ -85,7 +99,7 @@ class ExtractLines(Processor):
             regions = page.get_TextRegion()
             if not regions:
                 LOG.warning("Page '%s' contains no text regions", page_id)
-            for i, region in enumerate(regions):
+            for region in regions:
                 region_image, region_coords = self.workspace.image_from_segment(
                     region, page_image, page_coords,
                     transparency=self.parameter['transparency'])
@@ -94,7 +108,7 @@ class ExtractLines(Processor):
                 lines = region.get_TextLine()
                 if not lines:
                     LOG.warning("Region '%s' contains no text lines", region.id)
-                for j, line in enumerate(lines):
+                for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
                         transparency=self.parameter['transparency'])
@@ -131,11 +145,11 @@ class ExtractLines(Processor):
                                     'text': ltext,
                                     'style': lstyle,
                                     'production': (
-                                        line.get_production() or 
+                                        line.get_production() or
                                         region.get_production()),
                                     'readingDirection': (
-                                        line.get_readingDirection() or 
-                                        region.get_readingDirection() or 
+                                        line.get_readingDirection() or
+                                        region.get_readingDirection() or
                                         page.get_readingDirection()),
                                     'primaryScript': (
                                         line.get_primaryScript() or
@@ -155,7 +169,7 @@ class ExtractLines(Processor):
                                     'page.type': ptype,
                                     'file_grp': self.input_file_grp,
                                     'METS.UID': self.workspace.mets.unique_identifier
-                                }
+                    }
                     if 'binarized' in lfeatures:
                         extension = '.bin'
                     elif 'grayscale_normalized' in lfeatures:
@@ -174,6 +188,4 @@ class ExtractLines(Processor):
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
-                    
-            
 

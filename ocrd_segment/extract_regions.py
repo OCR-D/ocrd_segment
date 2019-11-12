@@ -1,13 +1,15 @@
 from __future__ import absolute_import
 
-import os.path
 import json
-import PIL.Image, PIL.ImageDraw
+from PIL import Image, ImageDraw
 
 from ocrd_utils import (
     getLogger, concat_padded,
-    coordinates_of_segment,
-    MIMETYPE_PAGE
+    coordinates_of_segment
+)
+from ocrd_models.ocrd_page import (
+    LabelsType, LabelType,
+    MetadataItemType
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
@@ -17,20 +19,20 @@ from .config import OCRD_TOOL
 TOOL = 'ocrd-segment-extract-regions'
 LOG = getLogger('processor.ExtractRegions')
 # region classes and their colours in debug images:
-CLASSES = { 'border': (255,255,255),
-            'text': (200,0,0),
-            'table': (0,100,20),
-            'chart': (0,120,0),
-            'chem': (0,140,0),
-            'graphic': (0,0,200),
-            'image': (0,20,180),
-            'linedrawing': (20,0,180),
-            'maths': (20,120,0),
-            'music': (20,120,40),
-            'noise': (50,50,50),
-            'separator': (0,0,100),
-            'unknown': (0,0,0)
-        }
+CLASSES = {'border': (255, 255, 255),
+           'text': (200, 0, 0),
+           'table': (0, 100, 20),
+           'chart': (0, 120, 0),
+           'chem': (0, 140, 0),
+           'graphic': (0, 0, 200),
+           'image': (0, 20, 180),
+           'linedrawing': (20, 0, 180),
+           'maths': (20, 120, 0),
+           'music': (20, 120, 40),
+           'noise': (50, 50, 50),
+           'separator': (0, 0, 100),
+           'unknown': (0, 0, 0)
+}
 
 class ExtractRegions(Processor):
 
@@ -68,6 +70,17 @@ class ExtractRegions(Processor):
             pcgts = page_from_file(self.workspace.download_file(input_file))
             page = pcgts.get_Page()
             ptype = page.get_type()
+            metadata = pcgts.get_Metadata() # ensured by from_file()
+            metadata.add_MetadataItem(
+                MetadataItemType(type_="processingStep",
+                                 name=self.ocrd_tool['steps'][0],
+                                 value=TOOL,
+                                 Labels=[LabelsType(
+                                     externalModel="ocrd-tool",
+                                     externalId="parameters",
+                                     Label=[LabelType(type_=name,
+                                                      value=self.parameter[name])
+                                            for name in self.parameter.keys()])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 feature_filter='binarized',
@@ -90,7 +103,7 @@ class ExtractRegions(Processor):
                                            file_id + '.bin',
                                            self.output_file_grp,
                                            page_id=page_id)
-            page_image_dbg = PIL.Image.new(mode='RGB', size=page_image.size, color=0)
+            page_image_dbg = Image.new(mode='RGB', size=page_image.size, color=0)
             regions = { 'text': page.get_TextRegion(),
                         'table': page.get_TableRegion(),
                         'chart': page.get_ChartRegion(),
@@ -103,7 +116,7 @@ class ExtractRegions(Processor):
                         'noise': page.get_NoiseRegion(),
                         'separator': page.get_SeparatorRegion(),
                         'unknown': page.get_UnknownRegion()
-                    }
+            }
             description = { 'angle': page.get_orientation() }
             for rtype, rlist in regions.items():
                 for region in rlist:
@@ -120,9 +133,10 @@ class ExtractRegions(Processor):
                           'page.type': ptype,
                           'file_grp': self.input_file_grp,
                           'METS.UID': self.workspace.mets.unique_identifier
-                    })
-                    PIL.ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple,polygon)), fill=CLASSES[rtype])
-                    PIL.ImageDraw.Draw(page_image_dbg).line(list(map(tuple,polygon + [polygon[0]])), 
+                        })
+                    ImageDraw.Draw(page_image_dbg).polygon(list(map(tuple, polygon)),
+                                                               fill=CLASSES[rtype])
+                    ImageDraw.Draw(page_image_dbg).line(list(map(tuple, polygon + [polygon[0]])), 
                                                             fill=CLASSES['border'], width=3)
             self.workspace.save_image_file(page_image_dbg,
                                            file_id + '.dbg',
@@ -130,4 +144,3 @@ class ExtractRegions(Processor):
                                            page_id=page_id)
             file_path = file_path.replace('.png', '.json')
             json.dump(description, open(file_path, 'w'))
-
