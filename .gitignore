@@ -106,3 +106,8 @@ venv.bak/
 # vim tmp
 *.swp
 *.swo
+
+# Input files
+/input
+/downscale*
+/masks*

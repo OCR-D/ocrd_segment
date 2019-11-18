@@ -1,0 +1,4 @@
+['remote "jsde"']
+url = ssh://me@janek-schleicher.de:/home/me/data/ocrd_segments
+[core]
+remote = jsde
