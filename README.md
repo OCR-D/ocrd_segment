@@ -1,6 +1,15 @@
 # ocrd_segment
 
-This repository aims to provide a number of OCR-D-compliant processors for layout analysis and evaluation.
+This repository aims to provide a number of [OCR-D-compliant processors](https://ocr-d.github.io/cli) for layout analysis and evaluation.
+
+## Installation
+
+In your virtual environment, run:
+```bash
+pip install .
+```
+
+## Usage
 
   - extracting page images (including results from preprocessing like cropping, deskewing or binarization) along with region polygon coordinates and metadata:
     - [ocrd-segment-extract-regions](ocrd_segment/extract_regions.py)
@@ -14,3 +23,9 @@ This repository aims to provide a number of OCR-D-compliant processors for layou
     - `ocrd-segment-via-template` :construction: (unpublished)
   - data-driven segmentation (input file groups N=1, based on a statistical model, e.g. Neural Network)  
     - `ocrd-segment-via-model` :construction: (unpublished)
+
+For detailed description on input/output and parameters, see [ocrd-tool.json](ocrd_segment/ocrd-tool.json)
+
+## Testing
+
+None yet.
