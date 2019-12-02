@@ -1,3 +1,2 @@
-ocrd >= 1.0.0b19
-click
+ocrd >= 2.0.2
 shapely
