@@ -22,6 +22,10 @@ class LayoutPredictConfig(Config):
     NUM_CLASSES = 1 + 6
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
+    # default is square, but when trained on crop,
+    # we should use the full-resolution image, too:
+    #IMAGE_RESIZE_MODE = "none" # yields impatible tensor shapes
+    IMAGE_MAX_DIM = 4096
 
 class LayoutDataset(Dataset):
 
