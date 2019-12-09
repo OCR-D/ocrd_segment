@@ -151,14 +151,12 @@ class RepairSegmentation(Processor):
             page, page_id)
         for region in regions:
             LOG.info('Sanitizing region "%s"', region.id)
-            region_image, region_coords = self.workspace.image_from_segment(
-                region, page_image, page_coords)
             lines = region.get_TextLine()
             heights = []
             # get labels:
-            region_mask = np.zeros((region_image.height, region_image.width), dtype=np.uint8)
+            region_mask = np.zeros((page_image.height, page_image.width), dtype=np.uint8)
             for line in lines:
-                line_polygon = coordinates_of_segment(line, region_image, region_coords)
+                line_polygon = coordinates_of_segment(line, page_image, page_coords)
                 heights.append(xywh_from_polygon(line_polygon)['h'])
                 region_mask[draw.polygon(line_polygon[:, 1],
                                          line_polygon[:, 0],
@@ -201,7 +199,7 @@ class RepairSegmentation(Processor):
                               region.id)
                     region_polygon = None
                     break
-                region_polygon = coordinates_for_segment(polygon, region_image, region_coords)
+                region_polygon = coordinates_for_segment(polygon, page_image, page_coords)
             if region_polygon is not None:
                 LOG.info('Using new coordinates for region "%s"', region.id)
                 region.get_Coords().points = points_from_polygon(region_polygon)
