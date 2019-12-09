@@ -92,7 +92,7 @@ def train(data, weights, write_weights, heads, seed):
     model.train(train_data, test_data,
                 learning_rate=config.LEARNING_RATE,
                 epochs=40,
-                custom_callbacks=[EarlyStopping(patience=3, verbose=1, restore_best_weights=True)]
+                custom_callbacks=[EarlyStopping(patience=10, verbose=1, restore_best_weights=True)]
                 if write_weights else None,
                 layers='heads' if heads else 'all')
     if write_weights:
