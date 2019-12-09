@@ -31,9 +31,19 @@ def cli():
               help='save final weight file')
 @click.option('-h', '--heads', is_flag=True, default=False,
               help='only train head layers')
+@click.option('-d', '--depth', default=None,
+              help='start training at what depth of layers (heads, 2+, ..., all)')
 @click.option('-s', '--seed', type=int, default=0)
-def train(data, weights, write_weights, heads, seed):
+def train(data, weights, write_weights, heads, depth, seed):
     """Train model on DATA directory, loading from WEIGHTS."""
+    # check parameters
+    if heads:
+        if depth and depth != 'heads':
+            raise Exception("Inconsistency between options --heads and --depth")
+        depth = 'heads'
+    if not depth:
+        depth = 'all'
+
     #
     # prepare data
     #
@@ -94,7 +104,7 @@ def train(data, weights, write_weights, heads, seed):
                 epochs=40,
                 custom_callbacks=[EarlyStopping(patience=10, verbose=1, restore_best_weights=True)]
                 if write_weights else None,
-                layers='heads' if heads else 'all')
+                layers=depth)
     if write_weights:
         model.keras_model.save_weights(write_weights)
 
@@ -222,9 +232,12 @@ def predict(images, weights):
         # load image
         image = predict_data.load_image(image_id)
         # convert pixel values (e.g. center)
+        # FIXME robert: why mold here?? 
+        # (this step is already included in model.detect()'s mold_inputs)
         scaled_image = mold_image(image, config)
         # convert image into one sample
         sample = np.expand_dims(scaled_image, 0)
+        # (also resizes according to config)
         # make prediction
         yhat = model.detect(sample, verbose=0)[0]
         masks = yhat['masks']
