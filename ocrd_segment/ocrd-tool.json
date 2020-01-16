@@ -23,7 +23,13 @@
         "plausibilize": {
           "type": "boolean",
           "default": false,
-          "description": "Modify the region segmentation to make it (more) plausible"
+          "description": "Remove redundant (almost equal or almost contained) regions, and merge overlapping regions"
+        },
+        "plausibilize_merge_min_overlap": {
+          "type": "number",
+          "format": "float",
+          "default": 0.90,
+          "description": "When merging a region almost contained in another, require at least this ratio of area is shared with the other"
         }
       }
     },

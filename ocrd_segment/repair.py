@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os.path
+from collections import namedtuple
 from skimage import draw
 from scipy.ndimage import filters
 import cv2
@@ -87,49 +88,78 @@ class RepairSegmentation(Processor):
                 self.sanitize_page(page, page_id)
                 
             #
-            # plausibilize region segmentation (remove redundant regions)
+            # plausibilize region segmentation (remove redundant text regions)
             #
-            mark_for_deletion = list()
-            mark_for_merging = list()
+            mark_for_deletion = list() # what regions get removed?
+            mark_for_merging = dict() # what regions get merged into which regions?
 
+            # TODO: cover recursive region structure (but compare only at the same level)
             regions = page.get_TextRegion()
-            for i in range(0, len(regions)):
-                for j in range(i+1, len(regions)):
-                    region1 = regions[i]
-                    region2 = regions[j]
+            # sort by area to ensure to arrive at a total ordering compatible
+            # with the topological sort along containment/equivalence arcs
+            # (so we can avoid substituting regions with superregions that have
+            #  themselves been substituted/deleted):
+            RegionPolygon = namedtuple('RegionPolygon', ['region', 'polygon'])
+            regionspolys = sorted([RegionPolygon(region, Polygon(polygon_from_points(region.get_Coords().points)))
+                                   for region in regions],
+                                  key=lambda x: x.polygon.area)
+            for i in range(0, len(regionspolys)):
+                for j in range(i+1, len(regionspolys)):
+                    region1 = regionspolys[i].region
+                    region2 = regionspolys[j].region
+                    poly1 = regionspolys[i].polygon
+                    poly2 = regionspolys[j].polygon
                     LOG.debug('Comparing regions "%s" and "%s"', region1.id, region2.id)
-                    region1_poly = Polygon(polygon_from_points(region1.get_Coords().points))
-                    region2_poly = Polygon(polygon_from_points(region2.get_Coords().points))
                     
-                    equality = region1_poly.almost_equals(region2_poly)
-                    if equality:
-                        LOG.warning('Page "%s" regions "%s" and "%s" cover the same area.',
-                                    page_id, region1.id, region2.id)
-                        mark_for_deletion.append(region2)
+                    if poly1.almost_equals(poly2):
+                        LOG.warning('Page "%s" region "%s" is almost equal to "%s" %s',
+                                    page_id, region2.id, region1.id,
+                                    '(removing)' if plausibilize else '')
+                        mark_for_deletion.append(region2.id)
+                    elif poly1.contains(poly2):
+                        LOG.warning('Page "%s" region "%s" is within "%s" %s',
+                                    page_id, region2.id, region1.id,
+                                    '(removing)' if plausibilize else '')
+                        mark_for_deletion.append(region2.id)
+                    elif poly2.contains(poly1):
+                        LOG.warning('Page "%s" region "%s" is within "%s" %s',
+                                    page_id, region1.id, region2.id,
+                                    '(removing)' if plausibilize else '')
+                        mark_for_deletion.append(region1.id)
+                    elif poly1.overlaps(poly2):
+                        inter_poly = poly1.intersection(poly2)
+                        LOG.debug('Page "%s" region "%s" overlaps "%s" by %f/%f',
+                                  page_id, region1.id, region2.id, inter_poly.area/poly1.area, inter_poly.area/poly2.area)
+                        if inter_poly.area / poly2.area > self.parameter['plausibilize_merge_min_overlap']:
+                            LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
+                                        page_id, region2.id, region1.id,
+                                        '(merging)' if plausibilize else '')
+                            mark_for_merging[region2.id] = region1
+                        elif inter_poly.area / poly1.area > self.parameter['plausibilize_merge_min_overlap']:
+                            LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
+                                        page_id, region1.id, region2.id,
+                                        '(merging)' if plausibilize else '')
+                            mark_for_merging[region1.id] = region2
 
-                    if region1_poly.contains(region2_poly):
-                        LOG.warning('Page "%s" region "%s" contains "%s"',
-                                    page_id, region1.id, region2.id)
-                        mark_for_deletion.append(region2)
-                    elif region2_poly.contains(region1_poly):
-                        LOG.warning('Page "%s" region "%s" contains "%s"',
-                                    page_id, region2.id, region1.id)
-                        mark_for_deletion.append(region1)
-
-                    #LOG.info('Intersection %i', region1_poly.intersects(region2_poly))
-                    #LOG.info('Containment %i', region1_poly1.contains(region2_poly))
-                    #if region1_poly.intersects(region2_poly):
-                    #    LOG.info('Area 1 %d', region1_poly.area)
-                    #    LOG.info('Area 2 %d', region2_poly.area)
-                    #    LOG.info('Area intersect %d', region1_poly.intersection(region2_poly).area)
+                    # TODO: more merging cases...
+                    #LOG.info('Intersection %i', poly1.intersects(poly2))
+                    #LOG.info('Containment %i', poly1.contains(poly2))
+                    #if poly1.intersects(poly2):
+                    #    LOG.info('Area 1 %d', poly1.area)
+                    #    LOG.info('Area 2 %d', poly2.area)
+                    #    LOG.info('Area intersect %d', poly1.intersection(poly2).area)
                         
 
             if plausibilize:
                 # the reading order does not have to include all regions
                 # but it may include all types of regions!
                 ro = page.get_ReadingOrder()
-                _plausibilize_group(regions, ro.get_OrderedGroup() or ro.get_UnorderedGroup(),
-                                    mark_for_deletion)
+                if ro:
+                    rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
+                else:
+                    rogroup = None
+                # pass the regions sorted (see above)
+                _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging)
 
             # Use input_file's basename for the new file -
             # this way the files retain the same basenames:
@@ -259,7 +289,7 @@ def _child_within_parent(child, parent):
     parent_poly = Polygon(polygon_from_points(parent.get_Coords().points))
     return child_poly.within(parent_poly)
 
-def _plausibilize_group(regions, rogroup, mark_for_deletion):
+def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
     wait_for_deletion = list()
     reading_order = dict()
     ordered = False
@@ -275,17 +305,63 @@ def _plausibilize_group(regions, rogroup, mark_for_deletion):
     for elem in regionrefs:
         reading_order[elem.get_regionRef()] = elem
         if not isinstance(elem, (RegionRefType, RegionRefIndexedType)):
-            _plausibilize_group(regions, elem, mark_for_deletion)
-    for region in regions:
-        if (region in mark_for_deletion and
-            region.get_id() in reading_order):
+            # recursive reading order element (un/ordered group):
+            _plausibilize_group(regionspolys, elem, mark_for_deletion, mark_for_merging)
+    for regionpoly in regionspolys:
+        delete = regionpoly.region.id in mark_for_deletion
+        merge = regionpoly.region.id in mark_for_merging
+        if delete or merge:
+            region = regionpoly.region
+            poly = regionpoly.polygon
+            if merge:
+                # merge region with super region:
+                superreg = mark_for_merging[region.id]
+                # granularity will necessarily be lost here --
+                # this is not for workflows/processors that already
+                # provide good/correct segmentation and reading order
+                # (in which case orientation, script and style detection
+                #  can be expected as well), but rather as a postprocessor
+                # for suboptimal segmentation (possibly before reading order
+                # detection/correction); hence, all we now do here is
+                # show warnings when granularity is lost; but there might
+                # be good reasons to do more here when we have better processors
+                # and use-cases in the future
+                superpoly = Polygon(polygon_from_points(superreg.get_Coords().points))
+                superpoly = superpoly.union(poly)
+                superreg.get_Coords().points = points_from_polygon(superpoly.exterior.coords)
+                # FIXME should we merge/mix attributes and features?
+                if region.get_orientation() != superreg.get_orientation():
+                    LOG.warning('Merging region "%s" with orientation %f into "%s" with %f',
+                                region.id, region.get_orientation(),
+                                superreg.id, superreg.get_orientation())
+                if region.get_type() != superreg.get_type():
+                    LOG.warning('Merging region "%s" with type %s into "%s" with %s',
+                                region.id, region.get_type(),
+                                superreg.id, superreg.get_type())
+                if region.get_primaryScript() != superreg.get_primaryScript():
+                    LOG.warning('Merging region "%s" with primaryScript %s into "%s" with %s',
+                                region.id, region.get_primaryScript(),
+                                superreg.id, superreg.get_primaryScript())
+                if region.get_primaryLanguage() != superreg.get_primaryLanguage():
+                    LOG.warning('Merging region "%s" with primaryLanguage %s into "%s" with %s',
+                                region.id, region.get_primaryLanguage(),
+                                superreg.id, superreg.get_primaryLanguage())
+                if region.get_TextStyle():
+                    LOG.warning('Merging region "%s" with TextStyle %s into "%s" with %s',
+                                region.id, region.get_TextStyle(), # FIXME needs repr...
+                                superreg.id, superreg.get_TextStyle()) # ...to be informative
+                if region.get_TextEquiv():
+                    LOG.warning('Merging region "%s" with TextEquiv %s into "%s" with %s',
+                                region.id, region.get_TextEquiv(), # FIXME needs repr...
+                                superreg.id, superreg.get_TextEquiv()) # ...to be informative
             wait_for_deletion.append(region)
-            regionref = reading_order[region.get_id()]
-            # TODO: re-assign regionref.continuation and regionref.type to other?
-            # could be any of the 6 types above:
-            regionrefs = rogroup.__getattribute__(regionref.__class__.__name__.replace('Type', ''))
-            # remove in-place
-            regionrefs.remove(regionref)
+            if region.id in reading_order:
+                regionref = reading_order[region.id]
+                # TODO: re-assign regionref.continuation and regionref.type to other?
+                # could be any of the 6 types above:
+                regionrefs = rogroup.__getattribute__(regionref.__class__.__name__.replace('Type', ''))
+                # remove in-place
+                regionrefs.remove(regionref)
 
     if ordered:
         # re-index the reading order!
@@ -294,6 +370,6 @@ def _plausibilize_group(regions, rogroup, mark_for_deletion):
             regionref.set_index(i)
         
     for region in wait_for_deletion:
-        if region in regions:
+        if region.parent_object_:
             # remove in-place
-            regions.remove(region)
+            region.parent_object_.get_TextRegion().remove(region)
