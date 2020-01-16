@@ -128,9 +128,13 @@ class RepairSegmentation(Processor):
                         mark_for_deletion.append(region1.id)
                     elif poly1.overlaps(poly2):
                         inter_poly = poly1.intersection(poly2)
+                        union_poly = poly1.union(poly2)
                         LOG.debug('Page "%s" region "%s" overlaps "%s" by %f/%f',
                                   page_id, region1.id, region2.id, inter_poly.area/poly1.area, inter_poly.area/poly2.area)
-                        if inter_poly.area / poly2.area > self.parameter['plausibilize_merge_min_overlap']:
+                        if union_poly.convex_hull.area >= poly1.area + poly2.area:
+                            # skip this pair -- combined polygon encloses previously free segments
+                            pass
+                        elif inter_poly.area / poly2.area > self.parameter['plausibilize_merge_min_overlap']:
                             LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
                                         page_id, region2.id, region1.id,
                                         '(merging)' if plausibilize else '')
