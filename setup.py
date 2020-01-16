@@ -3,6 +3,7 @@
 Installs:
 
     - ocrd-segment-repair
+    - ocrd-segment-extract-pages
     - ocrd-segment-extract-regions
     - ocrd-segment-extract-lines
     - ocrd-segment-evaluate
@@ -28,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
+            'ocrd-segment-extract-pages=ocrd_segment.cli:ocrd_segment_extract_pages',
             'ocrd-segment-extract-regions=ocrd_segment.cli:ocrd_segment_extract_regions',
             'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
