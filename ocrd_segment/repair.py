@@ -186,6 +186,9 @@ class RepairSegmentation(Processor):
         for region in regions:
             LOG.info('Sanitizing region "%s"', region.id)
             lines = region.get_TextLine()
+            if not lines:
+                LOG.warning('Page "%s" region "%s" contains no textlines', page_id, region.id)
+                continue
             heights = []
             # get labels:
             region_mask = np.zeros((page_image.height, page_image.width), dtype=np.uint8)
