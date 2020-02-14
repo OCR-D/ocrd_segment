@@ -141,6 +141,7 @@ class ExtractPages(Processor):
             self.workspace.save_image_file(page_image_dbg,
                                            file_id + '.dbg',
                                            self.output_file_grp,
-                                           page_id=page_id)
-            file_path = file_path.replace('.png', '.json')
+                                           page_id=page_id,
+                                           format=self.parameter['format'])
+            file_path = file_path.replace('.' + self.parameter['format'].lower(), '.json')
             json.dump(description, open(file_path, 'w'))

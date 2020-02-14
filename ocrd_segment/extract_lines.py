@@ -182,8 +182,8 @@ class ExtractLines(Processor):
                         file_id + '_' + region.id + '_' + line.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
-                        format='PNG')
-                    file_path = file_path.replace(extension + '.png', '.json')
+                        format=self.parameter['format'])
+                    file_path = file_path.replace(extension + '.' + self.parameter['format'].lower(), '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:

@@ -173,7 +173,7 @@ class ExtractRegions(Processor):
                         file_id + '_' + region.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
-                        format='PNG')
-                    file_path = file_path.replace(extension + '.png', '.json')
+                        format=self.parameter['format'])
+                    file_path = file_path.replace(extension + '.' + self.parameter['format'].lower(), '.json')
                     json.dump(description, open(file_path, 'w'))
 

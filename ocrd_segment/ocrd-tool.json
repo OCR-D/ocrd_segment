@@ -48,6 +48,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "format": {
+          "type": "string",
+          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
+          "default": "PNG",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,
@@ -68,6 +74,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "format": {
+          "type": "string",
+          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
+          "default": "PNG",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,
@@ -88,6 +100,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "format": {
+          "type": "string",
+          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
+          "default": "PNG",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,
