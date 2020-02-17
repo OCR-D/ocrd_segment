@@ -1,3 +1,4 @@
-ocrd >= 2.0.2
+ocrd >= 2.4.0
 shapely
 scikit-image
+numpy

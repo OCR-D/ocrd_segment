@@ -6,7 +6,8 @@ import json
 from ocrd_utils import (
     getLogger, concat_padded,
     coordinates_of_segment,
-    polygon_from_points
+    polygon_from_points,
+    MIME_TO_EXT
 )
 from ocrd_models.ocrd_page import (
     LabelsType, LabelType,
@@ -182,8 +183,8 @@ class ExtractLines(Processor):
                         file_id + '_' + region.id + '_' + line.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
-                        format=self.parameter['format'])
-                    file_path = file_path.replace(extension + '.' + self.parameter['format'].lower(), '.json')
+                        mimetype=self.parameter['mimetype'])
+                    file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:

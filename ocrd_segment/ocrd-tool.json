@@ -48,10 +48,10 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
-        "format": {
+        "mimetype": {
           "type": "string",
-          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
-          "default": "PNG",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
           "description": "File format to save extracted images in."
         },
         "transparency": {
@@ -74,10 +74,10 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
-        "format": {
+        "mimetype": {
           "type": "string",
-          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
-          "default": "PNG",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
           "description": "File format to save extracted images in."
         },
         "transparency": {
@@ -100,10 +100,10 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
-        "format": {
+        "mimetype": {
           "type": "string",
-          "enum": ["BMP", "EPS", "GIF", "JPEG", "JP2", "MSP", "PCX", "PNG", "PPM", "TIFF"],
-          "default": "PNG",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
           "description": "File format to save extracted images in."
         },
         "transparency": {

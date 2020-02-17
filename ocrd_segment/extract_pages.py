@@ -5,7 +5,8 @@ from PIL import Image, ImageDraw
 
 from ocrd_utils import (
     getLogger, concat_padded,
-    coordinates_of_segment
+    coordinates_of_segment,
+    MIME_TO_EXT
 )
 from ocrd_models.ocrd_page import (
     LabelsType, LabelType,
@@ -94,7 +95,8 @@ class ExtractPages(Processor):
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id,
                                                        self.output_file_grp,
-                                                       page_id=page_id)
+                                                       page_id=page_id,
+                                                       mimetype=self.parameter['mimetype'])
             page_image_bin, _, _ = self.workspace.image_from_page(
                 page, page_id,
                 feature_selector='binarized',
@@ -142,6 +144,6 @@ class ExtractPages(Processor):
                                            file_id + '.dbg',
                                            self.output_file_grp,
                                            page_id=page_id,
-                                           format=self.parameter['format'])
-            file_path = file_path.replace('.' + self.parameter['format'].lower(), '.json')
+                                           mimetype=self.parameter['mimetype'])
+            file_path = file_path.replace(MIME_TO_EXT[self.parameter['mimetype']], '.json')
             json.dump(description, open(file_path, 'w'))
