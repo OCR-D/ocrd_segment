@@ -10,11 +10,15 @@ Installs:
 """
 import codecs
 
+import json
 from setuptools import setup, find_packages
 
+with open('./ocrd-tool.json', 'r') as f:
+    version = json.load(f)['version']
+    
 setup(
     name='ocrd_segment',
-    version='0.0.2',
+    version=version,
     description='Page segmentation and segmentation evaluation',
     long_description=codecs.open('README.md', encoding='utf-8').read(),
     author='Konstantin Baierer, Kay-Michael Würzner, Robert Sachunsky',
