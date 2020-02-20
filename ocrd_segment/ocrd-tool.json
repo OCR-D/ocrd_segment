@@ -48,6 +48,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,
@@ -68,6 +74,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,
@@ -88,6 +100,12 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
         "transparency": {
           "type": "boolean",
           "default": true,

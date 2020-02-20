@@ -6,7 +6,8 @@ import json
 from ocrd_utils import (
     getLogger, concat_padded,
     coordinates_of_segment,
-    polygon_from_points
+    polygon_from_points,
+    MIME_TO_EXT
 )
 from ocrd_models.ocrd_page import (
     LabelsType, LabelType,
@@ -173,7 +174,7 @@ class ExtractRegions(Processor):
                         file_id + '_' + region.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
-                        format='PNG')
-                    file_path = file_path.replace(extension + '.png', '.json')
+                        mimetype=self.parameter['mimetype'])
+                    file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
 

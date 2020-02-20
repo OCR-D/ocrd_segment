@@ -11,9 +11,11 @@ pip install .
 
 ## Usage
 
-  - extracting page images (including results from preprocessing like cropping, deskewing or binarization) along with region polygon coordinates and metadata:
+  - extracting page images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata:
+    - [ocrd-segment-extract-pages](ocrd_segment/extract_pages.py)
+  - extracting region images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata:
     - [ocrd-segment-extract-regions](ocrd_segment/extract_regions.py)
-  - extracting line images (including results from preprocessing like cropping, deskewing, dewarping or binarization) along with line polygon coordinates and metadata:
+  - extracting line images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with line polygon coordinates and metadata:
     - [ocrd-segment-extract-lines](ocrd_segment/extract_lines.py)
   - comparing different layout segmentations (input file groups N = 2, compute the distance between two segmentations, e.g. automatic vs. manual):
     - [ocrd-segment-evaluate](ocrd_segment/evaluate.py) :construction: (very early stage)
