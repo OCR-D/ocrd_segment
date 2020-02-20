@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import os.path
 import json
+import itertools
 
 from ocrd_utils import (
     getLogger, concat_padded,
@@ -97,7 +98,9 @@ class ExtractLines(Processor):
                 dpi = None
             ptype = page.get_type()
             
-            regions = page.get_TextRegion()
+            regions = itertools.chain.from_iterable(
+                [page.get_TextRegion()] +
+                [subregion.get_TextRegion() for subregion in page.get_TableRegion()])
             if not regions:
                 LOG.warning("Page '%s' contains no text regions", page_id)
             for region in regions:
