@@ -1,3 +1,4 @@
-ocrd >= 1.0.0b19
-click
+ocrd >= 2.4.0
 shapely
+scikit-image
+numpy

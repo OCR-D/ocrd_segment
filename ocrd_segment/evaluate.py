@@ -1,14 +1,12 @@
 from __future__ import absolute_import
 
-import os.path
+from shapely.geometry import Polygon
 
 from ocrd import Processor
 from ocrd_utils import getLogger, concat_padded
 from ocrd_modelfactory import page_from_file
 
 from .config import OCRD_TOOL
-
-from shapely.geometry import Polygon
 
 TOOL = 'ocrd-segment-evaluate'
 LOG = getLogger('processor.EvaluateSegmentation')
