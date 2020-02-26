@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1",
+  "version": "0.0.3",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-repair": {
@@ -23,7 +23,93 @@
         "plausibilize": {
           "type": "boolean",
           "default": false,
-          "description": "Modify the region segmentation to make it (more) plausible"
+          "description": "Remove redundant (almost equal or almost contained) regions, and merge overlapping regions"
+        },
+        "plausibilize_merge_min_overlap": {
+          "type": "number",
+          "format": "float",
+          "default": 0.90,
+          "description": "When merging a region almost contained in another, require at least this ratio of area is shared with the other"
+        }
+      }
+    },
+    "ocrd-segment-extract-pages": {
+      "executable": "ocrd-segment-extract-pages",
+      "categories": ["Image preprocessing"],
+      "description": "Extract page segmentation (border/skew) as image+JSON, including region coordinates/classes.",
+      "input_file_grp": [
+        "OCR-D-SEG-PAGE",
+        "OCR-D-GT-SEG-PAGE",
+        "OCR-D-SEG-BLOCK",
+        "OCR-D-GT-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-regions": {
+      "executable": "ocrd-segment-extract-regions",
+      "categories": ["Image preprocessing"],
+      "description": "Extract region segmentation (polygon/skew) as image+JSON.",
+      "input_file_grp": [
+        "OCR-D-SEG-BLOCK",
+        "OCR-D-GT-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-lines": {
+      "executable": "ocrd-segment-extract-lines",
+      "categories": ["Image preprocessing"],
+      "description": "Extract line segmentation (polygon) as image+txt+JSON.",
+      "input_file_grp": [
+        "OCR-D-SEG-LINE",
+        "OCR-D-GT-SEG-LINE"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
         }
       }
     },

@@ -31,9 +31,19 @@ def cli():
               help='save final weight file')
 @click.option('-h', '--heads', is_flag=True, default=False,
               help='only train head layers')
+@click.option('-d', '--depth', default=None,
+              help='start training at what depth of layers (heads, 2+, ..., all)')
 @click.option('-s', '--seed', type=int, default=0)
-def train(data, weights, write_weights, heads, seed):
+def train(data, weights, write_weights, heads, depth, seed):
     """Train model on DATA directory, loading from WEIGHTS."""
+    # check parameters
+    if heads:
+        if depth and depth != 'heads':
+            raise Exception("Inconsistency between options --heads and --depth")
+        depth = 'heads'
+    if not depth:
+        depth = 'all'
+
     #
     # prepare data
     #
@@ -57,6 +67,8 @@ def train(data, weights, write_weights, heads, seed):
         annotation = None
         with json_path.open('r') as json_file:
             annotation = json.load(json_file)
+        if not annotation.get('regions'):
+            continue
         image_id = json_path.stem
         image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
         if pathlib.Path(image_path).exists():
@@ -90,9 +102,9 @@ def train(data, weights, write_weights, heads, seed):
     model.train(train_data, test_data,
                 learning_rate=config.LEARNING_RATE,
                 epochs=40,
-                custom_callbacks=[EarlyStopping(patience=3, verbose=1, restore_best_weights=True)]
+                custom_callbacks=[EarlyStopping(patience=10, verbose=1, restore_best_weights=True)]
                 if write_weights else None,
-                layers='heads' if heads else 'all')
+                layers=depth)
     if write_weights:
         model.keras_model.save_weights(write_weights)
 
@@ -123,6 +135,8 @@ def evaluate(data, weights, seed):
         annotation = None
         with json_path.open('r') as json_file:
             annotation = json.load(json_file)
+        if not annotation.get('regions'):
+            continue
         image_id = json_path.stem
         image_path = str(json_path.parent.joinpath(image_id + '.png')) # .bin.png, .dbg.png
         if pathlib.Path(image_path).exists():
@@ -218,17 +232,28 @@ def predict(images, weights):
         # load image
         image = predict_data.load_image(image_id)
         # convert pixel values (e.g. center)
+        # FIXME robert: why mold here?? 
+        # (this step is already included in model.detect()'s mold_inputs)
         scaled_image = mold_image(image, config)
         # convert image into one sample
         sample = np.expand_dims(scaled_image, 0)
+        # (also resizes according to config)
         # make prediction
         yhat = model.detect(sample, verbose=0)[0]
         masks = yhat['masks']
-        click.echo("image has %d rois" % masks.shape[-1])
+        click.echo("image has %d rois with %d distinct classes" % \
+                   (masks.shape[-1], len(np.unique(yhat['class_ids']))))
         # show result
         pyplot.close() # clear axes from previous images
         pyplot.imshow(image)
         ax = pyplot.gca()
+        ax.set_axis_off()
+        ax.set_xmargin(0)
+        ax.set_ymargin(0)
+        ax.set_frame_on(0)
+        ax.set_position([0,0,1,1])
+        # label the image with the file name
+        #ax.set_title(image_path)
         for i, box in enumerate(yhat['rois']):
             # get best class and score of best class
             class_ = yhat['class_ids'][i]
@@ -246,10 +271,10 @@ def predict(images, weights):
             ax.add_patch(rect)
             # draw the pixel mask onto the image (semi-transparent)
             # but do not color-code zero (but make transparent)
-            ax.imshow(np.ma.array(mask * class_, mask=np.logical_not(mask)),
-                      cmap=cm.tab10, alpha=0.5)
-            # label the image with the file name
-            ax.legend([image_path])
+            # todo: colormap does not work with masked arrays
+            # (but a custom cmap with set_under('k',alpha=0) and vmin does not, either)
+            ax.imshow(np.ma.masked_where(mask == 0, mask * class_), cmap=cm.tab10, alpha=0.5)
+        # write to CWD (not input directory)
         pyplot.savefig(image_path + '.pred.png', dpi=300, bbox_inches='tight')
     # show the very last plot interactively
     pyplot.show()

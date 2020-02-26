@@ -1,3 +1,6 @@
-ocrd >= 1.0.0b11
-click
+ocrd >= 2.4.0
 shapely
+scikit-image
+numpy
+keras ~= 2.2.5 # mask-rcnn needs < 2.3
+mask-rcnn@git+https://github.com/matterport/Mask_RCNN@refs/pull/1611/head#egg=mask-rcnn-2.1

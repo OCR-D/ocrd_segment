@@ -8,8 +8,8 @@ from mrcnn.config import Config
 class LayoutTrainConfig(Config):
     # Give the configuration a recognizable name
     NAME = "layout_train_cfg"
-    # Number of classes (background + text)
-    NUM_CLASSES = 1 + 1
+    # Number of classes (background + region types)
+    NUM_CLASSES = 1 + 6
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 800
     GPU_COUNT = 1
@@ -18,11 +18,14 @@ class LayoutTrainConfig(Config):
 class LayoutPredictConfig(Config):
     # Give the configuration a recognizable name
     NAME = "layout_predict_cfg"
-    # Number of classes (background + text)
-    # todo: use all classes
-    NUM_CLASSES = 1 + 1
+    # Number of classes (background + region types)
+    NUM_CLASSES = 1 + 6
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
+    # default is square, but when trained on crop,
+    # we should use the full-resolution image, too:
+    #IMAGE_RESIZE_MODE = "none" # yields impatible tensor shapes
+    IMAGE_MAX_DIM = 4096
 
 class LayoutDataset(Dataset):
 
@@ -30,14 +33,12 @@ class LayoutDataset(Dataset):
         super().__init__()
 
         # define classes
-        # todo: use all classes
-        #self.add_class("dataset", 0, "background")
         self.add_class("dataset", 1, "text")
-        #self.add_class("dataset", 2, "separator")
-        #self.add_class("dataset", 3, "table")
-        #self.add_class("dataset", 4, "graphic")
-        #self.add_class("dataset", 5, "noise")
-        #self.add_class("dataset", 6, "maths")
+        self.add_class("dataset", 2, "separator")
+        self.add_class("dataset", 3, "table")
+        self.add_class("dataset", 4, "graphic")
+        self.add_class("dataset", 5, "noise")
+        self.add_class("dataset", 6, "maths")
 
     def image_reference(self, image_id):
         info = self.image_info[image_id]
@@ -65,9 +66,7 @@ class LayoutDataset(Dataset):
             masks[rows, cols, i] = 1
             rows, cols = draw.polygon_perimeter(polygon[:,1], polygon[:,0], (height, width))
             masks[rows, cols, i] = 1
-            # todo: use all classes
-            #class_ids.append(self.class_names.index(class_))
-            class_ids.append(self.class_names.index('text'))
+            class_ids.append(self.class_names.index(class_))
         return masks, asarray(class_ids, dtype='int32')
 
 def bbox_from_polygon(polygon,
