@@ -33,6 +33,26 @@
         }
       }
     },
+    "ocrd-segment-from-masks": {
+      "executable": "ocrd-segment-from-masks",
+      "categories": ["Layout analysis"],
+      "description": "Import region segmentation from mask images",
+      "input_file_grp": [
+        "OCR-D-IMG",
+        "OCR-D-SEG-PAGE"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "colordict": {
+          "type": "object",
+          "required": true,
+          "description": "mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '#00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background))"
+        }
+      }
+    },
     "ocrd-segment-extract-pages": {
       "executable": "ocrd-segment-extract-pages",
       "categories": ["Image preprocessing"],

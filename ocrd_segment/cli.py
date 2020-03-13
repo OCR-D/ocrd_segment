@@ -1,16 +1,22 @@
 import click
 
 from ocrd.decorators import ocrd_cli_options, ocrd_cli_wrap_processor
-from ocrd_segment.repair import RepairSegmentation
-from ocrd_segment.evaluate import EvaluateSegmentation
-from ocrd_segment.extract_pages import ExtractPages
-from ocrd_segment.extract_regions import ExtractRegions
-from ocrd_segment.extract_lines import ExtractLines
+from .repair import RepairSegmentation
+from .import_image_segmentation import ImportImageSegmentation
+from .evaluate import EvaluateSegmentation
+from .extract_pages import ExtractPages
+from .extract_regions import ExtractRegions
+from .extract_lines import ExtractLines
 
 @click.command()
 @ocrd_cli_options
 def ocrd_segment_repair(*args, **kwargs):
     return ocrd_cli_wrap_processor(RepairSegmentation, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_from_masks(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ImportImageSegmentation, *args, **kwargs)
 
 @click.command()
 @ocrd_cli_options

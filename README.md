@@ -21,6 +21,9 @@ pip install .
     - [ocrd-segment-evaluate](ocrd_segment/evaluate.py) :construction: (very early stage)
   - repairing layout segmentations (input file groups N >= 1, based on heuristics implemented using Shapely):
     - [ocrd-segment-repair](ocrd_segment/repair.py) :construction: (much to be done)
+  - importing layout segmentations from other formats (mask images, MS-COCO JSON annotation):
+    - [ocrd-segment-from-masks](ocrd_segment/import_image_segmentation.py)
+    - [ocrd-segment-from-coco](ocrd_segment/import_coco_segmentation.py) :construction: (unpublished)
   - pattern-based segmentation (input file groups N=1, based on a PAGE template, e.g. from Aletheia, and some XSLT or Python to apply it to the input file group)
     - `ocrd-segment-via-template` :construction: (unpublished)
   - data-driven segmentation (input file groups N=1, based on a statistical model, e.g. Neural Network)  
