@@ -11,19 +11,19 @@ pip install .
 
 ## Usage
 
-  - extracting page images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata:
+  - exporting page images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata, also MS-COCO:
     - [ocrd-segment-extract-pages](ocrd_segment/extract_pages.py)
-  - extracting region images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata:
+  - exporting region images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with region polygon coordinates and metadata:
     - [ocrd-segment-extract-regions](ocrd_segment/extract_regions.py)
-  - extracting line images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with line polygon coordinates and metadata:
+  - exporting line images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with line polygon coordinates and metadata:
     - [ocrd-segment-extract-lines](ocrd_segment/extract_lines.py)
-  - comparing different layout segmentations (input file groups N = 2, compute the distance between two segmentations, e.g. automatic vs. manual):
-    - [ocrd-segment-evaluate](ocrd_segment/evaluate.py) :construction: (very early stage)
-  - repairing layout segmentations (input file groups N >= 1, based on heuristics implemented using Shapely):
-    - [ocrd-segment-repair](ocrd_segment/repair.py) :construction: (much to be done)
   - importing layout segmentations from other formats (mask images, MS-COCO JSON annotation):
     - [ocrd-segment-from-masks](ocrd_segment/import_image_segmentation.py)
-    - [ocrd-segment-from-coco](ocrd_segment/import_coco_segmentation.py) :construction: (unpublished)
+    - [ocrd-segment-from-coco](ocrd_segment/import_coco_segmentation.py)
+  - repairing layout segmentations (input file groups N >= 1, based on heuristics implemented using Shapely):
+    - [ocrd-segment-repair](ocrd_segment/repair.py) :construction: (much to be done)
+  - comparing different layout segmentations (input file groups N = 2, compute the distance between two segmentations, e.g. automatic vs. manual):
+    - [ocrd-segment-evaluate](ocrd_segment/evaluate.py) :construction: (very early stage)
   - pattern-based segmentation (input file groups N=1, based on a PAGE template, e.g. from Aletheia, and some XSLT or Python to apply it to the input file group)
     - `ocrd-segment-via-template` :construction: (unpublished)
   - data-driven segmentation (input file groups N=1, based on a statistical model, e.g. Neural Network)  

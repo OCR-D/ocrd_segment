@@ -3,6 +3,7 @@ import click
 from ocrd.decorators import ocrd_cli_options, ocrd_cli_wrap_processor
 from .repair import RepairSegmentation
 from .import_image_segmentation import ImportImageSegmentation
+from .import_coco_segmentation import ImportCOCOSegmentation
 from .evaluate import EvaluateSegmentation
 from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
@@ -17,6 +18,11 @@ def ocrd_segment_repair(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_from_masks(*args, **kwargs):
     return ocrd_cli_wrap_processor(ImportImageSegmentation, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_from_coco(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ImportCOCOSegmentation, *args, **kwargs)
 
 @click.command()
 @ocrd_cli_options

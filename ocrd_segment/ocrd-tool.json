@@ -53,6 +53,28 @@
         }
       }
     },
+    "ocrd-segment-from-coco": {
+      "executable": "ocrd-segment-from-coco",
+      "categories": ["Layout analysis"],
+      "description": "Import region segmentation from COCO format",
+      "input_file_grp": [
+        "OCR-D-IMG",
+        "OCR-D-SEG-PAGE"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "cocofile": {
+          "type": "string",
+          "format": "uri",
+          "content-type": "application/json",
+          "required": true,
+          "description": "JSON file with image segmentations in COCO detection format (source PubLayNet or PAGE)"
+        }
+      }
+    },
     "ocrd-segment-extract-pages": {
       "executable": "ocrd-segment-extract-pages",
       "categories": ["Image preprocessing"],
