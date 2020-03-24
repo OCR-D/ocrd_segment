@@ -14,10 +14,12 @@ from ocrd_utils import (
     membername
 )
 from ocrd_modelfactory import page_from_file
+# pragma pylint: disable=unused-import
+# (region types will be referenced indirectly via globals())
 from ocrd_models.ocrd_page import (
     MetadataItemType,
     LabelsType, LabelType,
-    CoordsType, AlternativeImageType,
+    CoordsType,
     TextRegionType,
     ImageRegionType,
     MathsRegionType,
@@ -25,6 +27,7 @@ from ocrd_models.ocrd_page import (
     NoiseRegionType,
     to_xml)
 from ocrd_models.ocrd_page_generateds import (
+    BorderType,
     TableRegionType,
     GraphicRegionType,
     ChartRegionType,
@@ -36,6 +39,7 @@ from ocrd_models.ocrd_page_generateds import (
     GraphicsTypeSimpleType,
     ChartTypeSimpleType
 )
+# pragma pylint: enable=unused-import
 from ocrd import Processor
 
 from .config import OCRD_TOOL
@@ -91,26 +95,44 @@ class ImportImageSegmentation(Processor):
                                      Label=[LabelType(type_=name,
                                                       value=self.parameter[name])
                                             for name in self.parameter.keys()])]))
-            
+
+            # import mask image
             segmentation_filename = self.workspace.download_file(segmentation_file).local_filename
             with pushd_popd(self.workspace.directory):
                 segmentation_pil = Image.open(segmentation_filename)
-            if segmentation_pil.mode != 'RGB':
-                segmentation_pil = segmentation_pil.convert('RGB')
+            has_alpha = segmentation_pil.mode == 'RGBA'
+            if has_alpha:
+                colorformat = "#%08X"
+            else:
+                colorformat = "#%06X"
+                if segmentation_pil.mode != 'RGB':
+                    segmentation_pil = segmentation_pil.convert('RGB')
             # convert to array
             segmentation_array = np.array(segmentation_pil)
             # collapse 3 color channels
-            segmentation_array = segmentation_array.dot(np.array([2**16, 2**8, 1], np.uint32))
-            # iterate over mask for each color/class
-            regionno = 0
+            segmentation_array = segmentation_array.dot(
+                np.array([2**24, 2**16, 2**8, 1], np.uint32)[0 if has_alpha else 1:])
+            # partition mapped colors vs background
             colors = np.unique(segmentation_array)
+            bgcolors = []
+            for i, color in enumerate(colors):
+                colorname = colorformat % color
+                if (colorname not in colordict or
+                    not colordict[colorname]):
+                    #raise Exception("Unknown color %s (not in colordict)" % colorname)
+                    LOG.info("Ignoring background color %s", colorname)
+                    bgcolors.append(i)
+            background = np.zeros_like(segmentation_array, np.uint8)
+            if bgcolors:
+                for i in bgcolors:
+                    background += np.array(segmentation_array == colors[i], np.uint8)
+                colors = np.delete(colors, bgcolors, 0)
+            # iterate over mask for each mapped color/class
+            regionno = 0
             for color in colors:
-                if not "#%06X" % color in colordict:
-                    #raise Exception("Unknown color #%06X (not in colordict)" % color)
-                    LOG.info("Ignoring background color #%06X", color)
-                    continue
                 # get region (sub)type
-                classname = colordict["#%06X" % color]
+                colorname = colorformat % color
+                classname = colordict[colorname]
                 regiontype = None
                 custom = None
                 if ":" in classname:
@@ -124,10 +146,14 @@ class ImportImageSegmentation(Processor):
                     else:
                         custom = "subtype:%s" % regiontype
                 if classname + "Type" not in globals():
-                    raise Exception("Unknown class '%s' for color #%06X in colordict" % (classname, color))
+                    raise Exception("Unknown class '%s' for color %s in colordict" % (classname, colorname))
                 classtype = globals()[classname + "Type"]
-                # mask image by current color/class
-                classmask = np.array(segmentation_array == color, np.uint8)
+                if classtype is BorderType:
+                    # mask from all non-background regions
+                    classmask = 1 - background
+                else:
+                    # mask from current color/class
+                    classmask = np.array(segmentation_array == color, np.uint8)
                 if not np.count_nonzero(classmask):
                     continue
                 # now get the contours and make polygons for them
@@ -138,23 +164,28 @@ class ImportImageSegmentation(Processor):
                     # filter too small regions
                     area_pct = area / np.prod(segmentation_array.shape) * 100
                     if area < 100 and area_pct < 0.1:
-                        LOG.warning('ignoring contour of only %d%% area for color #%06X',
-                                    area_pct, color)
+                        LOG.warning('ignoring contour of only %.1f%% area for %s',
+                                    area_pct, classname)
                         continue
-                    LOG.info('found region %s:%s:%s with area %d%%',
-                             classname, regiontype or 'none', custom or 'none', area_pct)
+                    LOG.info('found region %s:%s:%s with area %.1f%%',
+                             classname, regiontype or '', custom or '', area_pct)
                     # simplify shape
                     poly = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
                     if len(poly) < 4:
-                        LOG.warning('ignoring contour of only %d points (area %d%%) for color #%06X',
-                                    len(poly), area_pct, color)
+                        LOG.warning('ignoring contour of only %d points (area %.1f%%) for %s',
+                                    len(poly), area_pct, classname)
                         continue
-                    # instantiate region
-                    regionno += 1
-                    region = classtype(id="region_%d" % regionno, type_=regiontype, custom=custom,
-                                       Coords=CoordsType(points=points_from_polygon(poly)))
-                    # add region
-                    getattr(page, 'add_%s' % classname)(region)
+                    if classtype is BorderType:
+                        # add Border
+                        page.set_Border(BorderType(Coords=CoordsType(points=points_from_polygon(poly))))
+                        break
+                    else:
+                        # instantiate region
+                        regionno += 1
+                        region = classtype(id="region_%d" % regionno, type_=regiontype, custom=custom,
+                                           Coords=CoordsType(points=points_from_polygon(poly)))
+                        # add region
+                        getattr(page, 'add_%s' % classname)(region)
                     
             # Use input_file's basename for the new file -
             # this way the files retain the same basenames:
@@ -182,6 +213,10 @@ class ImportImageSegmentation(Processor):
             for ifg in ifgs:
                 LOG.debug("adding input file group %s to page %s", ifg, page_id)
                 files = self.workspace.mets.find_files(pageId=page_id, fileGrp=ifg)
+                # find_files cannot filter by MIME type yet
+                files = [file_ for file_ in files if (
+                    file_.mimetype.startswith('image/') or
+                    file_.mimetype == MIMETYPE_PAGE)]
                 if not files:
                     # fall back for missing pageId via Page imageFilename:
                     all_files = self.workspace.mets.find_files(fileGrp=ifg)
