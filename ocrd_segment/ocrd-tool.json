@@ -48,8 +48,8 @@
       "parameters": {
         "colordict": {
           "type": "object",
-          "required": true,
-          "description": "Mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '#00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background)). Cf. output of ocrd-segment-extract-pages for an example."
+          "default": {},
+          "description": "Mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '#00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background)). Cf. output of ocrd-segment-extract-pages for an example (this is also the default)."
         }
       }
     },

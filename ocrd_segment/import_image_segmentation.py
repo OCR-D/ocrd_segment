@@ -43,6 +43,7 @@ from ocrd_models.ocrd_page_generateds import (
 from ocrd import Processor
 
 from .config import OCRD_TOOL
+from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-from-masks'
 LOG = getLogger('processor.ImportImageSegmentation')
@@ -68,6 +69,11 @@ class ImportImageSegmentation(Processor):
         Produce a new output file by serialising the resulting hierarchy.
         """
         colordict = self.parameter['colordict']
+        if not colordict:
+            LOG.info('Using default PAGE colordict')
+            colordict = dict(('#' + col, name)
+                             for name, col in CLASSES.items()
+                             if name)
         typedict = {"TextRegion": TextTypeSimpleType,
                     "GraphicRegion": GraphicsTypeSimpleType,
                     "ChartType": ChartTypeSimpleType}
