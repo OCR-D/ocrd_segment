@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import os.path
 import json
 
 from ocrd_utils import (
@@ -17,6 +16,7 @@ from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
 from .config import OCRD_TOOL
+from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-extract-regions'
 LOG = getLogger('processor.ExtractRegions')
@@ -82,7 +82,7 @@ class ExtractRegions(Processor):
                                      externalId="parameters",
                                      Label=[LabelType(type_=name,
                                                       value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
+                                            for name in self.parameter])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 transparency=self.parameter['transparency'])
@@ -94,27 +94,23 @@ class ExtractRegions(Processor):
                 dpi = None
             ptype = page.get_type()
 
-            regions = { 'advert': page.get_AdvertRegion(),
-                        'text': page.get_TextRegion(),
-                        'table': page.get_TableRegion(),
-                        'chart': page.get_ChartRegion(),
-                        'chem': page.get_ChemRegion(),
-                        'graphic': page.get_GraphicRegion(),
-                        'image': page.get_ImageRegion(),
-                        'linedrawing': page.get_LineDrawingRegion(),
-                        'maths': page.get_MathsRegion(),
-                        'music': page.get_MusicRegion(),
-                        'noise': page.get_NoiseRegion(),
-                        'separator': page.get_SeparatorRegion(),
-                        'unknown': page.get_UnknownRegion()
-            }
+            regions = dict()
+            for name in CLASSES.keys():
+                if not name or name == 'Border' or ':' in name:
+                    # no subtypes here
+                    continue
+                regions[name] = getattr(page, 'get_' + name)()
             for rtype, rlist in regions.items():
                 for region in rlist:
-                    description = { 'region.ID': region.id, 'region.type': rtype }
+                    description = {'region.ID': region.id, 'region.type': rtype}
                     region_image, region_coords = self.workspace.image_from_segment(
                         region, page_image, page_coords,
                         transparency=self.parameter['transparency'])
-                    description['subtype'] = region.get_type() if rtype in ['text', 'chart', 'graphic'] else None
+                    if rtype in ['TextRegion', 'ChartRegion', 'GraphicRegion']:
+                        subrtype = region.get_type()
+                    else:
+                        subrtype = None
+                    description['subtype'] = subrtype
                     description['coords_rel'] = coordinates_of_segment(
                         region, region_image, region_coords).tolist()
                     description['coords_abs'] = polygon_from_points(region.get_Coords().points)
@@ -157,7 +153,7 @@ class ExtractRegions(Processor):
                             region.get_primaryLanguage() or
                             page.get_primaryLanguage())
                     description['features'] = region_coords['features']
-                    description['DPI']= dpi
+                    description['DPI'] = dpi
                     description['page.ID'] = page_id
                     description['page.type'] = ptype
                     description['file_grp'] = self.input_file_grp
@@ -173,8 +169,10 @@ class ExtractRegions(Processor):
                         region_image,
                         file_id + '_' + region.id + extension,
                         self.output_file_grp,
-                        page_id=page_id,
                         mimetype=self.parameter['mimetype'])
-                    file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
-                    json.dump(description, open(file_path, 'w'))
-
+                    self.workspace.add_file(
+                        ID=file_id + '.json',
+                        file_grp=self.output_file_grp,
+                        local_filename=file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json'),
+                        mimetype='application/json',
+                        content=json.dumps(description))

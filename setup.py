@@ -3,6 +3,8 @@
 Installs:
 
     - ocrd-segment-repair
+    - ocrd-segment-from-masks
+    - ocrd-segment-from-coco
     - ocrd-segment-extract-pages
     - ocrd-segment-extract-regions
     - ocrd-segment-extract-lines
@@ -21,6 +23,7 @@ setup(
     version=version,
     description='Page segmentation and segmentation evaluation',
     long_description=codecs.open('README.md', encoding='utf-8').read(),
+    long_description_content_type='text/markdown',
     author='Konstantin Baierer, Kay-Michael Würzner, Robert Sachunsky',
     author_email='unixprog@gmail.com, wuerzner@gmail.com, sachunsky@informatik.uni-leipzig.de',
     url='https://github.com/OCR-D/ocrd_segment',
@@ -33,6 +36,8 @@ setup(
     entry_points={
         'console_scripts': [
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
+            'ocrd-segment-from-masks=ocrd_segment.cli:ocrd_segment_from_masks',
+            'ocrd-segment-from-coco=ocrd_segment.cli:ocrd_segment_from_coco',
             'ocrd-segment-extract-pages=ocrd_segment.cli:ocrd_segment_extract_pages',
             'ocrd-segment-extract-regions=ocrd_segment.cli:ocrd_segment_extract_regions',
             'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',

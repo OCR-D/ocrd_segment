@@ -1,5 +1,5 @@
 {
-  "version": "0.0.3",
+  "version": "0.0.4",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-repair": {
@@ -33,10 +33,45 @@
         }
       }
     },
+    "ocrd-segment-from-masks": {
+      "executable": "ocrd-segment-from-masks",
+      "categories": ["Layout analysis"],
+      "description": "Import region segmentation from mask images (segments filled with colors encoding classes). Input fileGrp format is `base,mask` (i.e. PAGE or original image files first, mask image files second).",
+      "input_file_grp": [
+        "OCR-D-IMG",
+        "OCR-D-SEG-PAGE"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "colordict": {
+          "type": "object",
+          "default": {},
+          "description": "Mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '#00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background)). Cf. output of ocrd-segment-extract-pages for an example (this is also the default)."
+        }
+      }
+    },
+    "ocrd-segment-from-coco": {
+      "executable": "ocrd-segment-from-coco",
+      "categories": ["Layout analysis"],
+      "description": "Import region segmentation from COCO detection format JSON (for all pages). Input fileGrp format is `base,COCO` (i.e. PAGE or original image files first, COCO file second).",
+      "input_file_grp": [
+        "OCR-D-IMG",
+        "OCR-D-SEG-PAGE"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+      }
+    },
     "ocrd-segment-extract-pages": {
       "executable": "ocrd-segment-extract-pages",
       "categories": ["Image preprocessing"],
-      "description": "Extract page segmentation (border/skew) as image+JSON, including region coordinates/classes.",
+      "description": "Extract page segmentation as page images (deskewed according to `/Page/@orientation` and cropped+masked along `/Page/Border`) + JSON (including region coordinates/classes and meta-data), as binarized images, and as mask images (segments filled with colors encoding classes) + COCO detection format JSON (for all pages). Output fileGrp format is `raw[,binarized[,mask]]` (i.e. fall back to first group).",
       "input_file_grp": [
         "OCR-D-SEG-PAGE",
         "OCR-D-GT-SEG-PAGE",
@@ -64,7 +99,7 @@
     "ocrd-segment-extract-regions": {
       "executable": "ocrd-segment-extract-regions",
       "categories": ["Image preprocessing"],
-      "description": "Extract region segmentation (polygon/skew) as image+JSON.",
+      "description": "Extract region segmentation as region images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon) + JSON (including region coordinates/classes and meta-data).",
       "input_file_grp": [
         "OCR-D-SEG-BLOCK",
         "OCR-D-GT-SEG-BLOCK"
@@ -90,7 +125,7 @@
     "ocrd-segment-extract-lines": {
       "executable": "ocrd-segment-extract-lines",
       "categories": ["Image preprocessing"],
-      "description": "Extract line segmentation (polygon) as image+txt+JSON.",
+      "description": "Extract line segmentation as line images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
       "input_file_grp": [
         "OCR-D-SEG-LINE",
         "OCR-D-GT-SEG-LINE"
