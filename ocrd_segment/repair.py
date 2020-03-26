@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import os.path
 from collections import namedtuple
 from skimage import draw
-from scipy.ndimage import filters
+from scipy.ndimage import filters, morphology
 import cv2
 import numpy as np
 from shapely.geometry import Polygon, LineString
@@ -205,8 +205,7 @@ class RepairSegmentation(Processor):
             scale = int(np.median(np.array(heights)))
             # close labels:
             region_mask = np.pad(region_mask, scale) # protect edges
-            region_mask = filters.maximum_filter(region_mask, (scale, 1), origin=0)
-            region_mask = filters.minimum_filter(region_mask, (scale, 1), origin=0)
+            region_mask = np.array(morphology.binary_closing(region_mask, np.ones((scale, 1))), dtype=np.uint8)
             region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
             # find outer contour (parts):
             contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
