@@ -220,6 +220,8 @@ class RepairSegmentation(Processor):
             region_mask = np.pad(region_mask, scale) # protect edges
             region_mask = np.array(morphology.binary_closing(region_mask, np.ones((scale, 1))), dtype=np.uint8)
             region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
+            # extend margins (to ensure simplified hull polygon is outside children):
+            region_mask = filters.maximum_filter(region_mask, 3) # 1px in each direction
             # find outer contour (parts):
             contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             # determine areas of parts:
