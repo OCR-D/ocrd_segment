@@ -190,11 +190,14 @@ class RepairSegmentation(Processor):
                 LOG.warning('Page "%s" region "%s" contains no textlines', page_id, region.id)
                 continue
             heights = []
+            tops = []
             # get labels:
             region_mask = np.zeros((page_image.height, page_image.width), dtype=np.uint8)
             for line in lines:
                 line_polygon = coordinates_of_segment(line, page_image, page_coords)
-                heights.append(xywh_from_polygon(line_polygon)['h'])
+                line_xywh = xywh_from_polygon(line_polygon)
+                heights.append(line_xywh['h'])
+                tops.append(line_xywh['y'])
                 region_mask[draw.polygon(line_polygon[:, 1],
                                          line_polygon[:, 0],
                                          region_mask.shape)] = 1
@@ -202,11 +205,23 @@ class RepairSegmentation(Processor):
                                                    line_polygon[:, 0],
                                                    region_mask.shape)] = 1
             # estimate scale:
-            scale = int(np.median(np.array(heights)))
+            heights = np.array(heights)
+            scale = int(np.max(heights))
+            tops = np.array(tops)
+            order = np.argsort(tops)
+            heights = heights[order]
+            tops = tops[order]
+            if len(lines) > 1:
+                # if interline spacing is larger than line height, use this
+                bottoms = tops + heights
+                deltas = tops[1:] - bottoms[:-1]
+                scale = max(scale, int(np.max(deltas)))
             # close labels:
             region_mask = np.pad(region_mask, scale) # protect edges
             region_mask = np.array(morphology.binary_closing(region_mask, np.ones((scale, 1))), dtype=np.uint8)
             region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
+            # extend margins (to ensure simplified hull polygon is outside children):
+            region_mask = filters.maximum_filter(region_mask, 3) # 1px in each direction
             # find outer contour (parts):
             contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             # determine areas of parts:
@@ -225,7 +240,10 @@ class RepairSegmentation(Processor):
                                 i, area, total_area, region.id)
                     continue
                 # simplify shape:
-                polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                # can produce invalid (self-intersecting) polygons:
+                #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                polygon = contour[:, 0, ::] # already ordered x,y
+                polygon = Polygon(polygon).simplify(1).exterior.coords
                 if len(polygon) < 4:
                     LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
                                 i, region.id)
