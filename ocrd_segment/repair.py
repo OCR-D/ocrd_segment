@@ -240,7 +240,10 @@ class RepairSegmentation(Processor):
                                 i, area, total_area, region.id)
                     continue
                 # simplify shape:
-                polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                # can produce invalid (self-intersecting) polygons:
+                #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
+                polygon = contour[:, 0, ::] # already ordered x,y
+                polygon = Polygon(polygon).simplify(1).exterior.coords
                 if len(polygon) < 4:
                     LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
                                 i, region.id)
