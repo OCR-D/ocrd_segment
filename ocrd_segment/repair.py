@@ -316,6 +316,7 @@ def _child_within_parent(child, parent):
 def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
     wait_for_deletion = list()
     reading_order = dict()
+    regionrefs = list()
     ordered = False
     if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
         regionrefs = (rogroup.get_RegionRefIndexed() +
