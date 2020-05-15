@@ -1,7 +1,52 @@
 {
-  "version": "0.0.4",
+  "version": "0.0.5",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
+    "ocrd-segment-extract-address": {
+      "executable": "ocrd-segment-extract-address",
+      "categories": ["Image preprocessing"],
+      "description": "Extract page segmentation as page images (deskewed according to `/Page/@orientation` and cropped+masked along `/Page/Border`) with alpha channel color-coding textline masks [for mrcnn input], and as JSON (including region coordinates/classes and meta-data) + COCO detection format JSON (for all pages) [for mrcnn output]. Output fileGrp format is `image,json`.",
+      "input_file_grp": [
+        "OCR-D-SEG-LINE",
+        "OCR-D-GT-SEG-LINE",
+        "OCR-D-OCR"
+      ],
+      "output_file_grp": [
+        "IMG-ADDR",
+        "JSON-ADDR"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+      }
+    },
+    "ocrd-segment-detect-address": {
+      "executable": "ocrd-segment-detect-address",
+      "categories": ["Layout analysis"],
+      "description": "",
+      "input_file_grp": [
+        "OCR-D-OCR"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-ADDR"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "model": {
+          "type": "string",
+          "format": "uri",
+          "content-type": "application/x-hdf;subtype=bag",
+          "default": "address.h5",
+          "description": "path of h5py weight file for model trained with address.py",
+          "cacheable": true
+        },
+        "min_confidence": {
+          "type": "number",
+          "format": "float",
+          "default": 0.5,
+          "description": "minimum probability for region candidates"
+        }
+      }
+    },
     "ocrd-segment-repair": {
       "executable": "ocrd-segment-repair",
       "categories": ["Layout analysis"],

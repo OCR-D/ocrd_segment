@@ -1,6 +1,7 @@
 """
 Mask R-CNN
-Configurations and data loading code for PubLayNet (MS COCO format).
+Configurations and data loading code for address resegmentation
+(textline alpha-masked input PNG images, address region output COCO JSON).
 
 Copyright (c) 2017 Matterport, Inc.
 Licensed under the MIT License (see LICENSE for details)
@@ -11,31 +12,33 @@ Written by Waleed Abdulla
 Usage: import the module, or run from the command line as such:
 
     # Train a new model starting from pre-trained COCO weights
-    python3 publaynet.py --model=/path/to/mask_rcnn_coco.h5 train --dataset=/path/to/publaynet/
+    python3 address.py --model=/path/to/mask_rcnn_coco.h5 train --dataset=/path/to/coco.json
 
     # Train a new model starting from ImageNet weights. Also auto download PubLayNet dataset
-    python3 publaynet.py --model=imagenet --download=True train --dataset=/path/to/publaynet/
+    python3 address.py --model=imagenet --download=True train --dataset=/path/to/coco.json
 
     # Continue training a model that you had trained earlier
-    python3 publaynet.py --model=/path/to/weights.h5 train --dataset=/path/to/publaynet/
+    python3 address.py --model=/path/to/weights.h5 train --dataset=/path/to/coco.json
 
     # Continue training the last model you trained
-    python3 publaynet.py --model=last train --dataset=/path/to/publaynet/
+    python3 address.py --model=last train --dataset=/path/to/coco.json
 
     # Run COCO evaluation on the last model you trained
-    python3 publaynet.py --model=last evaluate --dataset=/path/to/publaynet/
+    python3 address.py --model=last evaluate --dataset=/path/to/coco.json
 
     # Run COCO test on the last model you trained (only first 100 files)
-    python3 publaynet.py --model=last --limit 100 test --dataset=/path/to/publaynet/
+    python3 address.py --model=last --limit 100 test --dataset=/path/to/coco.json
 
     # Run COCO prediction on the last model you trained
-    python3 publaynet.py --model=last predict --json /path/to/publaynet/val.json /path/to/files*
+    python3 address.py --model=last predict --json /path/to/coco.json /path/to/files*
 """
 
 import os
 import sys
 import time
 import numpy as np
+import skimage.io
+import skimage.color
 import imgaug  # https://github.com/aleju/imgaug (pip3 install imgaug)
 
 import pathlib
@@ -61,8 +64,11 @@ import urllib.request
 import shutil
 
 # Import Mask RCNN
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
+import tensorflow as tf
+tf.get_logger().setLevel('ERROR')
 
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
@@ -79,7 +85,7 @@ class CocoConfig(Config):
     to the COCO dataset.
     """
     # Give the configuration a recognizable name
-    NAME = "PubLayNet"
+    NAME = "address"
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
@@ -89,8 +95,10 @@ class CocoConfig(Config):
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 5  # PubLayNet has 5 classes
+    NUM_CLASSES = 3 + 1  # address has 3 classes (rcpt/sndr/contact)
 
+    # ...settings to reduce GPU memory requirements...
+    
     # Use a smaller backbone network. The default is resnet101,
     # but you can use resnet50 to reduce memory load significantly
     # and it's sufficient for most applications. It also trains faster.
@@ -98,13 +106,15 @@ class CocoConfig(Config):
 
     # Reduce the maximum number of instances per image if your images
     # don't have a lot of objects.
-    MAX_GT_INSTANCES = 50
+    MAX_GT_INSTANCES = 5
     # Max number of final detections
-    DETECTION_MAX_INSTANCES = 30
+    DETECTION_MAX_INSTANCES = 5
+    DETECTION_MIN_CONFIDENCE = 0.7
 
     # Use fewer ROIs in training the second stage. This setting
     # is like the batch size for the second stage of the model.
-    TRAIN_ROIS_PER_IMAGE = 100
+    # (includes subsampling of both positive and negative examples)
+    TRAIN_ROIS_PER_IMAGE = 50
 
     # ROIs kept after tf.nn.top_k and before non-maximum suppression
     #PRE_NMS_LIMIT = 6000
@@ -115,28 +125,31 @@ class CocoConfig(Config):
     #POST_NMS_ROIS_INFERENCE = 1000
     POST_NMS_ROIS_TRAINING = 1000
     POST_NMS_ROIS_INFERENCE = 500
-    
+
+    IMAGE_RESIZE_MODE = "square"
+    IMAGE_MIN_DIM = 600
+    IMAGE_MAX_DIM = 768
+
+    # ...settings to accommodate alpha channel input...
+    IMAGE_CHANNEL_COUNT = 4
+    # don't touch the alpha channel
+    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0])
+
 class InferenceConfig(CocoConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
-    # Minimum probability value to accept a detected instance
-    # ROIs below this threshold are skipped: get all instances
-    DETECTION_MIN_CONFIDENCE = 0 # default: 0.7
-    # Non-maximum suppression threshold for detection:
-    # tolerate very little overlap between instances
-    # (i.e. prefer most likely bboxes)
-    DETECTION_NMS_THRESHOLD = 0.1 # default: 0.3
-
 
 ############################################################
 #  Dataset
 ############################################################
 
 class CocoDataset(utils.Dataset):
-    def load_coco(self, dataset_json, dataset_dir='.', limit=None, class_ids=None,
-                  class_map=None, return_coco=False, auto_download=False):
+    def load_coco(self, dataset_json, dataset_dir='.',
+                  limit=None, skip_empty=False,
+                  class_ids=None,
+                  class_map=None, return_coco=False):
         """Load a subset of the COCO dataset from a JSON file.
         dataset_json: JSON file path of the COCO (sub-) dataset.
         dataset_dir: parent directory of relative filenames in JSON
@@ -144,15 +157,14 @@ class CocoDataset(utils.Dataset):
         class_map: TODO: Not implemented yet. Supports maping classes from
             different datasets to the same class ID.
         return_coco: If True, returns the COCO object.
-        auto_download: Automatically download and unzip MS-COCO images and annotations
         """
         if not class_ids:
             class_ids = []
 
-        if auto_download is True:
-            self._auto_download(pathlib.Path(dataset_dir).parent)
-
-        coco = COCO(dataset_json)
+        if isinstance(dataset_json, COCO):
+            coco = dataset_json
+        else:
+            coco = COCO(dataset_json)
 
         # All images or a subset?
         if class_ids:
@@ -167,27 +179,37 @@ class CocoDataset(utils.Dataset):
 
         # Add classes
         for i in class_ids or sorted(coco.getCatIds()):
-            self.add_class("coco", i, coco.loadCats(i)[0]["name"])
+            self.add_class("IAO", i, coco.loadCats(i)[0]["name"])
 
         # Limit to a subset
-        if not limit is None:
+        if isinstance(limit, int):
             image_ids = image_ids[:limit]
+        elif isinstance(limit, (list, np.ndarray)):
+            image_ids = np.array(image_ids).take(limit)
         
         # Add images
         for i in image_ids:
+            file_name = coco.imgs[i]['file_name']
+            ann_ids = coco.getAnnIds(
+                imgIds=[i], catIds=class_ids, iscrowd=None)
+            if skip_empty and not ann_ids:
+                print('skipping image without annotations: %d ("%s")' % (
+                    i, file_name))
+                continue
             self.add_image(
-                "coco", image_id=i,
-                path=os.path.join(dataset_dir, coco.imgs[i]['file_name']),
+                "IAO", image_id=i,
+                path=os.path.join(dataset_dir, file_name),
                 width=coco.imgs[i]["width"],
                 height=coco.imgs[i]["height"],
-                annotations=coco.loadAnns(coco.getAnnIds(
-                    imgIds=[i], catIds=class_ids, iscrowd=None)))
+                annotations=coco.loadAnns(ann_ids))
         if return_coco:
             return coco
         
     def load_files(self, filenames, dataset_dir='.', limit=None):
-        if not limit is None:
+        if isinstance(limit, int):
             filenames = filenames[:limit]
+        elif isinstance(limit, (list, np.ndarray)):
+            filenames = np.array(filenames).take(limit)
         for i, filename in enumerate(filenames, len(self.image_info)):
             filename = os.path.join(dataset_dir, filename)
             if not os.path.exists(filename):
@@ -197,7 +219,7 @@ class CocoDataset(utils.Dataset):
                 width = image_pil.width
                 height = image_pil.height
             self.add_image(
-                "coco", image_id=i, path=filename,
+                "IAO", image_id=i, path=filename,
                 width=width, height=height)
 
     def dump_coco(self, dataset_dir='.'):
@@ -214,40 +236,6 @@ class CocoDataset(utils.Dataset):
                 result['annotations'].extend(image_info['annotations'])
         return result
 
-    def _auto_download(self, dataDir):
-        """Download the PubLayNet dataset/annotations if requested.
-        dataDir: The target directory for the dataset.
-        """
-
-        # Setup paths and file names
-        imgURL = "https://dax.cdn.appdomain.cloud/dax-publaynet/1.0.0/publaynet.tar.gz"
-        imgZipFile = "{}.tar.gz".format(dataDir)
-
-        # Download images if not available locally
-        if not os.path.exists(dataDir):
-            os.makedirs(dataDir)
-            if not os.path.exists(imgZipFile):
-                print("Downloading images to " + imgZipFile + " ...")
-                with urllib.request.urlopen(imgURL) as resp, open(imgZipFile, 'wb') as out:
-                    #shutil.copyfileobj(resp, out)
-                    length = int(resp.getheader('content-length'))
-                    print("Download size: %d MB" % (length//2**20))
-                    blocksize = 2**20 #max(2**12, min(2**20, length//100))
-                    progress = tqdm(desc='Downloading...', unit='MB',
-                                    total=int(length//blocksize + 1))
-                    while True:
-                        block = resp.read(blocksize)
-                        if not block:
-                            progress.close()
-                            break
-                        out.write(block)
-                        progress.update()
-                print("Download completed.")
-            print("Extracting " + imgZipFile)
-            with tarfile.open(imgZipFile, "r:gz") as zip_ref:
-                zip_ref.extractall(dataDir)
-            print("Extraction completed.")
-
     def load_mask(self, image_id):
         """Load instance masks for the given image.
 
@@ -262,7 +250,9 @@ class CocoDataset(utils.Dataset):
         """
         # If not a COCO image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "coco":
+        if image_info["source"] != "IAO":
+            print('invalid source "%s" for image %d ("%s")' % (
+                image_info['source'], image_id, image_info['path']))
             return super(CocoDataset, self).load_mask(image_id)
 
         instance_masks = []
@@ -272,7 +262,7 @@ class CocoDataset(utils.Dataset):
         # of class IDs that correspond to each channel of the mask.
         for annotation in annotations:
             class_id = self.map_source_class_id(
-                "coco.{}".format(annotation['category_id']))
+                "IAO.{}".format(annotation['category_id']))
             if class_id:
                 m = self.annToMask(annotation, image_info["height"],
                                    image_info["width"])
@@ -298,8 +288,24 @@ class CocoDataset(utils.Dataset):
             return mask, class_ids
         else:
             # Call super class to return an empty mask
+            print('no instance in image %d ("%s")' % (
+                image_id, image_info['path']))
             return super(CocoDataset, self).load_mask(image_id)
 
+    def load_image(self, image_id):
+        """Load the specified image and return a [H,W,4] Numpy array.
+        """
+        # Load image
+        image = skimage.io.imread(self.image_info[image_id]['path'])
+        # If grayscale. Convert to RGB for consistency.
+        if image.ndim != 3:
+            image = skimage.color.gray2rgb(image)
+        # If has no alpha channel, complain
+        if image.shape[-1] != 4:
+            raise Exception('image %d ("%s") has no alpha channel' % (
+                image_id, self.image_info[image_id]['path']))
+        return image
+    
     # The following two functions are from pycocotools with a few changes.
 
     def annToRLE(self, ann, height, width):
@@ -388,7 +394,7 @@ def build_coco_results(dataset, image_id, rois, class_ids, scores, masks):
 
         result = {
             "image_id": image_id,
-            "category_id": dataset.get_source_class_id(class_id, "coco"),
+            "category_id": dataset.get_source_class_id(class_id, "IAO"),
             "iscrowd": 0,
             "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
             "score": score,
@@ -398,7 +404,7 @@ def build_coco_results(dataset, image_id, rois, class_ids, scores, masks):
     return results
 
 
-def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=0, image_ids=None):
+def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=None):
     """Runs official COCO evaluation.
     dataset: A Dataset object with validation data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
@@ -408,8 +414,10 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=0, image_ids=Non
     image_ids = image_ids or dataset.image_ids
 
     # Limit to a subset
-    if limit:
+    if isinstance(limit, int):
         image_ids = image_ids[:limit]
+    elif isinstance(limit, (list, np.ndarray)):
+        image_ids = np.array(image_ids).take(limit)
 
     # Get corresponding COCO image IDs.
     coco_image_ids = [dataset.image_info[image_id]["id"] for image_id in image_ids]
@@ -546,7 +554,7 @@ if __name__ == '__main__':
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description='Run Mask R-CNN for PubLayNet region segmentation.')
+        description='Run Mask R-CNN for address region segmentation.')
     parser.add_argument('--model', required=True,
                         metavar="/path/to/weights.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
@@ -555,19 +563,14 @@ if __name__ == '__main__':
                         metavar="/path/to/logs/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False,
-                        default=0,
+                        type=int, default=0,
                         metavar="<image count>",
                         help='Maximum number of images to use (default=all)')
-    parser.add_argument('--download', required=False,
-                        default=False,
-                        metavar="<True|False>",
-                        help='Automatically download and unzip PubLayNet files (default=False)',
-                        type=bool)
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images (subset 'train') with COCO annotations ('train.json')")
     train_parser.add_argument('--dataset', required=True,
-                              metavar="/path/to/coco/",
-                              help='Directory of the PubLayNet dataset')
+                              metavar="/path/to/coco.json",
+                              help='Directory of the address dataset')
     train_parser.add_argument('--exclude', required=False,
                               default=None,
                               metavar="<layer-list>",
@@ -578,16 +581,13 @@ if __name__ == '__main__':
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images (subset 'val') with COCO annotations ('val.json')")
     evaluate_parser.add_argument('--dataset', required=True,
-                                 metavar="/path/to/coco/",
-                                 help='Directory of the PubLayNet dataset')
+                                 metavar="/path/to/coco.json",
+                                 help='Directory of the address dataset')
     test_parser = subparsers.add_parser('test', help="Apply a model on images (subset 'test'), adding COCO annotations ('test.json')")
     test_parser.add_argument('--dataset', required=True,
-                             metavar="/path/to/coco/",
-                             help='Directory of the PubLayNet dataset')
+                             metavar="/path/to/coco.json",
+                             help='Directory of the address dataset')
     predict_parser = subparsers.add_parser('predict', help='Apply a model on image files, creating plots')
-    predict_parser.add_argument('--json', required=True,
-                                metavar="/path/to/coco/val.json",
-                                help='JSON with class info')
     predict_parser.add_argument('dataset', nargs='+',
                                 help='Image files to predict')
     args = parser.parse_args()
@@ -599,8 +599,6 @@ if __name__ == '__main__':
         print("Depth: ", args.depth)
     print("Dataset: ", args.dataset)
     print("Limit: ", args.limit)
-    if args.command != 'predict':
-        print("Auto Download: ", args.download)
 
     # Configurations
     if args.command == "train":
@@ -636,80 +634,101 @@ if __name__ == '__main__':
             exclude = args.exclude.split(',')
         else:
             exclude = list()
+        if 'mask_rcnn_coco.h5' in model_path or args.model.lower() == 'imagenet':
+            # shape of first Conv layer changed with 4-channel input,
+            # so exclude from pre-trained weights
+            exclude.append("conv1")
     else:
         exclude = list()
     model.load_weights(model_path, by_name=True, exclude=exclude)
 
     # Train or evaluate
-    if args.command == "train":
-        # Training dataset (images from "train/" and annotations from "train.json").
-        image_path = os.path.join(args.dataset, "train")
-        json_path = image_path + '.json'
-        # Use the training set and 35K from the validation set, as as in the Mask RCNN paper.
-        dataset_train = CocoDataset()
-        dataset_train.load_coco(json_path, image_path, limit=int(args.limit) or None,
-                                auto_download=args.download)
-        dataset_train.prepare()
+    if args.command in ['train', 'evaluate']:
+        coco = COCO(args.dataset)
+        np.random.seed(42)
+        if not args.limit or args.limit > len(coco.imgs):
+            args.limit = len(coco.imgs)
+        indexes = np.random.permutation(args.limit)
+        trainset = indexes[:int(0.7*args.limit)]
+        valset = indexes[int(0.7*args.limit):]
+        
+        if args.command == "train":
+            dataset_train = CocoDataset()
+            dataset_train.load_coco(coco, os.path.dirname(args.dataset),
+                                    limit=trainset, skip_empty=True)
+            dataset_val = CocoDataset()
+            dataset_val.load_coco(coco, os.path.dirname(args.dataset),
+                                  limit=valset, skip_empty=True)
+            del coco
+            dataset_train.prepare()
+            dataset_val.prepare()
+            print("Running COCO training on {} train / {} val images.".format(
+                dataset_train.num_images, dataset_val.num_images))
+            # Image Augmentation
+            # Right/Left flip 50% of the time
+            #augmentation = imgaug.augmenters.Fliplr(0.5)
+            augmentation = None
 
-        # Validation dataset (images from "val/" and annotations from "val.json").
-        image_path = os.path.join(args.dataset, "val")
-        json_path = image_path + '.json'
-        dataset_val = CocoDataset()
-        dataset_val.load_coco(json_path, image_path, limit=int(args.limit) or None,
-                              auto_download=args.download)
-        dataset_val.prepare()
+            # from MaskRCNN.train:
+            def layers(depth, add='conv1'):
+                layer_regex = {
+                    # all layers but the backbone
+                    "heads": r"(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                    # From a specific Resnet stage and up
+                    "3+": r"(res3.*)|(bn3.*)|(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                    "4+": r"(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                    "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                    # All layers
+                    "all": ".*",
+                }
+                if depth in layer_regex.keys():
+                    depth = layer_regex[depth]
+                if add:
+                    depth += '|' + add
+                return depth
+            if args.depth:
+                print("Training %s" % args.depth)
+                model.train(dataset_train, dataset_val,
+                            learning_rate=config.LEARNING_RATE,
+                            epochs=100,
+                            layers=layers(args.depth),
+                            augmentation=augmentation)
+            else:
+                # Training - Stage 1
+                print("Training network heads")
+                model.train(dataset_train, dataset_val,
+                            learning_rate=config.LEARNING_RATE,
+                            epochs=40,
+                            layers=layers('heads'),
+                            augmentation=augmentation)
 
-        print("Running COCO training on {} train / {} val images.".format(
-            dataset_train.num_images, dataset_val.num_images))
-        # Image Augmentation
-        # Right/Left flip 50% of the time
-        #augmentation = imgaug.augmenters.Fliplr(0.5)
-        augmentation = None
+                # Training - Stage 2
+                # Finetune layers from ResNet stage 4 and up
+                print("Fine tune Resnet stage 4 and up")
+                model.train(dataset_train, dataset_val,
+                            learning_rate=config.LEARNING_RATE,
+                            epochs=120,
+                            layers=layers('4+'),
+                            augmentation=augmentation)
 
-        if args.depth:
-            print("Training %s" % args.depth)
-            model.train(dataset_train, dataset_val,
-                        learning_rate=config.LEARNING_RATE,
-                        epochs=100,
-                        layers=args.depth,
-                        augmentation=augmentation)
+                # Training - Stage 3
+                # Fine tune all layers
+                print("Fine tune all layers")
+                model.train(dataset_train, dataset_val,
+                            learning_rate=config.LEARNING_RATE / 10,
+                            epochs=160,
+                            layers='all',
+                            augmentation=augmentation)
+                
         else:
-            # Training - Stage 1
-            print("Training network heads")
-            model.train(dataset_train, dataset_val,
-                        learning_rate=config.LEARNING_RATE,
-                        epochs=40,
-                        layers='heads',
-                        augmentation=augmentation)
-
-            # Training - Stage 2
-            # Finetune layers from ResNet stage 4 and up
-            print("Fine tune Resnet stage 4 and up")
-            model.train(dataset_train, dataset_val,
-                        learning_rate=config.LEARNING_RATE,
-                        epochs=120,
-                        layers='4+',
-                        augmentation=augmentation)
-
-            # Training - Stage 3
-            # Fine tune all layers
-            print("Fine tune all layers")
-            model.train(dataset_train, dataset_val,
-                        learning_rate=config.LEARNING_RATE / 10,
-                        epochs=160,
-                        layers='all',
-                        augmentation=augmentation)
-
-    elif args.command == "evaluate":
-        # Validation dataset (images from "val/" and annotations from "val.json")
-        image_path = os.path.join(args.dataset, "val")
-        json_path = image_path + '.json'
-        dataset = CocoDataset()
-        coco = dataset.load_coco(json_path, image_path, limit=int(args.limit) or None,
-                                 return_coco=True, auto_download=args.download)
-        dataset.prepare()
-        print("Running COCO evaluation on {} images.".format(dataset.num_images))
-        evaluate_coco(model, dataset, coco, "bbox", limit=int(args.limit))
+            dataset = CocoDataset()
+            coco_res = dataset.load_coco(coco, os.path.dirname(args.dataset), limit=valset,
+                                         return_coco=True)
+            del coco
+            dataset.prepare()
+            print("Running COCO evaluation on {} images.".format(dataset.num_images))
+            evaluate_coco(model, dataset, coco_res, "bbox")
+            #print(model.evaluate(dataset))
         
     elif args.command == "test":
         # Test dataset (read images from "test/" and categories from "val.json")
@@ -717,25 +736,26 @@ if __name__ == '__main__':
         json_path = os.path.join(args.dataset, "val.json")
         dataset = CocoDataset()
         dataset.load_coco(json_path, limit=0, auto_download=args.download)
-        dataset.load_files(os.listdir(image_path), image_path, limit=int(args.limit) or None)
+        dataset.load_files(os.listdir(image_path), image_path, limit=args.limit or None)
         dataset.prepare()
         print("Running COCO test on {} images.".format(dataset.num_images))
         coco = COCO()
         coco.dataset = dataset.dump_coco(image_path)
         coco.createIndex()
-        coco = test_coco(model, dataset, coco, limit=int(args.limit))
+        coco = test_coco(model, dataset, coco, limit=args.limit or None)
         json_path = os.path.join(args.dataset, "test.json")
         store_coco(coco, json_path)
         
     elif args.command == "predict":
         # Other files (read images from CLI and categories from "val.json")
-        json_path = args.json
         dataset = CocoDataset()
-        dataset.load_coco(json_path, limit=0)
-        dataset.load_files(args.dataset, limit=int(args.limit))
+        dataset.add_class("IAO", 0, "address-rcpt")
+        dataset.add_class("IAO", 1, "address-sndr")
+        dataset.add_class("IAO", 2, "address-contact")
+        dataset.load_files(args.dataset, limit=args.limit or None)
         dataset.prepare()
         print("Running COCO predict on {} images.".format(dataset.num_images))
-        test_coco(model, dataset, None, limit=int(args.limit), plot=True)
+        test_coco(model, dataset, None, limit=args.limit or None, plot=True)
 
     else:
         print("'{}' is not recognized. "

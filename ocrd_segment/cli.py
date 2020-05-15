@@ -8,6 +8,8 @@ from .evaluate import EvaluateSegmentation
 from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines
+from .extract_address import ExtractAddress
+from .detect_address import DetectAddress
 
 @click.command()
 @ocrd_cli_options
@@ -43,3 +45,13 @@ def ocrd_segment_extract_regions(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_extract_lines(*args, **kwargs):
     return ocrd_cli_wrap_processor(ExtractLines, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_extract_address(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ExtractAddress, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_detect_address(*args, **kwargs):
+    return ocrd_cli_wrap_processor(DetectAddress, *args, **kwargs)
