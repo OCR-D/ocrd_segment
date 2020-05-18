@@ -84,8 +84,8 @@ class AddressConfig(Config):
     GPU_COUNT = 1
     BACKBONE = "resnet50"
     # Number of classes (including background)
-    #NUM_CLASSES = 3 + 1  # new address model has bg + 3 classes (rcpt/sndr/contact)
-    NUM_CLASSES = 1 + 1  # old address model has bg + 1 classes (rcpt)
+    NUM_CLASSES = 3 + 1  # new address model has bg + 3 classes (rcpt/sndr/contact)
+    #NUM_CLASSES = 1 + 1  # old address model has bg + 1 classes (rcpt)
     DETECTION_MAX_INSTANCES = 5
     DETECTION_MIN_CONFIDENCE = 0.7
     PRE_NMS_LIMIT = 2000
