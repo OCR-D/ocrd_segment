@@ -53,7 +53,7 @@ ALREADY_CLASSIFIED = False
 # text classification for address snippets
 def classify_address(text):
     # TODO more simple heuristics to avoid API call when crystal clear
-    if len(text) > 60:
+    if 8 > len(text) or len(text) > 60:
         return 'ADDRESS_NONE'
     result = requests.post(
         os.environ['SERVICE_URL'], json={'text': text},
@@ -262,8 +262,17 @@ class DetectAddress(Processor):
             page_array = np.array(page_image)
             # predict
             preds = self.model.detect([page_array], verbose=0)[0]
+            worse = []
+            for i in range(len(preds['class_ids'])):
+                for j in range(i + 1, len(preds['class_ids'])):
+                    imask = preds['masks'][:,:,i]
+                    jmask = preds['masks'][:,:,j]
+                    if np.any(imask * jmask):
+                        worse.append(i if preds['scores'][i] < preds['scores'][j] else j)
             best = np.zeros(4)
             for i in range(len(preds['class_ids'])):
+                if i in worse:
+                    continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
                 if cat not in [1,2]:
@@ -274,11 +283,12 @@ class DetectAddress(Processor):
             if not np.any(best):
                 LOG.warning("Detected no sndr/rcpt address on page '%s'", page_id)
             for i in range(len(preds['class_ids'])):
+                if i in worse:
+                    continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
                 if not cat:
-                    LOG.warning('got RoI for bg class!!')
-                    continue
+                    raise Exception('detected region for background class')
                 if score < best[cat]:
                     # ignore non-best
                     continue
@@ -288,8 +298,8 @@ class DetectAddress(Processor):
                 area = np.count_nonzero(mask)
                 scale = int(np.sqrt(area)//10)
                 scale = scale + (scale+1)%2 # odd
-                LOG.debug("post-processing prediction for '%s' at %s area %d in page '%s'",
-                          name, str(bbox), area, page_id)
+                LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
+                          name, str(bbox), area, score)
                 # dilate and find (outer) contour
                 contours = [None, None]
                 for _ in range(10):
@@ -300,14 +310,18 @@ class DetectAddress(Processor):
                     contours, _ = cv2.findContours(mask.astype(np.uint8),
                                                    cv2.RETR_EXTERNAL,
                                                    cv2.CHAIN_APPROX_SIMPLE)
-                region_poly = Polygon(contours[0][:,0,:]).simplify(2) # already in x,y order
+                region_poly = Polygon(contours[0][:,0,:]) # already in x,y order
+                for tolerance in range(2, int(area)):
+                    region_poly = region_poly.simplify(tolerance)
+                    if region_poly.is_valid:
+                        break
                 region_polygon = region_poly.exterior.coords[:-1] # keep open
                 #region_polygon = polygon_from_bbox(bbox)
                 # TODO: post-process (closure/majority in binarized, then clip to parent/border)
                 # annotate new region
                 region_polygon = coordinates_for_segment(region_polygon,
                                                          page_image, page_coords)
-                region_coords = CoordsType(points_from_polygon(region_polygon))
+                region_coords = CoordsType(points_from_polygon(region_polygon), conf=score)
                 region_id = 'addressregion%02d' % (i+1)
                 region = TextRegionType(id=region_id,
                                         Coords=region_coords,
@@ -317,21 +331,37 @@ class DetectAddress(Processor):
                          name, region_id, page_id)
                 page.add_TextRegion(region)
                 # remove overlapping existing regions
-                for neighbour, neighpoly in zip(allregions, allpolys):
+                for neighbour, neighpoly in list(zip(allregions, allpolys)):
                     if (neighpoly.within(region_poly) or
-                        neighpoly.within(region_poly.buffer(scale)) or
-                        neighpoly.context.almost_equals(region_poly)):
+                        neighpoly.within(region_poly.buffer(4*scale)) or
+                        (neighpoly.intersects(region_poly) and (
+                            neighpoly.context.almost_equals(region_poly) or
+                            neighpoly.context.intersection(region_poly).area > 0.8 * neighpoly.context.area))):
                         LOG.debug("removing redundant region '%s' in favour of '%s'",
                                   neighbour.id, region.id)
+                        # re-assign text lines
+                        line_no = len(region.get_TextLine())
                         for line in neighbour.get_TextLine():
+                            LOG.debug("stealing text line '%s'", line.id)
+                            line.id = region.id + '_line%02d' % line_no
+                            line_no += 1
                             region.add_TextLine(line)
                             line_poly = Polygon(coordinates_of_segment(
                                 line, page_image, page_coords))
                             if not line_poly.within(region_poly):
-                                region_poly = line_poly.union(region_poly).simplify(2)
+                                region_poly = line_poly.union(region_poly)
+                                if region_poly.type == 'MultiPolygon':
+                                    region_poly = region_poly.convex_hull
                                 region_polygon = coordinates_for_segment(
                                     region_poly.exterior.coords[:-1], page_image, page_coords)
                                 region.get_Coords().points = points_from_polygon(region_polygon)
+                        region.set_TextEquiv([TextEquivType(Unicode='\n'.join(
+                            line.get_TextEquiv()[0].Unicode for line in region.get_TextLine()
+                            if line.get_TextEquiv()))])
+                        # don't re-assign by another address detection
+                        allregions.remove(neighbour)
+                        allpolys.remove(neighpoly)
+                        # remove old region
                         neighbour.parent_object_.TextRegion.remove(neighbour)
                         if neighbour.id in reading_order:
                             roelem = reading_order[neighbour.id]
