@@ -193,13 +193,15 @@ class DetectAddress(Processor):
             page_image = page_image.convert(mode='RGB')
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
-            def mark_line(line, fill):
+            def mark_line(line, text_class):
                 # add to mask image (alpha channel for input image)
                 polygon = coordinates_of_segment(line, page_image, page_coords)
                 # draw line mask:
                 ImageDraw.Draw(page_image_mask).polygon(
                     list(map(tuple, polygon.tolist())),
-                    fill=fill)
+                    fill=200 if text_class == 'ADDRESS_NONE' else 255)
+                if text_class != 'ADDRESS_NONE':
+                    line.set_custom('subtype: %s' % text_class)
 
             # prepare reading order
             reading_order = dict()
@@ -240,21 +242,20 @@ class DetectAddress(Processor):
                     this_line = line
                     this_text = textequivs[0].Unicode
                     this_result = classify_address(this_text)
+                    mark_line(this_line, this_result)
                     if this_result != 'ADDRESS_NONE':
-                        mark_line(this_line, 255)
                         if this_result != 'ADDRESS_FULL_ADDRESS' and last_line:
                             last_text = last_line.get_TextEquiv()[0].Unicode
                             last_result = classify_address(', '.join([last_text, this_text]))
                             if last_result != 'ADDRESS_NONE':
-                                mark_line(last_line, 255)
+                                mark_line(last_line, last_result)
                                 if last_result != 'ADDRESS_FULL_ADDRESS' and prev_line:
                                     prev_text = prev_line.get_TextEquiv()[0].Unicode
                                     prev_result = classify_address(', '.join([prev_text, last_text, this_text]))
                                     if prev_result != 'ADDRESS_NONE':
-                                        mark_line(prev_line, 255)
+                                        mark_line(prev_line, prev_result)
                         prev_line, last_line = None, None
                     else:
-                        mark_line(this_line, 200)
                         prev_line, last_line = last_line, this_line
             
             # combine raw with aggregated mask to RGBA array
@@ -329,7 +330,7 @@ class DetectAddress(Processor):
                                         custom='subtype:' + name)
                 LOG.info("Detected %s region '%s' on page '%s'",
                          name, region_id, page_id)
-                page.add_TextRegion(region)
+                has_address = False
                 # remove overlapping existing regions
                 for neighbour, neighpoly in list(zip(allregions, allpolys)):
                     if (neighpoly.within(region_poly) or
@@ -342,6 +343,8 @@ class DetectAddress(Processor):
                         # re-assign text lines
                         line_no = len(region.get_TextLine())
                         for line in neighbour.get_TextLine():
+                            if line.get_custom() and line.get_custom().startswith('subtype: ADDRESS_'):
+                                has_address = True
                             LOG.debug("stealing text line '%s'", line.id)
                             line.id = region.id + '_line%02d' % line_no
                             line_no += 1
@@ -374,6 +377,12 @@ class DetectAddress(Processor):
                     elif neighpoly.overlaps(region_poly):
                         LOG.debug("ignoring overlapping region '%s' for '%s'",
                                   neighbour.id, region.id)
+                # safe-guard against ghost detections:
+                if has_address:
+                    page.add_TextRegion(region)
+                else:
+                    LOG.info("Ignoring %s region '%s' without any address lines",
+                             name, region_id)
             
             file_path = os.path.join(self.output_file_grp,
                                      file_id + '.xml')
