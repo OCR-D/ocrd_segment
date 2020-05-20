@@ -9,7 +9,8 @@ from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines
 from .extract_address import ExtractAddress
-from .detect_address import DetectAddress
+from .classify_address_text import ClassifyAddressText
+from .classify_address_layout import ClassifyAddressLayout
 
 @click.command()
 @ocrd_cli_options
@@ -53,5 +54,10 @@ def ocrd_segment_extract_address(*args, **kwargs):
 
 @click.command()
 @ocrd_cli_options
-def ocrd_segment_detect_address(*args, **kwargs):
-    return ocrd_cli_wrap_processor(DetectAddress, *args, **kwargs)
+def ocrd_segment_classify_address_text(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ClassifyAddressText, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_classify_address_layout(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ClassifyAddressLayout, *args, **kwargs)

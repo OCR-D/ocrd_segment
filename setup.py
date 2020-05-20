@@ -9,7 +9,8 @@ Installs:
     - ocrd-segment-extract-regions
     - ocrd-segment-extract-lines
     - ocrd-segment-extract-address
-    - ocrd-segment-detect-address
+    - ocrd-segment-classify-address-text
+    - ocrd-segment-classify-address-layout
     - ocrd-segment-evaluate
 """
 import codecs
@@ -45,7 +46,8 @@ setup(
             'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
             'ocrd-segment-extract-address=ocrd_segment.cli:ocrd_segment_extract_address',
-            'ocrd-segment-detect-address=ocrd_segment.cli:ocrd_segment_detect_address',
+            'ocrd-segment-classify-address-text=ocrd_segment.cli:ocrd_segment_classify_address_text',
+            'ocrd-segment-classify-address-layout=ocrd_segment.cli:ocrd_segment_classify_address_layout',
         ]
     },
 )

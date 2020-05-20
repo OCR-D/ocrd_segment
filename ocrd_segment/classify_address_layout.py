@@ -15,8 +15,6 @@ from mrcnn.config import Config
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
-import requests
-
 from ocrd_utils import (
     getLogger, concat_padded,
     coordinates_of_segment,
@@ -45,38 +43,8 @@ from ocrd import Processor
 
 from .config import OCRD_TOOL
 
-TOOL = 'ocrd-segment-detect-address'
-LOG = getLogger('processor.DetectAddress')
-
-# set True if input is GT, False to use classifier
-ALREADY_CLASSIFIED = False
-
-# text classification for address snippets
-def classify_address(text):
-    # TODO more simple heuristics to avoid API call when crystal clear
-    if 8 > len(text) or len(text) > 60:
-        return 'ADDRESS_NONE'
-    result = requests.post(
-        os.environ['SERVICE_URL'], json={'text': text},
-        auth=requests.auth.HTTPBasicAuth(
-            os.environ['SERVICE_LGN'],
-            os.environ['SERVICE_PWD']))
-    # should have result ADDRESS_ZIP_CITY
-    # "Irgendwas 50667 Köln"
-    # should have result ADDRESS_STREET_HOUSENUMBER_ZIP_CITY
-    # "Bahnhofstrasse 12, 50667 Köln"
-    # should have result ADDRESS_ADRESSEE_ZIP_CITY
-    # "Matthias Maier , 50667 Köln"
-    # should have result ADDRESS_FULL_ADDRESS
-    # "Matthias Maier - Bahnhofstrasse 12 - 50667 Köln"
-    # should have result ADDRESS_NONE
-    # "Hier ist keine Adresse sondern Rechnungsnummer 12312234:"
-    # FIXME: train visual models for multi-class input and use multi-line text
-    # TODO: check result network status
-    LOG.debug("text classification result for '%s' is: %s", text, result.text)
-    result = json.loads(result.text)
-    # TODO: train visual models for soft input and use result['confidence']
-    return result['resultClass']
+TOOL = 'ocrd-segment-classify-address-layout'
+LOG = getLogger('processor.ClassifyAddressLayout')
 
 class AddressConfig(Config):
     """Configuration for detection on address resegmentation"""
@@ -97,12 +65,12 @@ class AddressConfig(Config):
     IMAGE_CHANNEL_COUNT = 4
     MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0])
 
-class DetectAddress(Processor):
+class ClassifyAddressLayout(Processor):
 
     def __init__(self, *args, **kwargs):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
-        super(DetectAddress, self).__init__(*args, **kwargs)
+        super(ClassifyAddressLayout, self).__init__(*args, **kwargs)
         self.categories = ['',
                            'address-rcpt',
                            'address-sndr',
@@ -136,8 +104,8 @@ class DetectAddress(Processor):
         Open and deserialize PAGE input files and their respective images,
         then iterate over the element hierarchy down to the text line level.
         
-        Then, get the text results of each line and classify them into
-        text belonging to address descriptions and other.
+        Then, get the text classification result for each text line (what
+        parts of address descriptions it contains, if any).
         
         Next, retrieve the page image according to the layout annotation (from
         the alternative image of the page, or by cropping at Border and deskewing
@@ -149,7 +117,8 @@ class DetectAddress(Processor):
         Postprocess the mask and bbox to ensure no words are cut off accidentally.
         
         Where the class confidence is high enough, annotate the resulting TextRegion
-        (including the special address type), and remove any overlapping input regions.
+        (including the special address type), and remove any overlapping input regions
+        (re-assigning its text lines).
         
         Produce a new output file by serialising the resulting hierarchy.
         """
@@ -187,23 +156,29 @@ class DetectAddress(Processor):
                     dpi = round(dpi * 2.54)
             else:
                 dpi = None
-            page_image_binarized, _, _ = self.workspace.image_from_page(
-                page, page_id,
-                feature_selector='binarized')
+            # page_image_binarized, _, _ = self.workspace.image_from_page(
+            #     page, page_id,
+            #     feature_selector='binarized')
+            
             # ensure RGB (if raw was merely grayscale)
             page_image = page_image.convert(mode='RGB')
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
-            def mark_line(line, text_class):
+            def mark_line(line):
+                text_class = line.get_custom()
+                if not text_class:
+                    return
+                text_class = text_class.replace('subtype: ', '')
+                if (not text_class.startswith('ADDRESS_') or
+                    text_class == 'ADDRESS_NONE'):
+                    return
                 # add to mask image (alpha channel for input image)
                 polygon = coordinates_of_segment(line, page_image, page_coords)
                 # draw line mask:
                 ImageDraw.Draw(page_image_mask).polygon(
                     list(map(tuple, polygon.tolist())),
                     fill=200 if text_class == 'ADDRESS_NONE' else 255)
-                if text_class != 'ADDRESS_NONE':
-                    line.set_custom('subtype: %s' % text_class)
-
+            
             # prepare reading order
             reading_order = dict()
             ro = page.get_ReadingOrder()
@@ -213,51 +188,12 @@ class DetectAddress(Processor):
                     page_get_reading_order(reading_order, rogroup)
             
             # iterate through all regions that could have lines
-            # iterate along annotated reading order to better connect ((name+)street+)zip lines
-            allregions = page_get_all_regions(page, classes='Text', order='reading-order', depth=2)
-            if not allregions:
-                allregions = page_get_all_regions(page, classes='Text', order='document', depth=2)
+            allregions = page_get_all_regions(page, classes='Text', order='document', depth=2)
             allpolys = [prep(Polygon(coordinates_of_segment(region, page_image, page_coords)))
                         for region in allregions]
-            prev_line = None
-            last_line = None
             for region in allregions:
                 for line in region.get_TextLine():
-                    # FIXME: separate annotation with text classifier from visual prediction
-                    if ALREADY_CLASSIFIED:
-                        # use GT classification
-                        subtype = ''
-                        if region.get_type() == 'other' and region.get_custom():
-                            subtype = region.get_custom().replace('subtype:', '')
-                        if subtype.startswith('address'):
-                            mark_line(line, 255)
-                        else:
-                            mark_line(line, 200)
-                        continue
-                    # run text classification
-                    textequivs = line.get_TextEquiv()
-                    if not textequivs:
-                        LOG.error("Line '%s' in region '%s' of page '%s' contains no text results",
-                                  line.id, region.id, page_id)
-                        continue
-                    this_line = line
-                    this_text = textequivs[0].Unicode
-                    this_result = classify_address(this_text)
-                    mark_line(this_line, this_result)
-                    if this_result != 'ADDRESS_NONE':
-                        if this_result != 'ADDRESS_FULL_ADDRESS' and last_line:
-                            last_text = last_line.get_TextEquiv()[0].Unicode
-                            last_result = classify_address(', '.join([last_text, this_text]))
-                            if last_result != 'ADDRESS_NONE':
-                                mark_line(last_line, last_result)
-                                if last_result != 'ADDRESS_FULL_ADDRESS' and prev_line:
-                                    prev_text = prev_line.get_TextEquiv()[0].Unicode
-                                    prev_result = classify_address(', '.join([prev_text, last_text, this_text]))
-                                    if prev_result != 'ADDRESS_NONE':
-                                        mark_line(prev_line, prev_result)
-                        prev_line, last_line = None, None
-                    else:
-                        prev_line, last_line = last_line, this_line
+                    mark_line(line)
             
             # combine raw with aggregated mask to RGBA array
             page_image.putalpha(page_image_mask)
@@ -318,7 +254,7 @@ class DetectAddress(Processor):
                     if region_poly.is_valid:
                         break
                 region_polygon = region_poly.exterior.coords[:-1] # keep open
-                #region_polygon = polygon_from_bbox(bbox)
+                #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
                 # TODO: post-process (closure/majority in binarized, then clip to parent/border)
                 # annotate new region
                 region_polygon = coordinates_for_segment(region_polygon,
@@ -332,8 +268,11 @@ class DetectAddress(Processor):
                 LOG.info("Detected %s region '%s' on page '%s'",
                          name, region_id, page_id)
                 has_address = False
+                oldregions = []
                 # remove overlapping existing regions
-                for neighbour, neighpoly in list(zip(allregions, allpolys)):
+                for neighbour, neighpoly in zip(allregions, allpolys):
+                    if neighbour in oldregions:
+                        continue
                     if (neighpoly.within(region_poly) or
                         neighpoly.within(region_poly.buffer(4*scale)) or
                         (neighpoly.intersects(region_poly) and (
@@ -363,8 +302,7 @@ class DetectAddress(Processor):
                             line.get_TextEquiv()[0].Unicode for line in region.get_TextLine()
                             if line.get_TextEquiv()))])
                         # don't re-assign by another address detection
-                        allregions.remove(neighbour)
-                        allpolys.remove(neighpoly)
+                        oldregions.append(neighbour)
                         # remove old region
                         neighbour.parent_object_.TextRegion.remove(neighbour)
                         if neighbour.id in reading_order:
@@ -397,6 +335,7 @@ class DetectAddress(Processor):
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
 
+# FIXME: belongs into OCR-D/core
 def page_get_all_regions(page, classes=None, order='document', depth=1):
     """
     Get all *Region elements below ``page``,

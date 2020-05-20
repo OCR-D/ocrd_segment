@@ -19,12 +19,26 @@
       "parameters": {
       }
     },
-    "ocrd-segment-detect-address": {
-      "executable": "ocrd-segment-detect-address",
-      "categories": ["Layout analysis"],
+    "ocrd-segment-classify-address-text": {
+      "executable": "ocrd-segment-classify-address-text",
+      "categories": ["Text recognition and optimization"],
       "description": "",
       "input_file_grp": [
         "OCR-D-OCR"
+      ],
+      "output_file_grp": [
+        "OCR-D-OCR-ADDR"
+      ],
+      "steps": ["layout/segmentation/classification"],
+      "parameters": {
+      }
+    },
+    "ocrd-segment-classify-address-layout": {
+      "executable": "ocrd-segment-classify-address-layout",
+      "categories": ["Layout analysis"],
+      "description": "",
+      "input_file_grp": [
+        "OCR-D-OCR-ADDR"
       ],
       "output_file_grp": [
         "OCR-D-SEG-ADDR"
