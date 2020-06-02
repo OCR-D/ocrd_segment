@@ -131,9 +131,9 @@ class CocoConfig(Config):
     IMAGE_MAX_DIM = 768
 
     # ...settings to accommodate alpha channel input...
-    IMAGE_CHANNEL_COUNT = 4
+    IMAGE_CHANNEL_COUNT = 5
     # don't touch the alpha channel
-    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0])
+    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0, 0])
 
 class InferenceConfig(CocoConfig):
     # Set batch size to 1 since we'll be running inference on
@@ -304,6 +304,13 @@ class CocoDataset(utils.Dataset):
         if image.shape[-1] != 4:
             raise Exception('image %d ("%s") has no alpha channel' % (
                 image_id, self.image_info[image_id]['path']))
+        # Convert from RGBA to RGB+Text+Address
+        tmask = image[:,:,3:4] > 0
+        amask = image[:,:,3:4] == 255
+        image = np.concatenate([image[:,:,:3],
+                                255 * tmask.astype(np.uint8),
+                                255 * amask.astype(np.uint8)],
+                               axis=2)
         return image
     
     # The following two functions are from pycocotools with a few changes.
@@ -500,7 +507,7 @@ def test_coco(model, dataset, coco, limit=0, image_ids=None, plot=False):
             # show result
             pyplot.close() # clear axes from previous images
             fig = pyplot.figure(frameon=False)
-            pyplot.imshow(image)
+            pyplot.imshow(image[:,:,:3])
             ax = pyplot.gca()
             ax.set_axis_off()
             ax.set_xmargin(0)
@@ -567,7 +574,7 @@ if __name__ == '__main__':
                         metavar="<image count>",
                         help='Maximum number of images to use (default=all)')
     subparsers = parser.add_subparsers(dest='command')
-    train_parser = subparsers.add_parser('train', help="Train a model from images (subset 'train') with COCO annotations ('train.json')")
+    train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
     train_parser.add_argument('--dataset', required=True,
                               metavar="/path/to/coco.json",
                               help='Directory of the address dataset')
@@ -579,11 +586,11 @@ if __name__ == '__main__':
                               default=None,
                               metavar="depth-spec",
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
-    evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images (subset 'val') with COCO annotations ('val.json')")
+    evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
     evaluate_parser.add_argument('--dataset', required=True,
                                  metavar="/path/to/coco.json",
                                  help='Directory of the address dataset')
-    test_parser = subparsers.add_parser('test', help="Apply a model on images (subset 'test'), adding COCO annotations ('test.json')")
+    test_parser = subparsers.add_parser('test', help="Apply a model on images, adding COCO annotations")
     test_parser.add_argument('--dataset', required=True,
                              metavar="/path/to/coco.json",
                              help='Directory of the address dataset')
@@ -655,10 +662,10 @@ if __name__ == '__main__':
         if args.command == "train":
             dataset_train = CocoDataset()
             dataset_train.load_coco(coco, os.path.dirname(args.dataset),
-                                    limit=trainset, skip_empty=True)
+                                    limit=trainset, skip_empty=True) #False
             dataset_val = CocoDataset()
             dataset_val.load_coco(coco, os.path.dirname(args.dataset),
-                                  limit=valset, skip_empty=True)
+                                  limit=valset, skip_empty=True) #True
             del coco
             dataset_train.prepare()
             dataset_val.prepare()

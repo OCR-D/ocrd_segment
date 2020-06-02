@@ -62,8 +62,8 @@ class AddressConfig(Config):
     IMAGE_RESIZE_MODE = "square"
     IMAGE_MIN_DIM = 600
     IMAGE_MAX_DIM = 768
-    IMAGE_CHANNEL_COUNT = 4
-    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0])
+    IMAGE_CHANNEL_COUNT = 5
+    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0, 0])
 
 class ClassifyAddressLayout(Processor):
 
@@ -198,6 +198,13 @@ class ClassifyAddressLayout(Processor):
             # combine raw with aggregated mask to RGBA array
             page_image.putalpha(page_image_mask)
             page_array = np.array(page_image)
+            # convert to RGB+Text+Address array
+            tmask = page_array[:,:,3:4] > 0
+            amask = page_array[:,:,3:4] == 255
+            page_array = np.concatenate([page_array[:,:,:3],
+                                         255 * tmask.astype(np.uint8),
+                                         255 * amask.astype(np.uint8)],
+                                        axis=2)
             # predict
             preds = self.model.detect([page_array], verbose=0)[0]
             worse = []
