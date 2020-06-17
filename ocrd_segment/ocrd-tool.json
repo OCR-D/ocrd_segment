@@ -207,6 +207,23 @@
         }
       }
     },
+    "ocrd-segment-replace-original": {
+      "executable": "ocrd-segment-replace-original",
+      "categories": ["Image preprocessing"],
+      "description": "Extract page image (deskewed according to `/Page/@orientation` and cropped+masked along `/Page/Border`) and use it as @imageFilename, adjusting all coordinates",
+      "input_file_grp": [
+        "OCR-D-SEG-LINE",
+        "OCR-D-GT-SEG-LINE",
+        "OCR-D-OCR"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-CROP",
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+      }
+    },
     "ocrd-segment-evaluate": {
       "executable": "ocrd-segment-evaluate",
       "categories": ["Layout analysis"],
