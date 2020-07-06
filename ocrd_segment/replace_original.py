@@ -21,7 +21,7 @@ from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-replace-original'
 LOG = getLogger('processor.ReplaceOriginal')
-FALLBACK_FILEGRP_IMG = 'OCR-D-IMG-CROP'
+FALLBACK_FILEGRP_IMG = 'OCR-D-IMG-SUBST'
 
 class ReplaceOriginal(Processor):
 
@@ -39,7 +39,7 @@ class ReplaceOriginal(Processor):
         Retrieve the image of the (cropped, deskewed, dewarped) page, preferring
         the last annotated form (which, depending on the workflow, could be
         binarized or raw). Add that image file to the workspace with the fileGrp
-        USE given in the second position of the output fileGrp, or ``OCR-D-IMG-CROP``.
+        USE given in the second position of the output fileGrp, or ``OCR-D-IMG-SUBST``.
         Reference that file in the page (not as AlternativeImage but) as original
         image. Adjust all segment coordinates accordingly.
         
