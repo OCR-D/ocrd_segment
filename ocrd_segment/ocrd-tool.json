@@ -163,6 +163,21 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+          "feature_selector": {
+              "type": "string",
+              "default": "",
+              "description": "comma-separated list of required image features (e.g. binarized,despeckled)"
+          },
+          "feature_filter": {
+              "type": "string",
+              "default": "",
+              "description": "comma-separated list of forbidden image features (e.g. binarized,despeckled)"
+          },
+          "transform_coordinates": {
+              "type": "boolean",
+              "default": true,
+              "description": "re-calculate coordinates for all segments of the structural hierarchy to be consistent with the coordinate system of the chosen image again (vital after cropping, deskewing etc; disable only if input coordinates must be assumed to be inconsistent with the original)"
+          }
       }
     },
     "ocrd-segment-evaluate": {

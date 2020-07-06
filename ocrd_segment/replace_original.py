@@ -51,6 +51,9 @@ class ReplaceOriginal(Processor):
             page_grp = self.output_file_grp
             image_grp = FALLBACK_FILEGRP_IMG
             LOG.info("No output file group for images specified, falling back to '%s'", image_grp)
+        feature_selector = self.parameter['feature_selector']
+        feature_filter = self.parameter['feature_filter']
+        adapt_coords = self.parameter['transform_coordinates']
         
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
@@ -73,7 +76,9 @@ class ReplaceOriginal(Processor):
                                                       value=self.parameter[name])
                                             for name in self.parameter])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
-                page, page_id)
+                page, page_id,
+                feature_filter=feature_filter,
+                feature_selector=feature_selector)
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
                 if page_image_info.resolutionUnit == 'cm':
@@ -86,21 +91,23 @@ class ReplaceOriginal(Processor):
                                                        image_grp,
                                                        page_id=input_file.pageId,
                                                        mimetype='image/png')
-            # replace original image, adjust all coordinates
+            # replace original image
             page.set_imageFilename(file_path)
-            for region in page.get_AllRegions():
-                region_polygon = coordinates_of_segment(region, page_image, page_coords)
-                region.get_Coords().points = points_from_polygon(region_polygon)
-                if isinstance(region, TextRegionType):
-                    for line in region.get_TextLine():
-                        line_polygon = coordinates_of_segment(line, page_image, page_coords)
-                        line.get_Coords().points = points_from_polygon(line_polygon)
-                        for word in line.get_Word():
-                            word_polygon = coordinates_of_segment(word, page_image, page_coords)
-                            word.get_Coords().points = points_from_polygon(word_polygon)
-                            for glyph in word.get_Glyph():
-                                glyph_polygon = coordinates_of_segment(glyph, page_image, page_coords)
-                                glyph.get_Coords().points = points_from_polygon(glyph_polygon)
+            # adjust all coordinates
+            if adapt_coords:
+                for region in page.get_AllRegions():
+                    region_polygon = coordinates_of_segment(region, page_image, page_coords)
+                    region.get_Coords().points = points_from_polygon(region_polygon)
+                    if isinstance(region, TextRegionType):
+                        for line in region.get_TextLine():
+                            line_polygon = coordinates_of_segment(line, page_image, page_coords)
+                            line.get_Coords().points = points_from_polygon(line_polygon)
+                            for word in line.get_Word():
+                                word_polygon = coordinates_of_segment(word, page_image, page_coords)
+                                word.get_Coords().points = points_from_polygon(word_polygon)
+                                for glyph in word.get_Glyph():
+                                    glyph_polygon = coordinates_of_segment(glyph, page_image, page_coords)
+                                    glyph.get_Coords().points = points_from_polygon(glyph_polygon)
             
             # update METS (add the PAGE file):
             file_path = os.path.join(page_grp, file_id + '.xml')
