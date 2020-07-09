@@ -188,6 +188,7 @@ class ClassifyAddressLayout(Processor):
                     page_get_reading_order(reading_order, rogroup)
             
             # iterate through all regions that could have lines
+            oldregions = []
             allregions = page_get_all_regions(page, classes='Text', order='document', depth=2)
             allpolys = [prep(Polygon(coordinates_of_segment(region, page_image, page_coords)))
                         for region in allregions]
@@ -275,7 +276,6 @@ class ClassifyAddressLayout(Processor):
                 LOG.info("Detected %s region '%s' on page '%s'",
                          name, region_id, page_id)
                 has_address = False
-                oldregions = []
                 # remove overlapping existing regions
                 for neighbour, neighpoly in zip(allregions, allpolys):
                     if neighbour in oldregions:
