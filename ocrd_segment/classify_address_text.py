@@ -38,9 +38,13 @@ ALREADY_CLASSIFIED = False
 
 # text classification for address snippets
 def classify_address(text):
-    # TODO more simple heuristics to avoid API call when crystal clear
-    if 8 > len(text) or len(text) > 60:
+    # TODO more simple heuristics to avoid API call
+    # when no chance to be an address text
+    if 8 > len(text) or len(text) > 80:
         return 'ADDRESS_NONE'
+    # reduce allcaps to titlecase
+    words = [word.title() if word.isupper() else word for word in text.split(' ')]
+    text = ' '.join(words)
     result = requests.post(
         os.environ['SERVICE_URL'], json={'text': text},
         auth=requests.auth.HTTPBasicAuth(
@@ -52,7 +56,7 @@ def classify_address(text):
     # "Bahnhofstrasse 12, 50667 Köln"
     # should have result ADDRESS_ADRESSEE_ZIP_CITY
     # "Matthias Maier , 50667 Köln"
-    # should have result ADDRESS_FULL_ADDRESS
+    # should have result ADDRESS_FULL
     # "Matthias Maier - Bahnhofstrasse 12 - 50667 Köln"
     # should have result ADDRESS_NONE
     # "Hier ist keine Adresse sondern Rechnungsnummer 12312234:"
@@ -61,7 +65,17 @@ def classify_address(text):
     LOG.debug("text classification result for '%s' is: %s", text, result.text)
     result = json.loads(result.text)
     # TODO: train visual models for soft input and use result['confidence']
-    return result['resultClass']
+    result = result['resultClass']
+    if result != 'ADDRESS_NONE':
+        return result
+    # try a few other fallbacks
+    if '·' in text:
+        return classify_address(text.replace('·', ','))
+    if ' - ' in text:
+        return classify_address(text.replace(' - ', ' '))
+    if ' | ' in text:
+        return classify_address(text.replace(' | ', ' '))
+    return result
 
 class ClassifyAddressText(Processor):
 
@@ -127,7 +141,7 @@ class ClassifyAddressText(Processor):
                         if region.get_type() == 'other' and region.get_custom():
                             subtype = region.get_custom().replace('subtype:', '')
                         if subtype.startswith('address'):
-                            mark_line(line, 'ADDRESS_FULL_ADDRESS')
+                            mark_line(line, 'ADDRESS_FULL')
                         else:
                             mark_line(line, 'ADDRESS_NONE')
                         continue
@@ -142,12 +156,12 @@ class ClassifyAddressText(Processor):
                     this_result = classify_address(this_text)
                     mark_line(this_line, this_result)
                     if this_result != 'ADDRESS_NONE':
-                        if this_result != 'ADDRESS_FULL_ADDRESS' and last_line:
+                        if this_result != 'ADDRESS_FULL' and last_line:
                             last_text = last_line.get_TextEquiv()[0].Unicode
                             last_result = classify_address(', '.join([last_text, this_text]))
                             if last_result != 'ADDRESS_NONE':
                                 mark_line(last_line, last_result)
-                                if last_result != 'ADDRESS_FULL_ADDRESS' and prev_line:
+                                if last_result != 'ADDRESS_FULL' and prev_line:
                                     prev_text = prev_line.get_TextEquiv()[0].Unicode
                                     prev_result = classify_address(', '.join([prev_text, last_text, this_text]))
                                     if prev_result != 'ADDRESS_NONE':
