@@ -121,7 +121,7 @@ class ExtractLines(Processor):
                     lpolygon_abs = polygon_from_points(line.get_Coords().points)
                     ltext = line.get_TextEquiv()
                     if not ltext:
-                        LOG.warning("Line '%s' contains no text conent", line.id)
+                        LOG.warning("Line '%s' contains no text content", line.id)
                         ltext = ''
                     else:
                         ltext = ltext[0].Unicode
