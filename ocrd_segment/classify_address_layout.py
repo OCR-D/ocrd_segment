@@ -189,7 +189,7 @@ class ClassifyAddressLayout(Processor):
             
             # iterate through all regions that could have lines
             oldregions = []
-            allregions = page_get_all_regions(page, classes='Text', order='document', depth=2)
+            allregions = page.get_AllRegions(classes=['Text'], order='reading-order', depth=2)
             allpolys = [prep(Polygon(coordinates_of_segment(region, page_image, page_coords)))
                         for region in allregions]
             for region in allregions:
@@ -230,6 +230,8 @@ class ClassifyAddressLayout(Processor):
                 LOG.warning("Detected no sndr/rcpt address on page '%s'", page_id)
             for i in range(len(preds['class_ids'])):
                 if i in worse:
+                    LOG.debug("Ignoring instance for class %d overlapping better neighbour",
+                              preds['class_ids'][i])
                     continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
@@ -341,73 +343,6 @@ class ClassifyAddressLayout(Processor):
                 content=to_xml(pcgts))
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
-
-# FIXME: belongs into OCR-D/core
-def page_get_all_regions(page, classes=None, order='document', depth=1):
-    """
-    Get all *Region elements below ``page``,
-    or only those provided by ``classes``,
-    returned in the order specified by ``reading_order``,
-    and up to ``depth`` levels of recursion.
-    Arguments:
-       * ``classes`` (list) Classes of regions that shall be returned, e.g. ['Text', 'Image']
-       * ``order`` ('document'|'reading-order') Whether to return regions sorted by document order (default) or by reading order
-       * ``depth`` (integer) Maximum recursion level. Use 0 for arbitrary (i.e. unbounded) depth.
-   
-   For example, to get all text anywhere on the page in reading order, use:
-   ::
-       '\n'.join(line.get_TextEquiv()[0].Unicode
-                 for region in page_get_all_regions(page, classes='Text', depth=0, order='reading-order')
-                 for line in region.get_TextLine())
-    """
-    def region_class(x):
-        return x.__class__.__name__.replace('RegionType', '')
-    
-    def get_recursive_regions(regions, level):
-        if level == 1:
-            # stop recursion, filter classes
-            if classes:
-                return [r for r in regions if region_class(r) in classes]
-            else:
-                return regions
-        # find more regions recursively
-        more_regions = []
-        for region in regions:
-            more_regions.append([])
-            for class_ in ['Advert', 'Chart', 'Chem', 'Custom', 'Graphic', 'Image', 'LineDrawing', 'Map', 'Maths', 'Music', 'Noise', 'Separator', 'Table', 'Text', 'Unknown']:
-                if class_ == 'Map' and not isinstance(region, PageType):
-                    # 'Map' is not recursive in 2019 schema
-                    continue
-                more_regions[-1] += getattr(region, 'get_{}Region'.format(class_))()
-        if not any(more_regions):
-            return get_recursive_regions(regions, 1)
-        regions = [region for r, more in zip(regions, more_regions) for region in [r] + more]
-        return get_recursive_regions(regions, level - 1 if level else 0)
-    ret = get_recursive_regions([page], depth + 1 if depth else 0)
-    if order == 'reading-order':
-        reading_order = page.get_ReadingOrder()
-        if reading_order:
-            reading_order = reading_order.get_OrderedGroup() or reading_order.get_UnorderedGroup()
-        if reading_order:
-            def get_recursive_reading_order(rogroup):
-                if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
-                    elements = sorted(rogroup.get_RegionRefIndexed() +
-                                      rogroup.get_OrderedGroupIndexed() + rogroup.get_UnorderedGroupIndexed(),
-                                      key=lambda x : x.index)
-                if isinstance(rogroup, (UnorderedGroupType, UnorderedGroupIndexedType)):
-                    elements = (rogroup.get_RegionRef() + rogroup.get_OrderedGroup() + rogroup.get_UnorderedGroup())
-                regionrefs = list()
-                for elem in elements:
-                    regionrefs.append(elem.get_regionRef())
-                    if not isinstance(elem, (RegionRefType, RegionRefIndexedType)):
-                        regionrefs.extend(get_recursive_reading_order(elem))
-                return regionrefs
-            reading_order = get_recursive_reading_order(reading_order)
-        if reading_order:
-            id2region = dict([(region.id, region) for region in ret])
-            ret = [id2region[region_id] for region_id in reading_order if region_id in id2region]
-    ret = [r for r in ret if region_class(r) in classes]
-    return ret
 
 def page_get_reading_order(ro, rogroup):
     """Add all elements from the given reading order group to the given dictionary.

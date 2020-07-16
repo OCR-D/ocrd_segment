@@ -8,6 +8,7 @@ import requests
 
 from ocrd_utils import (
     getLogger, concat_padded,
+    bbox_from_points,
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
@@ -40,11 +41,14 @@ ALREADY_CLASSIFIED = False
 def classify_address(text):
     # TODO more simple heuristics to avoid API call
     # when no chance to be an address text
-    if 8 > len(text) or len(text) > 80:
+    if 8 > len(text) or len(text) > 100:
         return 'ADDRESS_NONE'
     # reduce allcaps to titlecase
     words = [word.title() if word.isupper() else word for word in text.split(' ')]
     text = ' '.join(words)
+    # workaround for bad OCR:
+    text = text.replace('ı', 'i')
+    text = text.replace(']', 'I')
     result = requests.post(
         os.environ['SERVICE_URL'], json={'text': text},
         auth=requests.auth.HTTPBasicAuth(
@@ -72,9 +76,9 @@ def classify_address(text):
     if '·' in text:
         return classify_address(text.replace('·', ','))
     if ' - ' in text:
-        return classify_address(text.replace(' - ', ' '))
+        return classify_address(text.replace(' - ', ', '))
     if ' | ' in text:
-        return classify_address(text.replace(' | ', ' '))
+        return classify_address(text.replace(' | ', ', '))
     return result
 
 class ClassifyAddressText(Processor):
@@ -124,15 +128,16 @@ class ClassifyAddressText(Processor):
             def mark_line(line, text_class):
                 if text_class != 'ADDRESS_NONE':
                     line.set_custom('subtype: %s' % text_class)
+            def left_of(rseg, lseg):
+                r_x1, r_y1, r_x2, r_y2 = bbox_from_points(rseg.get_Coords().points)
+                l_x1, l_y1, l_x2, l_y2 = bbox_from_points(lseg.get_Coords().points)
+                return (r_y1 < l_y2 and l_y1 < r_y2 and l_x2 < r_x1)
 
             # iterate through all regions that could have lines,
             # but along annotated reading order to better connect
             # ((name+)street+)zip parts split across lines
-            allregions = page_get_all_regions(page, classes='Text', order='reading-order', depth=2)
-            if not allregions:
-                allregions = page_get_all_regions(page, classes='Text', order='document', depth=2)
-            prev_line = None
-            last_line = None
+            allregions = page.get_AllRegions(classes=['Text'], order='reading-order', depth=2)
+            last_lines = [None, None, None]
             for region in allregions:
                 for line in region.get_TextLine():
                     if ALREADY_CLASSIFIED:
@@ -151,24 +156,33 @@ class ClassifyAddressText(Processor):
                         LOG.error("Line '%s' in region '%s' of page '%s' contains no text results",
                                   line.id, region.id, page_id)
                         continue
-                    this_line = line
-                    this_text = textequivs[0].Unicode
-                    this_result = classify_address(this_text)
-                    mark_line(this_line, this_result)
-                    if this_result != 'ADDRESS_NONE':
-                        if this_result != 'ADDRESS_FULL' and last_line:
-                            last_text = last_line.get_TextEquiv()[0].Unicode
-                            last_result = classify_address(', '.join([last_text, this_text]))
-                            if last_result != 'ADDRESS_NONE':
-                                mark_line(last_line, last_result)
-                                if last_result != 'ADDRESS_FULL' and prev_line:
-                                    prev_text = prev_line.get_TextEquiv()[0].Unicode
-                                    prev_result = classify_address(', '.join([prev_text, last_text, this_text]))
-                                    if prev_result != 'ADDRESS_NONE':
-                                        mark_line(prev_line, prev_result)
-                        prev_line, last_line = None, None
-                    else:
-                        prev_line, last_line = last_line, this_line
+                    # If the current line is part of an address, then
+                    # also try it in concatenation with the previous line etc.
+                    # When concatenating, try to separate parts by comma,
+                    # except if they are already written next to each other
+                    # (horizontally).
+                    # The top-most part (ADDRESS_FULL) is the freest, i.e.
+                    # it may contain more than one line (without comma),
+                    # but the text classifier is too liberal here, so
+                    # we stop short at the last line of the name.
+                    last_lines += [line] # expand
+                    text = ''
+                    for this_line, prev_line in zip(reversed(last_lines),
+                                                    reversed([None] + last_lines[:-1])):
+                        text = this_line.get_TextEquiv()[0].Unicode + text
+                        result = classify_address(text)
+                        if result == 'ADDRESS_NONE':
+                            break
+                        mark_line(this_line, result)
+                        last_lines = [None] * len(last_lines) # reset
+                        if not prev_line:
+                            break
+                        text = ' ' + text
+                        if result == 'ADDRESS_FULL':
+                            break # avoid false positives
+                        if result != 'ADDRESS_FULL' and not left_of(prev_line, this_line):
+                            text = ',' + text
+                    last_lines = last_lines[1:] # advance
             
             file_path = os.path.join(self.output_file_grp,
                                      file_id + '.xml')
@@ -181,70 +195,3 @@ class ClassifyAddressText(Processor):
                 content=to_xml(pcgts))
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
-
-# FIXME: belongs into OCR-D/core
-def page_get_all_regions(page, classes=None, order='document', depth=1):
-    """
-    Get all *Region elements below ``page``,
-    or only those provided by ``classes``,
-    returned in the order specified by ``reading_order``,
-    and up to ``depth`` levels of recursion.
-    Arguments:
-       * ``classes`` (list) Classes of regions that shall be returned, e.g. ['Text', 'Image']
-       * ``order`` ('document'|'reading-order') Whether to return regions sorted by document order (default) or by reading order
-       * ``depth`` (integer) Maximum recursion level. Use 0 for arbitrary (i.e. unbounded) depth.
-   
-   For example, to get all text anywhere on the page in reading order, use:
-   ::
-       '\n'.join(line.get_TextEquiv()[0].Unicode
-                 for region in page_get_all_regions(page, classes='Text', depth=0, order='reading-order')
-                 for line in region.get_TextLine())
-    """
-    def region_class(x):
-        return x.__class__.__name__.replace('RegionType', '')
-    
-    def get_recursive_regions(regions, level):
-        if level == 1:
-            # stop recursion, filter classes
-            if classes:
-                return [r for r in regions if region_class(r) in classes]
-            else:
-                return regions
-        # find more regions recursively
-        more_regions = []
-        for region in regions:
-            more_regions.append([])
-            for class_ in ['Advert', 'Chart', 'Chem', 'Custom', 'Graphic', 'Image', 'LineDrawing', 'Map', 'Maths', 'Music', 'Noise', 'Separator', 'Table', 'Text', 'Unknown']:
-                if class_ == 'Map' and not isinstance(region, PageType):
-                    # 'Map' is not recursive in 2019 schema
-                    continue
-                more_regions[-1] += getattr(region, 'get_{}Region'.format(class_))()
-        if not any(more_regions):
-            return get_recursive_regions(regions, 1)
-        regions = [region for r, more in zip(regions, more_regions) for region in [r] + more]
-        return get_recursive_regions(regions, level - 1 if level else 0)
-    ret = get_recursive_regions([page], depth + 1 if depth else 0)
-    if order == 'reading-order':
-        reading_order = page.get_ReadingOrder()
-        if reading_order:
-            reading_order = reading_order.get_OrderedGroup() or reading_order.get_UnorderedGroup()
-        if reading_order:
-            def get_recursive_reading_order(rogroup):
-                if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
-                    elements = sorted(rogroup.get_RegionRefIndexed() +
-                                      rogroup.get_OrderedGroupIndexed() + rogroup.get_UnorderedGroupIndexed(),
-                                      key=lambda x : x.index)
-                if isinstance(rogroup, (UnorderedGroupType, UnorderedGroupIndexedType)):
-                    elements = (rogroup.get_RegionRef() + rogroup.get_OrderedGroup() + rogroup.get_UnorderedGroup())
-                regionrefs = list()
-                for elem in elements:
-                    regionrefs.append(elem.get_regionRef())
-                    if not isinstance(elem, (RegionRefType, RegionRefIndexedType)):
-                        regionrefs.extend(get_recursive_reading_order(elem))
-                return regionrefs
-            reading_order = get_recursive_reading_order(reading_order)
-        if reading_order:
-            id2region = dict([(region.id, region) for region in ret])
-            ret = [id2region[region_id] for region_id in reading_order if region_id in id2region]
-    ret = [r for r in ret if region_class(r) in classes]
-    return ret
