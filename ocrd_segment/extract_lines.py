@@ -101,12 +101,16 @@ class ExtractLines(Processor):
 
             # add excel file
             LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
-            workbook = xlsxwriter.Workbook('%s.xlsx' % os.path.join(self.output_file_grp, file_id))
+            url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
+            workbook = xlsxwriter.Workbook(url)
             worksheet = workbook.add_worksheet()
             self.workspace.add_file(
                 ID=file_id,
+                mimetype='application/vnd.ms-excel',
+                pageId=page_id,
+                url=url,
                 file_grp=self.output_file_grp,
-                    )
+            )
 
             
             regions = itertools.chain.from_iterable(
@@ -123,6 +127,7 @@ class ExtractLines(Processor):
                 lines = region.get_TextLine()
                 if not lines:
                     LOG.warning("Region '%s' contains no text lines", region.id)
+                i = 0
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
@@ -198,11 +203,15 @@ class ExtractLines(Processor):
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
+                    worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id)
+                    worksheet.insert_image('B%d' % i, file_path)
+                    worksheet.write('C%d' % i, ltext)
                     file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
+                    i += 1
 
             workbook.close()
 
