@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os.path
 import json
 import itertools
+import xlsxwriter
 
 from ocrd_utils import (
     getLogger, concat_padded,
@@ -97,6 +98,16 @@ class ExtractLines(Processor):
             else:
                 dpi = None
             ptype = page.get_type()
+
+            # add excel file
+            LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
+            workbook = xlsxwriter.Workbook('%s.xlsx' % os.path.join(self.output_file_grp, file_id))
+            worksheet = workbook.add_worksheet()
+            self.workspace.add_file(
+                ID=file_id,
+                file_grp=self.output_file_grp,
+                    )
+
             
             regions = itertools.chain.from_iterable(
                 [page.get_TextRegion()] +
@@ -192,4 +203,6 @@ class ExtractLines(Processor):
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
+
+            workbook.close()
 

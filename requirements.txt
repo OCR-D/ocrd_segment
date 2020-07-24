@@ -2,3 +2,4 @@ ocrd >= 2.4.0
 shapely
 scikit-image
 numpy
+xlsxwriter

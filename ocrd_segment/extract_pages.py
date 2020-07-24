@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw
 from shapely.geometry import Polygon
 from shapely.validation import explain_validity
 from shapely.prepared import prep
+import xlsxwriter
 
 from ocrd_utils import (
     getLogger, concat_padded,
