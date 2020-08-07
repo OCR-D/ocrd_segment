@@ -7,7 +7,8 @@ import cv2
 
 from ocrd_utils import (
     getLogger,
-    concat_padded,
+    make_file_id,
+    assert_file_grp_cardinality,
     points_from_polygon,
     MIMETYPE_PAGE,
     pushd_popd,
@@ -68,6 +69,9 @@ class ImportImageSegmentation(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        assert_file_grp_cardinality(self.input_file_grp, 2, 'base and mask')
+        assert_file_grp_cardinality(self.output_file_grp, 1)
+
         colordict = self.parameter['colordict']
         if not colordict:
             LOG.info('Using default PAGE colordict')
@@ -78,8 +82,6 @@ class ImportImageSegmentation(Processor):
                     "GraphicRegion": GraphicsTypeSimpleType,
                     "ChartType": ChartTypeSimpleType}
         ifgs = self.input_file_grp.split(",") # input file groups
-        if len(ifgs) != 2:
-            raise Exception("need 2 input file groups (base and mask)")
         # collect input file tuples
         ifts = self.zip_input_files(ifgs) # input file tuples
         # process input file tuples
@@ -192,12 +194,8 @@ class ImportImageSegmentation(Processor):
                                            Coords=CoordsType(points=points_from_polygon(poly)))
                         # add region
                         getattr(page, 'add_%s' % classname)(region)
-                    
-            # Use input_file's basename for the new file -
-            # this way the files retain the same basenames:
-            file_id = input_file.ID.replace(ifgs[0], self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
+
+            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

@@ -7,7 +7,8 @@ import numpy as np
 
 from ocrd_utils import (
     getLogger,
-    concat_padded,
+    make_file_id,
+    assert_file_grp_cardinality,
     points_from_polygon,
     MIMETYPE_PAGE,
     membername
@@ -81,11 +82,9 @@ class ImportCOCOSegmentation(Processor):
         corresponding input files), then show a warning.
         """
         # Load JSON
-        try:
-            # pylint: disable=attribute-defined-outside-init
-            self.input_file_grp, coco_grp = self.input_file_grp.split(',')
-        except ValueError:
-            raise Exception("need 2 input file groups (base and COCO)")
+        assert_file_grp_cardinality(self.input_file_grp, 2, 'base and COCO')
+        # pylint: disable=attribute-defined-outside-init
+        self.input_file_grp, coco_grp = self.input_file_grp.split(',')
         # pylint: disable=attribute-defined-outside-init
         if not self.input_files:
             LOG.warning('No input files to process')
@@ -135,7 +134,6 @@ class ImportCOCOSegmentation(Processor):
         
         LOG.info('Converting %s annotations into PAGE-XML', coco_source)
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             num_page_id = int(page_id.strip(page_id.strip("0123456789")))
             LOG.info("INPUT FILE %i / %s", n, page_id)
@@ -234,19 +232,14 @@ class ImportCOCOSegmentation(Processor):
             # remove image from dicts
             images_by_id.pop(num_page_id, None)
             images_by_filename.pop(page.imageFilename, None)
-                    
-            # Use input_file's basename for the new file -
-            # this way the files retain the same basenames:
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
+
+            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
                 pageId=input_file.pageId,
                 mimetype=MIMETYPE_PAGE,
-                local_filename=os.path.join(self.output_file_grp,
-                                            file_id + '.xml'),
+                local_filename=os.path.join(self.output_file_grp, file_id + '.xml'),
                 content=to_xml(pcgts))
         
         # warn of remaining COCO images

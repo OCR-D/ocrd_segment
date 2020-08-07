@@ -3,7 +3,9 @@ from __future__ import absolute_import
 import json
 
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
+    assert_file_grp_cardinality,
     coordinates_of_segment,
     polygon_from_points,
     MIME_TO_EXT
@@ -63,11 +65,10 @@ class ExtractRegions(Processor):
         * ID + '.nrm.png': region image (if the workflow provides grayscale-normalized images)
         * ID + '.json': region metadata.
         """
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -164,7 +165,8 @@ class ExtractRegions(Processor):
                         extension = '.nrm'
                     else:
                         extension = '.raw'
-                    
+
+                    file_id = make_file_id(input_file, self.output_file_grp)
                     file_path = self.workspace.save_image_file(
                         region_image,
                         file_id + '_' + region.id + extension,

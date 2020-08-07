@@ -10,7 +10,9 @@ from shapely.geometry import Polygon, LineString
 
 from ocrd import Processor
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
+    assert_file_grp_cardinality,
     coordinates_for_segment,
     coordinates_of_segment,
     polygon_from_points,
@@ -56,6 +58,9 @@ class RepairSegmentation(Processor):
         Return information on the plausibility of the segmentation into
         regions on the logging level.
         """
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
+
         sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
         
@@ -165,11 +170,7 @@ class RepairSegmentation(Processor):
                 # pass the regions sorted (see above)
                 _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging)
 
-            # Use input_file's basename for the new file -
-            # this way the files retain the same basenames:
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
+            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

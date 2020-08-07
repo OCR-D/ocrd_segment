@@ -6,6 +6,8 @@ from ocrd_utils import (
     getLogger, concat_padded,
     coordinates_of_segment,
     points_from_polygon,
+    make_file_id,
+    assert_file_grp_cardinality,
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
@@ -45,21 +47,14 @@ class ReplaceOriginal(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
-        try:
-            page_grp, image_grp = self.output_file_grp.split(',')
-        except ValueError:
-            page_grp = self.output_file_grp
-            image_grp = FALLBACK_FILEGRP_IMG
-            LOG.info("No output file group for images specified, falling back to '%s'", image_grp)
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
         feature_selector = self.parameter['feature_selector']
         feature_filter = self.parameter['feature_filter']
         adapt_coords = self.parameter['transform_coordinates']
         
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, page_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(page_grp, n)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -86,9 +81,10 @@ class ReplaceOriginal(Processor):
             else:
                 dpi = None
             # annotate extracted image
+            file_id = make_file_id(input_file, self.output_file_grp)
             file_path = self.workspace.save_image_file(page_image,
-                                                       file_id.replace(page_grp, image_grp),
-                                                       image_grp,
+                                                       file_id + '-IMG',
+                                                       self.output_file_grp,
                                                        page_id=input_file.pageId,
                                                        mimetype='image/png')
             # replace original image
@@ -108,15 +104,14 @@ class ReplaceOriginal(Processor):
                                 for glyph in word.get_Glyph():
                                     glyph_polygon = coordinates_of_segment(glyph, page_image, page_coords)
                                     glyph.get_Coords().points = points_from_polygon(glyph_polygon)
-            
+
             # update METS (add the PAGE file):
-            file_path = os.path.join(page_grp, file_id + '.xml')
             out = self.workspace.add_file(
                 ID=file_id,
-                file_grp=page_grp,
+                file_grp=self.output_file_grp,
                 pageId=input_file.pageId,
-                local_filename=file_path,
+                local_filename=os.path.join(self.output_file_grp, file_id + '.xml'),
                 mimetype=MIMETYPE_PAGE,
                 content=to_xml(pcgts))
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
-                     file_id, page_grp, out.local_filename)
+                     file_id, self.output_file_grp, out.local_filename)
