@@ -176,5 +176,6 @@ class ExtractRegions(Processor):
                         ID=file_id + '.json',
                         file_grp=self.output_file_grp,
                         local_filename=file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json'),
+                        pageId=input_file.pageId,
                         mimetype='application/json',
                         content=json.dumps(description))

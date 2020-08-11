@@ -339,6 +339,7 @@ class ExtractPages(Processor):
             file_grp=dbg_image_grp,
             local_filename=os.path.join(dbg_image_grp, file_id),
             mimetype='application/json',
+            pageId=input_file.pageId,
             content=json.dumps(
                 {'categories': categories,
                  'images': images,
