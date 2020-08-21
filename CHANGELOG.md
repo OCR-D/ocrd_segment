@@ -8,6 +8,10 @@ Changed:
 
   * adapt to 1-output-file-group convention, use `make_file_id` and `assert_file_grp_cardinality`, #41
 
+Fixed:
+
+  * typo in `extract_lines`, #40
+
 ## [0.0.2] - 2019-12-19
 
 Changed:
