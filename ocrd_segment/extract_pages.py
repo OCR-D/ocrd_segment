@@ -127,19 +127,18 @@ class ExtractPages(Processor):
         """
         assert_file_grp_cardinality(self.input_file_grp, 1)
         file_groups = self.output_file_grp.split(',')
-        try:
-            assert_file_grp_cardinality(self.output_file_grp, 3)
-            dbg_image_grp, bin_image_grp = file_groups[1:]
-        except AssertionError:
-            try:
-                assert_file_grp_cardinality(self.output_file_grp, 2)
-                dbg_image_grp, bin_image_grp = file_groups
-                LOG.info("No output file group for debug images specified, falling back to output filegrp '%s'", dbg_image_grp)
-            except AssertionError:
-                assert_file_grp_cardinality(self.output_file_grp, 1)
-                dbg_image_grp = bin_image_grp = file_groups[0]
-                LOG.info("No output file group for debug images specified, falling back to output filegrp '%s'", dbg_image_grp)
-                LOG.info("No output file group for binarized images specified, falling back to output filegrp '%s'", bin_image_grp)
+        if len(file_groups) > 3:
+            raise Exception("at most 3 output file grps allowed (raw, [binarized, [mask]] image)")
+        if len(file_groups) > 2:
+            dbg_image_grp = file_groups[2]
+        else:
+            dbg_image_grp = file_groups[0]
+            LOG.info("No output file group for debug images specified, falling back to output filegrp '%s'", dbg_image_grp)
+        if len(file_groups) > 1:
+            bin_image_grp = file_groups[1]
+        else:
+            bin_image_grp = file_groups[0]
+            LOG.info("No output file group for binarized images specified, falling back to output filegrp '%s'", bin_image_grp)
         self.output_file_grp = file_groups[0]
 
         # COCO: init data structures
