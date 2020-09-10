@@ -245,7 +245,7 @@ class RepairSegmentation(Processor):
                 #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
                 polygon = contour[:, 0, ::] # already ordered x,y
                 polygon = Polygon(polygon)
-                for tolerance in range(2, int(polygon.area)):
+                for tolerance in range(1, int(polygon.area)):
                     polygon = polygon.simplify(tolerance)
                     if polygon.is_valid:
                         break
@@ -361,6 +361,10 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                 superpoly = superpoly.union(poly)
                 if superpoly.type == 'MultiPolygon':
                     superpoly = superpoly.convex_hull
+                for tolerance in range(1, int(superpoly.area)):
+                    if superpoly.is_valid:
+                        break
+                    superpoly = superpoly.simplify(tolerance)
                 superpoly = superpoly.exterior.coords[:-1] # keep open
                 superreg.get_Coords().points = points_from_polygon(superpoly)
                 # FIXME should we merge/mix attributes and features?
