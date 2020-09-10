@@ -359,7 +359,10 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                 # and use-cases in the future
                 superpoly = Polygon(polygon_from_points(superreg.get_Coords().points))
                 superpoly = superpoly.union(poly)
-                superreg.get_Coords().points = points_from_polygon(superpoly.exterior.coords)
+                if superpoly.type == 'MultiPolygon':
+                    superpoly = superpoly.convex_hull
+                superpoly = superpoly.exterior.coords[:-1] # keep open
+                superreg.get_Coords().points = points_from_polygon(superpoly)
                 # FIXME should we merge/mix attributes and features?
                 if region.get_orientation() != superreg.get_orientation():
                     LOG.warning('Merging region "%s" with orientation %f into "%s" with %f',
