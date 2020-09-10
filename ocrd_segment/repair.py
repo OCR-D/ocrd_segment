@@ -240,11 +240,16 @@ class RepairSegmentation(Processor):
                     LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
                                 i, area, total_area, region.id)
                     continue
-                # simplify shape:
+                # simplify shape (until valid):
                 # can produce invalid (self-intersecting) polygons:
                 #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
                 polygon = contour[:, 0, ::] # already ordered x,y
-                polygon = Polygon(polygon).simplify(1).exterior.coords
+                polygon = Polygon(polygon)
+                for tolerance in range(2, int(polygon.area)):
+                    polygon = polygon.simplify(tolerance)
+                    if polygon.is_valid:
+                        break
+                polygon = polygon.exterior.coords[:-1] # keep open
                 if len(polygon) < 4:
                     LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
                                 i, region.id)
