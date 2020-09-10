@@ -6,7 +6,7 @@ from skimage import draw
 from scipy.ndimage import filters, morphology
 import cv2
 import numpy as np
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import asPolygon, Polygon, LineString
 
 from ocrd import Processor
 from ocrd_utils import (
@@ -361,6 +361,8 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                 superpoly = superpoly.union(poly)
                 if superpoly.type == 'MultiPolygon':
                     superpoly = superpoly.convex_hull
+                if superpoly.minimum_clearance < 1.0:
+                    superpoly = asPolygon(np.round(superpoly.exterior.coords))
                 for tolerance in range(1, int(superpoly.area)):
                     if superpoly.is_valid:
                         break
