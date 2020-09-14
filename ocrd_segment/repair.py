@@ -78,13 +78,8 @@ class RepairSegmentation(Processor):
                                             check_baseline=False)
             if not report.is_valid:
                 LOG.warning(report.to_xml())
+                # TODO: maybe skip this page if report contains any CoordinateValidityError
 
-            #
-            # sanitize region segmentation (shrink to hull of lines)
-            #
-            if sanitize:
-                self.sanitize_page(page, page_id)
-                
             #
             # plausibilize region segmentation (remove redundant text regions)
             #
@@ -161,6 +156,12 @@ class RepairSegmentation(Processor):
                     # pass the regions sorted (see above)
                     _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging)
 
+            #
+            # sanitize region segmentation (shrink to hull of lines)
+            #
+            if sanitize:
+                self.sanitize_page(page, page_id)
+                
             file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
