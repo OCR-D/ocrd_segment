@@ -1,4 +1,4 @@
-ocrd >= 2.13.1
-shapely
+ocrd >= 2.16.2
+shapely >= 1.7.1
 scikit-image
 numpy

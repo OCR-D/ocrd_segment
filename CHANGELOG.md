@@ -4,6 +4,17 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.1] - 2020-09-14
+
+Changed:
+
+  * repair: traverse all text regions recursively
+  
+Fixed:
+
+  * repair: be robust against invalid input polygons
+  * repair: be careful to make valid output polygons
+
 ## [0.1.0] - 2020-08-21
 
 Changed:

@@ -11,10 +11,6 @@ from ocrd_utils import (
     polygon_from_points,
     MIME_TO_EXT
 )
-from ocrd_models.ocrd_page import (
-    LabelsType, LabelType,
-    MetadataItemType
-)
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -75,18 +71,8 @@ class ExtractLines(Processor):
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 transparency=self.parameter['transparency'])
