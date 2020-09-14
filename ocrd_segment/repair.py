@@ -23,8 +23,6 @@ from ocrd_utils import (
 from ocrd_modelfactory import page_from_file
 from ocrd_models.ocrd_page import (
     CoordsType,
-    LabelType, LabelsType,
-    MetadataItemType,
     to_xml
 )
 from ocrd_models.ocrd_page_generateds import (
@@ -36,6 +34,7 @@ from ocrd_models.ocrd_page_generateds import (
     UnorderedGroupIndexedType,
     ReadingOrderType
 )
+from ocrd_validators.page_validator import PageValidator
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-repair'
@@ -68,23 +67,17 @@ class RepairSegmentation(Processor):
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
-
+            
             #
             # validate segmentation (warn of children extending beyond their parents)
             #
-            self.validate_coords(page, page_id)
+            report = PageValidator.validate(ocrd_page=pcgts, 
+                                            page_textequiv_consistency='off',
+                                            check_baseline=False)
+            if not report.is_valid:
+                LOG.warning(report.to_xml())
 
             #
             # sanitize region segmentation (shrink to hull of lines)
@@ -261,61 +254,6 @@ class RepairSegmentation(Processor):
                 LOG.info('Using new coordinates for region "%s"', region.id)
                 region.get_Coords().points = points_from_polygon(region_polygon)
     
-    def validate_coords(self, page, page_id):
-        valid = True
-        regions = page.get_TextRegion()
-        if page.get_Border():
-            other_regions = (
-                page.get_AdvertRegion() +
-                page.get_ChartRegion() +
-                page.get_ChemRegion() +
-                page.get_GraphicRegion() +
-                page.get_ImageRegion() +
-                page.get_LineDrawingRegion() +
-                page.get_MathsRegion() +
-                page.get_MusicRegion() +
-                page.get_NoiseRegion() +
-                page.get_SeparatorRegion() +
-                page.get_TableRegion() +
-                page.get_UnknownRegion())
-            for region in regions + other_regions:
-                if not _child_within_parent(region, page.get_Border()):
-                    LOG.warning('Region "%s" extends beyond Border of page "%s"',
-                                region.id, page_id)
-                    valid = False
-        for region in regions:
-            lines = region.get_TextLine()
-            for line in lines:
-                if not _child_within_parent(line, region):
-                    LOG.warning('Line "%s" extends beyond region "%s" on page "%s"',
-                                line.id, region.id, page_id)
-                    valid = False
-                if line.get_Baseline():
-                    baseline = LineString(polygon_from_points(line.get_Baseline().points))
-                    linepoly = Polygon(polygon_from_points(line.get_Coords().points))
-                    if not baseline.within(linepoly):
-                        LOG.warning('Baseline extends beyond line "%s" in region "%s" on page "%s"',
-                                    line.id, region.id, page_id)
-                        valid = False
-                words = line.get_Word()
-                for word in words:
-                    if not _child_within_parent(word, line):
-                        LOG.warning('Word "%s" extends beyond line "%s" in region "%s" on page "%s"',
-                                    word.id, line.id, region.id, page_id)
-                        valid = False
-                    glyphs = word.get_Glyph()
-                    for glyph in glyphs:
-                        if not _child_within_parent(glyph, word):
-                            LOG.warning('Glyph "%s" extends beyond word "%s" in line "%s" of region "%s" on page "%s"',
-                                        glyph.id, word.id, line.id, region.id, page_id)
-                            valid = False
-        return valid
-
-def _child_within_parent(child, parent):
-    child_poly = Polygon(polygon_from_points(child.get_Coords().points))
-    parent_poly = Polygon(polygon_from_points(parent.get_Coords().points))
-    return child_poly.within(parent_poly)
-
 def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
     wait_for_deletion = list()
     reading_order = dict()
