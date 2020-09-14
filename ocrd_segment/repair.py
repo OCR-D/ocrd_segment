@@ -172,7 +172,7 @@ class RepairSegmentation(Processor):
                 content=to_xml(pcgts))
     
     def sanitize_page(self, page, page_id):
-        regions = page.get_TextRegion()
+        regions = page.get_AllRegions(classes=['text'])
         page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id)
         for region in regions:
