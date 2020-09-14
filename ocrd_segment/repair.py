@@ -244,11 +244,8 @@ class RepairSegmentation(Processor):
                 # can produce invalid (self-intersecting) polygons:
                 #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
                 polygon = contour[:, 0, ::] # already ordered x,y
-                polygon = Polygon(polygon)
-                for tolerance in range(1, int(polygon.area)):
-                    polygon = polygon.simplify(tolerance)
-                    if polygon.is_valid:
-                        break
+                polygon = Polygon(polygon).simplify(1)
+                polygon = make_valid(polygon)
                 polygon = polygon.exterior.coords[:-1] # keep open
                 if len(polygon) < 4:
                     LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
@@ -363,10 +360,7 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                     superpoly = superpoly.convex_hull
                 if superpoly.minimum_clearance < 1.0:
                     superpoly = asPolygon(np.round(superpoly.exterior.coords))
-                for tolerance in range(1, int(superpoly.area)):
-                    if superpoly.is_valid:
-                        break
-                    superpoly = superpoly.simplify(tolerance)
+                superpoly = make_valid(superpoly)
                 superpoly = superpoly.exterior.coords[:-1] # keep open
                 superreg.get_Coords().points = points_from_polygon(superpoly)
                 # FIXME should we merge/mix attributes and features?
@@ -413,3 +407,18 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
         if region.parent_object_:
             # remove in-place
             region.parent_object_.get_TextRegion().remove(region)
+
+def make_valid(polygon):
+    """Ensures shapely.geometry.Polygon object is valid by repeated simplification"""
+    for split in range(1, len(polygon.exterior.coords)-1):
+        if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
+            break
+        # simplification may not be possible (at all) due to ordering
+        # in that case, try another starting point
+        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
+    for tolerance in range(1, int(polygon.area)):
+        if polygon.is_valid:
+            break
+        # simplification may require a larger tolerance
+        polygon = polygon.simplify(tolerance)
+    return polygon
