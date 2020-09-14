@@ -3,6 +3,8 @@ ignored-modules=cv2
 
 [MESSAGES CONTROL]
 disable =
+    super-with-arguments,
+    trailing-whitespace,
     missing-docstring,
     no-self-use,
     superfluous-parens,
