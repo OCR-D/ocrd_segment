@@ -91,7 +91,7 @@ class RepairSegmentation(Processor):
             mark_for_deletion = list() # what regions get removed?
             mark_for_merging = dict() # what regions get merged into which regions?
             # cover recursive region structure (but compare only at the same level)
-            parents = list(set([region.parent_object_ for region in page.get_AllRegions(classes=['text'])]))
+            parents = list(set([region.parent_object_ for region in page.get_AllRegions(classes=['Text'])]))
             for parent in parents:
                 regions = parent.get_TextRegion()
                 # sort by area to ensure to arrive at a total ordering compatible
@@ -173,7 +173,7 @@ class RepairSegmentation(Processor):
                 content=to_xml(pcgts))
     
     def sanitize_page(self, page, page_id):
-        regions = page.get_AllRegions(classes=['text'])
+        regions = page.get_AllRegions(classes=['Text'])
         page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id)
         for region in regions:
