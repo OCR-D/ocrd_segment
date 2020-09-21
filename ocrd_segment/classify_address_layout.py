@@ -16,7 +16,8 @@ import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
     coordinates_of_segment,
     coordinates_for_segment,
     polygon_from_bbox,
@@ -125,25 +126,10 @@ class ClassifyAddressLayout(Processor):
         
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
-            
-            # add metadata about this operation and its runtime parameters:
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
+            self.add_metadata(pcgts)
             
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
@@ -197,6 +183,11 @@ class ClassifyAddressLayout(Processor):
                     mark_line(line)
             
             # combine raw with aggregated mask to RGBA array
+            if page_image.mode.startswith('I') or page_image.mode == 'F':
+                # workaround for Pillow#4926
+                page_image = page_image.convert('RGB')
+            if page_image.mode == '1':
+                page_image = page_image.convert('L')
             page_image.putalpha(page_image_mask)
             page_array = np.array(page_image)
             # convert to RGB+Text+Address array
@@ -331,7 +322,8 @@ class ClassifyAddressLayout(Processor):
                 else:
                     LOG.info("Ignoring %s region '%s' without any address lines",
                              name, region_id)
-            
+
+            file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
                                      file_id + '.xml')
             out = self.workspace.add_file(
@@ -351,6 +343,7 @@ def page_get_reading_order(ro, rogroup):
     and an object ``rogroup`` with additional ReadingOrder element objects,
     add all references to the dict, traversing the group recursively.
     """
+    regionrefs = list()
     if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
         regionrefs = (rogroup.get_RegionRefIndexed() +
                       rogroup.get_OrderedGroupIndexed() +
