@@ -1,10 +1,9 @@
 """
 Mask R-CNN
-Configurations and data loading code for PubLayNet (MS COCO format).
+Configurations and data loading code for PubLayNet document layouts
+(images from rasterized PDF publications, segmentations from PDF; in COCO format).
 
-Copyright (c) 2017 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
+Based on coco.py in matterport/MaskRCNN.
 
 ------------------------------------------------------------
 

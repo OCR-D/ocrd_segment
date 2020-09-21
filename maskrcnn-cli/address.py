@@ -3,9 +3,7 @@ Mask R-CNN
 Configurations and data loading code for address resegmentation
 (textline alpha-masked input PNG images, address region output COCO JSON).
 
-Copyright (c) 2017 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
+Based on coco.py in matterport/MaskRCNN.
 
 ------------------------------------------------------------
 
@@ -14,8 +12,8 @@ Usage: import the module, or run from the command line as such:
     # Train a new model starting from pre-trained COCO weights
     python3 address.py --model=/path/to/mask_rcnn_coco.h5 train --dataset=/path/to/coco.json
 
-    # Train a new model starting from ImageNet weights. Also auto download PubLayNet dataset
-    python3 address.py --model=imagenet --download=True train --dataset=/path/to/coco.json
+    # Train a new model starting from ImageNet weights
+    python3 address.py --model=imagenet train --dataset=/path/to/coco.json
 
     # Continue training a model that you had trained earlier
     python3 address.py --model=/path/to/weights.h5 train --dataset=/path/to/coco.json
@@ -26,11 +24,16 @@ Usage: import the module, or run from the command line as such:
     # Run COCO evaluation on the last model you trained
     python3 address.py --model=last evaluate --dataset=/path/to/coco.json
 
-    # Run COCO test on the last model you trained (only first 100 files)
-    python3 address.py --model=last --limit 100 test --dataset=/path/to/coco.json
+    # Run COCO evaluation on the last model you trained (only first 100 files, writing plot files)
+    python3 address.py --model=last --limit 100 --plot pred evaluate --dataset=/path/to/coco.json
 
     # Run COCO prediction on the last model you trained
-    python3 address.py --model=last predict --json /path/to/coco.json /path/to/files*
+    python3 coco-categories.py </path/to/coco.json >/path/to/files.json
+    python3 address.py --model=last test --dataset=/path/to/coco.json /path/to/files*
+
+    # Run COCO prediction on the last model you trained (writing plot files)
+    python3 coco-categories.py </path/to/coco.json >/path/to/files.json
+    python3 address.py --model=last test --plot pred --dataset=/path/to/files.json /path/to/files*
 """
 
 import os
@@ -591,11 +594,31 @@ def build_coco_results(dataset, image_id, rois, class_ids, scores, masks):
     return results
 
 
-def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=None):
+def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=None, plot=None):
     """Runs official COCO evaluation.
     dataset: A Dataset object with validation data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
     limit: if not 0, it's the number of images to use for evaluation
+    """
+    results, cocoids = test_coco(model, dataset, limit=limit, image_ids=image_ids, plot=plot)
+    # Load results. This modifies results with additional attributes.
+    coco_results = coco.loadRes(results)
+
+    # Evaluate
+    cocoEval = COCOeval(coco, coco_results, eval_type)
+    cocoEval.params.imgIds = cocoids
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()
+
+def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=None, active_classes=None):
+    """Predict images
+    dataset: A Dataset object with test data
+    verbose: If not False, print summary of detection for each image
+    limit: if not 0, it's the number of images to use for test
+    image_ids: if not None, list or array of image IDs to use for test
+    plot: if not None, write an image file showing the predictions color-coded.
+    active_classes: if not None, list of class names allowed during detection
     """
     # Pick COCO images from the dataset
     image_ids = image_ids or dataset.image_ids
@@ -605,62 +628,22 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=
         image_ids = image_ids[:limit]
     elif isinstance(limit, (list, np.ndarray)):
         image_ids = np.array(image_ids).take(limit)
-
-    # Get corresponding COCO image IDs.
-    coco_image_ids = [dataset.image_info[image_id]["id"] for image_id in image_ids]
-
-    t_prediction = 0
-    t_start = time.time()
-
-    results = []
-    for i, image_id in enumerate(tqdm(image_ids)):
-        # Load image
-        image = dataset.load_image(image_id)
-
-        # Run detection
-        t = time.time()
-        r = model.detect([image], verbose=0)[0]
-        t_prediction += (time.time() - t)
-
-        # Convert results to COCO format
-        # Cast masks to uint8 because COCO tools errors out on bool
-        image_results = build_coco_results(dataset, coco_image_ids[i],
-                                           r["rois"], r["class_ids"],
-                                           r["scores"],
-                                           r["masks"].astype(np.uint8))
-        dataset.image_info[image_id].update({'annotations': image_results})
-        results.extend(image_results)
-
-    # Load results. This modifies results with additional attributes.
-    coco_results = coco.loadRes(results)
-
-    # Evaluate
-    cocoEval = COCOeval(coco, coco_results, eval_type)
-    cocoEval.params.imgIds = coco_image_ids
-    cocoEval.evaluate()
-    cocoEval.accumulate()
-    cocoEval.summarize()
-
-    print("Prediction time: {}. Average {}/image".format(
-        t_prediction, t_prediction / len(image_ids)))
-    print("Total time: ", time.time() - t_start)
-
-def test_coco(model, dataset, coco, limit=0, image_ids=None, plot=False):
-    """Predict images
-    dataset: A Dataset object with test data
-    limit: if not 0, it's the number of images to use for test
-    """
-    # Pick COCO images from the dataset
-    image_ids = image_ids or dataset.image_ids
-
-    # Limit to a subset
-    if not limit is None:
-        image_ids = image_ids[:limit]
+    # Limit to a subset of classes
+    if active_classes:
+        active_class_ids = []
+        for name in active_classes:
+            if not name in dataset.class_names:
+                print('ignoring active class name {} not in dataset'.format(name))
+                continue
+            active_class_ids.append(dataset.class_names.index(name))
+    else:
+        active_class_ids = None
 
     t_prediction = 0
     t_start = time.time()
 
     results = []
+    cocoids = []
     for image_id in tqdm(image_ids):
         # Load image
         image = dataset.load_image(image_id)
@@ -669,11 +652,12 @@ def test_coco(model, dataset, coco, limit=0, image_ids=None, plot=False):
 
         # Run detection
         t = time.time()
-        r = model.detect([image], verbose=0)[0]
+        r = model.detect([image], verbose=0, active_class_ids=active_class_ids)[0]
         t_prediction += (time.time() - t)
-        print("image %s %s has %d rois with %d distinct classes" % \
-              (image_cocoid, image_path,
-               r['masks'].shape[-1], len(np.unique(r['class_ids']))))
+        if verbose:
+            print("image {} {} has {} rois with {} distinct classes".format(
+                image_cocoid, image_path,
+                r['masks'].shape[-1], len(np.unique(r['class_ids']))))
 
         # Convert results to COCO format
         # Cast masks to uint8 because COCO tools errors out on bool
@@ -683,37 +667,39 @@ def test_coco(model, dataset, coco, limit=0, image_ids=None, plot=False):
                                            r["masks"].astype(np.uint8))
         dataset.image_info[image_id].update({'annotations': image_results})
         results.extend(image_results)
+        cocoids.append(image_cocoid)
         if plot:
-            # show result
-            pyplot.close() # clear axes from previous images
-            fig = pyplot.figure(frameon=False)
-            pyplot.imshow(image[:,:,:3])
-            ax = pyplot.gca()
-            ax.set_axis_off()
-            ax.set_xmargin(0)
-            ax.set_ymargin(0)
-            ax.set_frame_on(0)
-            ax.set_position([0,0,1,1])
-            #ax.title(image_cocoid)
-            width = dataset.image_info[image_id]['width']
-            height = dataset.image_info[image_id]['height']
-            dataset.showAnns(image_results, width, height)
-            filename = pathlib.Path(image_path).with_suffix(".pred.png")
-            # make an extra effort to arrive at the same image size
-            # (no frames, axes, margins):
-            fig.set_size_inches((width/300, height/300))
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            pyplot.savefig(filename, dpi=300, pad_inches=0, bbox_inches=extent)
-            
-    # Load results. This modifies results with additional attributes.
-    if coco:
-        coco = coco.loadRes(results)
+            plot_result(image, image_results,
+                        dataset.image_info[image_id]['width'],
+                        dataset.image_info[image_id]['height'],
+                        pathlib.Path(image_path).with_suffix('.' + plot + '.png'))
 
     print("Prediction time: {}. Average {}/image".format(
         t_prediction, t_prediction / len(image_ids)))
     print("Total time: ", time.time() - t_start)
 
-    return coco
+    for i, ann in enumerate(results):
+        ann['id'] = i
+    return results, cocoids
+
+def plot_result(image, anns, width, height, filename):
+    # show result
+    pyplot.close() # clear axes from previous images
+    fig = pyplot.figure(frameon=False)
+    pyplot.imshow(image[:,:,:3])
+    ax = pyplot.gca()
+    ax.set_axis_off()
+    ax.set_xmargin(0)
+    ax.set_ymargin(0)
+    ax.set_frame_on(0)
+    ax.set_position([0,0,1,1])
+    #ax.title(image_cocoid)
+    dataset.showAnns(anns, width, height)
+    # make an extra effort to arrive at the same image size
+    # (no frames, axes, margins):
+    fig.set_size_inches((width/300, height/300))
+    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    pyplot.savefig(filename, dpi=300, pad_inches=0, bbox_inches=extent)
 
 def json_safe(obj):
     if isinstance(obj, np.integer):
@@ -729,7 +715,7 @@ def json_safe(obj):
 
 def store_coco(coco, filename):        
     with open(filename, 'w') as outp:
-        json.dump(coco.dataset, outp, default=json_safe)
+        json.dump(coco.dataset, outp, default=json_safe, indent=2)
 
 ############################################################
 #  main
@@ -742,41 +728,44 @@ if __name__ == '__main__':
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Run Mask R-CNN for address region segmentation.')
-    parser.add_argument('--model', required=True,
-                        metavar="/path/to/weights.h5",
+    parser.add_argument('--model', required=False, default='last',
+                        metavar="PATH/TO/WEIGHTS.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
     parser.add_argument('--logs', required=False,
                         default=DEFAULT_LOGS_DIR,
-                        metavar="/path/to/logs/",
+                        metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False,
                         type=int, default=0,
-                        metavar="<image count>",
+                        metavar="NUM",
                         help='Maximum number of images to use (default=all)')
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
     train_parser.add_argument('--dataset', required=True,
-                              metavar="/path/to/coco.json",
-                              help='Directory of the address dataset')
+                              metavar="PATH/TO/COCO.json",
+                              help='File path of the address dataset annotations (randomly split into training and validation)')
     train_parser.add_argument('--exclude', required=False,
                               default=None,
-                              metavar="<layer-list>",
+                              metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
     train_parser.add_argument('--depth', required=False,
                               default=None,
-                              metavar="depth-spec",
+                              metavar="DEPTH-SPEC",
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
     evaluate_parser.add_argument('--dataset', required=True,
-                                 metavar="/path/to/coco.json",
-                                 help='Directory of the address dataset')
-    test_parser = subparsers.add_parser('test', help="Apply a model on images, adding COCO annotations")
+                                 metavar="PATH/TO/COCO.json",
+                                 help='File path of the address dataset annotations (randomly split into skip and evaluation)')
+    evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
+                                 help='Create plot files from prediction under *.SUFFIX.png')
+    test_parser = subparsers.add_parser('test', help="Apply a model on image files, adding COCO annotations")
     test_parser.add_argument('--dataset', required=True,
-                             metavar="/path/to/coco.json",
-                             help='Directory of the address dataset')
-    predict_parser = subparsers.add_parser('predict', help='Apply a model on image files, creating plots')
-    predict_parser.add_argument('dataset', nargs='+',
-                                help='Image files to predict')
+                             metavar="PATH/TO/COCO.json",
+                             help='File path of the address dataset annotations (to be filled; needs categories)')
+    test_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
+                             help='Create plot files from prediction under *.SUFFIX.png')
+    test_parser.add_argument('files', nargs='+',
+                             help='Image files to annotate')
     args = parser.parse_args()
     print("Command: ", args.command)
     print("Model: ", args.model)
@@ -784,7 +773,11 @@ if __name__ == '__main__':
     if args.command == 'train':
         print("Exclude: ", args.exclude)
         print("Depth: ", args.depth)
+    if args.command in ['evaluate', 'test']:
+        print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
+    if args.command == 'test':
+        print("Files: ", len(args.files))
     print("Limit: ", args.limit)
 
     # Configurations
@@ -921,36 +914,23 @@ if __name__ == '__main__':
             del coco
             dataset.prepare()
             print("Running COCO evaluation on {} images.".format(dataset.num_images))
-            evaluate_coco(model, dataset, coco_res, "bbox")
+            evaluate_coco(model, dataset, coco_res, "bbox", plot=args.plot)
             #print(model.evaluate(dataset))
         
     elif args.command == "test":
-        # Test dataset (read images from "test/" and categories from "val.json")
-        image_path = os.path.join(args.dataset, "test")
-        json_path = os.path.join(args.dataset, "val.json")
+        # Test dataset (read images from args.files and categories from args.dataset)
         dataset = CocoDataset()
-        dataset.load_coco(json_path, limit=0, auto_download=args.download)
-        dataset.load_files(os.listdir(image_path), image_path, limit=args.limit or None)
+        dataset.load_coco(args.dataset, limit=0)
+        dataset.load_files(args.files, limit=args.limit or None)
         dataset.prepare()
         print("Running COCO test on {} images.".format(dataset.num_images))
+        result, _ = test_coco(model, dataset, verbose=True, plot=args.plot)
         coco = COCO()
-        coco.dataset = dataset.dump_coco(image_path)
+        coco.dataset = dataset.dump_coco(os.path.dirname(args.dataset))
         coco.createIndex()
-        coco = test_coco(model, dataset, coco, limit=args.limit or None)
-        json_path = os.path.join(args.dataset, "test.json")
-        store_coco(coco, json_path)
+        coco.loadRes(result)
+        store_coco(coco, args.dataset)
         
-    elif args.command == "predict":
-        # Other files (read images from CLI and categories from "val.json")
-        dataset = CocoDataset()
-        dataset.add_class("IAO", 0, "address-rcpt")
-        dataset.add_class("IAO", 1, "address-sndr")
-        dataset.add_class("IAO", 2, "address-contact")
-        dataset.load_files(args.dataset, limit=args.limit or None)
-        dataset.prepare()
-        print("Running COCO predict on {} images.".format(dataset.num_images))
-        test_coco(model, dataset, None, limit=args.limit or None, plot=True)
-
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
