@@ -39,7 +39,8 @@ import time
 import numpy as np
 import skimage.io
 import skimage.color
-import imgaug  # https://github.com/aleju/imgaug (pip3 install imgaug)
+import scipy.ndimage.measurements as measurements
+import imgaug
 
 import pathlib
 from matplotlib import pyplot, cm
@@ -49,12 +50,6 @@ from PIL import Image
 import json
 from tqdm import tqdm
 
-# Download and install the Python COCO tools from https://github.com/waleedka/coco
-# That's a fork from the original https://github.com/pdollar/coco with a bug
-# fix for Python 3.
-# I submitted a pull request https://github.com/cocodataset/cocoapi/pull/50
-# If the PR is merged then use the original repo.
-# Note: Edit PythonAPI/Makefile and replace "python" with "python3".
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from pycocotools import mask as maskUtils
@@ -73,6 +68,9 @@ tf.get_logger().setLevel('ERROR')
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.abspath("logs")
+
+ALPHA_TEXT_CHANNEL = 200
+ALPHA_ADDR_CHANNEL = 255
 
 ############################################################
 #  Configurations
@@ -109,7 +107,7 @@ class CocoConfig(Config):
     MAX_GT_INSTANCES = 5
     # Max number of final detections
     DETECTION_MAX_INSTANCES = 5
-    DETECTION_MIN_CONFIDENCE = 0.7
+    DETECTION_MIN_CONFIDENCE = 0.9
 
     # Use fewer ROIs in training the second stage. This setting
     # is like the batch size for the second stage of the model.
@@ -142,13 +140,199 @@ class InferenceConfig(CocoConfig):
     IMAGES_PER_GPU = 1
 
 ############################################################
+#  Image/Segmentation Augmentation
+############################################################
+
+class SegmapDropout(imgaug.augmenters.meta.Augmenter):
+    """Augment by randomly dropping instances from GT and image alpha.
+
+    Probabilistic augmenter that takes instance masks
+    (in the form of segmentation maps with bg as index 0)
+    and randomly drops a fraction of instances
+    by setting its output segmap / mask to bg, and
+    by setting its input 5th / address channel to 0 in that area.
+    This is supposed to help not rely too much on certain instances
+    always appearing (and also learn to cope with empty pages).
+    """
+    def __init__(self, p=0.3,
+                 seed=None, name=None,
+                 random_state="deprecated",
+                 deterministic="deprecated"):
+        super(SegmapDropout, self).__init__(
+            seed=seed, name=name,
+            random_state=random_state,
+            deterministic=deterministic)
+        self.p = imgaug.parameters.Binomial(1 - p)
+    def _augment_batch_(self, batch, random_state, parents, hooks):
+        for i in range(batch.nb_rows):
+            image = batch.images[i]
+            segmap = batch.segmentation_maps[i].arr
+            assert segmap.shape[-1] == 1, "segmentation map is not in argmax form"
+            ninstances = segmap.max()
+            p = self.p.draw_samples((ninstances,), random_state=random_state)
+            drop = p < 0.5
+            drop = np.insert(drop, 0, [False]) # never "drop" background
+            image[drop[segmap][:,:,0],4] = 0 # set amask=0
+            segmap[drop[segmap]] = 0 # set to bg
+            batch.images[i] = image
+            batch.segmentation_maps[i].arr = segmap
+        return batch
+    def get_parameters(self):
+        return [self.p]
+    
+class SegmapDropoutLines(imgaug.augmenters.meta.Augmenter):
+    """Augment by randomly dropping instances' first line from image alpha.
+
+    Probabilistic augmenter that takes instance masks
+    (in the form of segmentation maps with bg as index 0),
+    and randomly degrades a fraction of instances
+    by setting its input 5th / address channel to 0
+    in the top lines but keeping its output segmap / mask.
+    This is supposed to help become robust against
+    title/name part of address lines being undetected.
+    """
+    def __init__(self, p=0.3,
+                 seed=None, name=None,
+                 random_state="deprecated",
+                 deterministic="deprecated"):
+        super(SegmapDropoutLines, self).__init__(
+            seed=seed, name=name,
+            random_state=random_state,
+            deterministic=deterministic)
+        self.p = imgaug.parameters.Binomial(1 - p)
+    def _augment_batch_(self, batch, random_state, parents, hooks):
+        for i in range(batch.nb_rows):
+            image = batch.images[i]
+            segmap = batch.segmentation_maps[i].arr
+            assert segmap.shape[-1] == 1, "segmentation map is not in argmax form"
+            ninstances = segmap.max()
+            p = self.p.draw_samples((ninstances,), random_state=random_state)
+            drop = p < 0.5
+            drop = np.insert(drop, 0, [False]) # never "drop" background
+            labels, _ = measurements.label(image[:,:,3])
+            # only instances with more than 1 label (line)
+            # TODO: vectorize!
+            for instance in drop.nonzero()[0]:
+                masked = labels * (segmap[:,:,0] == instance)
+                lines = np.unique(masked)
+                # at least 3 lines (bg + 2 text lines)
+                if len(lines) > 2:
+                    top = np.argmin([np.nonzero(labels == line)[0].mean() for line in lines])
+                    image[labels == lines[top],4] = 0 # set amask=0 of first line
+            batch.images[i] = image
+        return batch
+    def get_parameters(self):
+        return [self.p]
+
+class SegmapBlackoutLines(imgaug.augmenters.meta.Augmenter):
+    """Augment by randomly drawing black boxes over non-instances' lines in the image.
+
+    Probabilistic augmenter that takes instance masks
+    (in the form of segmentation maps with bg as index 0),
+    and randomly degrades a fraction of non-instance lines
+    (i.e. areas with 1 at their input 4th / text channel)
+    by setting its input RGB channels to 0.
+    This is supposed to help become robust against
+    input images with anonymization.
+    """
+    def __init__(self, p=0.1, padding=5,
+                 seed=None, name=None,
+                 random_state="deprecated",
+                 deterministic="deprecated"):
+        super(SegmapBlackoutLines, self).__init__(
+            seed=seed, name=name,
+            random_state=random_state,
+            deterministic=deterministic)
+        self.p = imgaug.parameters.Binomial(1 - p)
+        self.padding = padding
+    def _augment_batch_(self, batch, random_state, parents, hooks):
+        for i in range(batch.nb_rows):
+            image = batch.images[i]
+            segmap = batch.segmentation_maps[i].arr
+            assert segmap.shape[-1] == 1, "segmentation map is not in argmax form"
+            mask = image[:,:,3] > 0
+            labels, nlabels = measurements.label(mask.astype(np.int32))
+            p = self.p.draw_samples((nlabels,), random_state=random_state)
+            drop = p < 0.5
+            drop = np.insert(drop, 0, [False]) # never box out non-text
+            for label in drop.nonzero()[0]:
+                if not label:
+                    continue
+                mask = labels == label
+                if np.any(mask & (segmap[:,:,0] > 0)):
+                    # text line is part of GT RoI instance
+                    continue
+                y, x = np.nonzero(mask)
+                ymin = np.maximum(0, y.min() - self.padding)
+                ymax = np.minimum(mask.shape[0], y.max() + self.padding)
+                xmin = np.maximum(0, x.min() - self.padding)
+                xmax = np.minimum(mask.shape[1], x.max() + self.padding)
+                y, x = np.indices((ymax-ymin, xmax-xmin))
+                y += ymin
+                x += xmin
+                image[y, x, 0:3] = 0 # set RGB to black
+            batch.images[i] = image
+        return batch
+    def get_parameters(self):
+        return [self.p, self.padding]
+
+class SaveDebugImage(imgaug.augmenters.meta.Augmenter):
+    """Augment by randomly dropping instances' first line from image alpha.
+
+    Augmenter that takes instance masks
+    (in the form of segmentation maps with bg as index 0),
+    and draws them on the image, reducing tmask/amask to alpha
+    (by setting coloring output segmap / mask and
+     by setting input alpha channel to 255 if amask else 200 if tmask else 0).
+    These images are written as temporary files.
+    Use them for debugging only (RGB, not RGBA as in CocoDataset).
+    (The batch itself is not modified.)
+    """
+    def __init__(self, title='images',
+                 seed=None, name=None,
+                 random_state="deprecated",
+                 deterministic="deprecated"):
+        super(SaveDebugImage, self).__init__(
+            seed=seed, name=name,
+            random_state=random_state,
+            deterministic=deterministic)
+        self.title = title
+    def _augment_batch_(self, batch, random_state, parents, hooks):
+        images = []
+        for i in range(batch.nb_rows):
+            img = batch.images[i]
+            # if tmask == 0, set RGB to 255 (white)
+            # elif amask == 0, scale from 0..255 to 200..255 (gray)
+            # else keep full contrast
+            image = img[:,:,:3]
+            tmask = img[:,:,3]
+            amask = img[:,:,4]
+            # print("image with %f%% text with %f%% address" % (
+            #     100.0 * np.count_nonzero(tmask == 255)/np.prod(tmask.shape),
+            #     100.0 * np.count_nonzero(amask == 255)/np.count_nonzero(tmask == 255)))
+            #image[tmask < 255] = 255
+            image[amask < 255] = 200 + 55/255 * image[amask < 255]
+            images.append(image)
+        image = imgaug.augmenters.debug.draw_debug_image(
+            images,
+            segmentation_maps=batch.segmentation_maps)
+        from imageio import imwrite
+        from tempfile import mkstemp
+        from os import close
+        fd, fname = mkstemp(suffix=self.title + '.png')
+        imwrite(fname, image)
+        close(fd)
+        return batch
+    def get_parameters(self):
+        return []
+    
+############################################################
 #  Dataset
 ############################################################
 
 class CocoDataset(utils.Dataset):
     def load_coco(self, dataset_json, dataset_dir='.',
-                  limit=None, skip_empty=False,
-                  class_ids=None,
+                  limit=None, class_ids=None,
                   class_map=None, return_coco=False):
         """Load a subset of the COCO dataset from a JSON file.
         dataset_json: JSON file path of the COCO (sub-) dataset.
@@ -192,10 +376,6 @@ class CocoDataset(utils.Dataset):
             file_name = coco.imgs[i]['file_name']
             ann_ids = coco.getAnnIds(
                 imgIds=[i], catIds=class_ids, iscrowd=None)
-            if skip_empty and not ann_ids:
-                print('skipping image without annotations: %d ("%s")' % (
-                    i, file_name))
-                continue
             self.add_image(
                 "IAO", image_id=i,
                 path=os.path.join(dataset_dir, file_name),
@@ -285,12 +465,12 @@ class CocoDataset(utils.Dataset):
         if class_ids:
             mask = np.stack(instance_masks, axis=2).astype(np.bool)
             class_ids = np.array(class_ids, dtype=np.int32)
-            return mask, class_ids
         else:
-            # Call super class to return an empty mask
-            print('no instance in image %d ("%s")' % (
-                image_id, image_info['path']))
-            return super(CocoDataset, self).load_mask(image_id)
+            # print('no instance in image %d ("%s")' % (
+            #     image_id, image_info['path']))
+            mask = np.empty([0, 0, 0], dtype=np.bool)
+            class_ids = np.empty([0], dtype=np.int32)
+        return mask, class_ids
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,4] Numpy array.
@@ -306,7 +486,7 @@ class CocoDataset(utils.Dataset):
                 image_id, self.image_info[image_id]['path']))
         # Convert from RGBA to RGB+Text+Address
         tmask = image[:,:,3:4] > 0
-        amask = image[:,:,3:4] == 255
+        amask = image[:,:,3:4] == ALPHA_ADDR_CHANNEL
         image = np.concatenate([image[:,:,:3],
                                 255 * tmask.astype(np.uint8),
                                 255 * amask.astype(np.uint8)],
@@ -661,20 +841,27 @@ if __name__ == '__main__':
         
         if args.command == "train":
             dataset_train = CocoDataset()
-            dataset_train.load_coco(coco, os.path.dirname(args.dataset),
-                                    limit=trainset, skip_empty=True) #False
+            dataset_train.load_coco(coco, #os.path.dirname(args.dataset),
+                                    limit=trainset)
             dataset_val = CocoDataset()
-            dataset_val.load_coco(coco, os.path.dirname(args.dataset),
-                                  limit=valset, skip_empty=True) #True
+            dataset_val.load_coco(coco, #os.path.dirname(args.dataset),
+                                  limit=valset)
             del coco
             dataset_train.prepare()
             dataset_val.prepare()
             print("Running COCO training on {} train / {} val images.".format(
                 dataset_train.num_images, dataset_val.num_images))
-            # Image Augmentation
-            # Right/Left flip 50% of the time
-            #augmentation = imgaug.augmenters.Fliplr(0.5)
-            augmentation = None
+            #augmentation = None
+            #augmentation = SegmapDropout(0.2)
+            augmentation = imgaug.augmenters.Sequential([
+                SegmapDropout(0.3),
+                SegmapDropoutLines(0.3)])
+            # augmentation = imgaug.augmenters.Sequential([
+            #     SaveDebugImage('before-augmentation'),
+            #     SegmapDropout(0.3),
+            #     SegmapDropoutLines(0.3),
+            #     SegmapBlackoutLines(0.1),
+            #     SaveDebugImage('after-augmentation')])
 
             # from MaskRCNN.train:
             def layers(depth, add='conv1'):
@@ -726,11 +913,11 @@ if __name__ == '__main__':
                             epochs=160,
                             layers='all',
                             augmentation=augmentation)
-                
+
         else:
             dataset = CocoDataset()
-            coco_res = dataset.load_coco(coco, os.path.dirname(args.dataset), limit=valset,
-                                         return_coco=True)
+            coco_res = dataset.load_coco(coco, #os.path.dirname(args.dataset),
+                                         limit=valset, return_coco=True)
             del coco
             dataset.prepare()
             print("Running COCO evaluation on {} images.".format(dataset.num_images))

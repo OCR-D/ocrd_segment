@@ -4,5 +4,5 @@ scikit-image
 numpy
 opencv-python-headless
 imgaug
-#pycocotools@git+https://github.com/waleedka/coco#egg=pycocotools-2.0
+pycocotools >= 2.0.2
 mask-rcnn@git+https://github.com/bertsky/Mask_RCNN#egg=mask-rcnn-2.1
