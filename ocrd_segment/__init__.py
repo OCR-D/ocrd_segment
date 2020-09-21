@@ -1,6 +1,7 @@
 from .repair import RepairSegmentation
 from .evaluate import EvaluateSegmentation
 from .replace_original import ReplaceOriginal
+from .replace_page import ReplacePage
 from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines

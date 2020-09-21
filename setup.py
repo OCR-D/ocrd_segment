@@ -9,6 +9,7 @@ Installs:
     - ocrd-segment-extract-regions
     - ocrd-segment-extract-lines
     - ocrd-segment-replace-original
+    - ocrd-segment-replace-page
     - ocrd-segment-evaluate
     - ocrd-segment-extract-address
     - ocrd-segment-classify-address-text
@@ -46,6 +47,7 @@ setup(
             'ocrd-segment-extract-regions=ocrd_segment.cli:ocrd_segment_extract_regions',
             'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',
             'ocrd-segment-replace-original=ocrd_segment.cli:ocrd_segment_replace_original',
+            'ocrd-segment-replace-page=ocrd_segment.cli:ocrd_segment_replace_page',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
             'ocrd-segment-extract-address=ocrd_segment.cli:ocrd_segment_extract_address',
             'ocrd-segment-classify-address-text=ocrd_segment.cli:ocrd_segment_classify_address_text',

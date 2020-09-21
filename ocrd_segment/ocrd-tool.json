@@ -244,6 +244,28 @@
           }
       }
     },
+    "ocrd-segment-replace-page": {
+      "executable": "ocrd-segment-replace-page",
+      "categories": ["Image preprocessing"],
+      "description": "Replace everything below page level with another annotation, adjusting all coordinates",
+      "input_file_grp": [
+        "OCR-D-SEG-LINE",
+        "OCR-D-GT-SEG-LINE",
+        "OCR-D-OCR"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-CROP",
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+          "transform_coordinates": {
+              "type": "boolean",
+              "default": true,
+              "description": "re-calculate coordinates for all segments of the structural hierarchy to be consistent with the coordinate system of the first input file group (vital after cropping, deskewing etc; disable only if input coordinates can be assumed to be consistent with the second input file group)"
+          }
+      }
+    },
     "ocrd-segment-evaluate": {
       "executable": "ocrd-segment-evaluate",
       "categories": ["Layout analysis"],
