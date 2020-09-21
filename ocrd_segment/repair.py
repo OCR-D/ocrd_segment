@@ -6,11 +6,13 @@ from skimage import draw
 from scipy.ndimage import filters, morphology
 import cv2
 import numpy as np
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import asPolygon, Polygon, LineString
 
 from ocrd import Processor
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
+    assert_file_grp_cardinality,
     coordinates_for_segment,
     coordinates_of_segment,
     polygon_from_points,
@@ -21,8 +23,6 @@ from ocrd_utils import (
 from ocrd_modelfactory import page_from_file
 from ocrd_models.ocrd_page import (
     CoordsType,
-    LabelType, LabelsType,
-    MetadataItemType,
     to_xml
 )
 from ocrd_models.ocrd_page_generateds import (
@@ -34,6 +34,7 @@ from ocrd_models.ocrd_page_generateds import (
     UnorderedGroupIndexedType,
     ReadingOrderType
 )
+from ocrd_validators.page_validator import PageValidator
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-repair'
@@ -56,6 +57,9 @@ class RepairSegmentation(Processor):
         Return information on the plausibility of the segmentation into
         regions on the logging level.
         """
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
+
         sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
         
@@ -63,23 +67,94 @@ class RepairSegmentation(Processor):
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
-
+            
             #
             # validate segmentation (warn of children extending beyond their parents)
             #
-            self.validate_coords(page, page_id)
+            report = PageValidator.validate(ocrd_page=pcgts, 
+                                            page_textequiv_consistency='off',
+                                            check_baseline=False)
+            if not report.is_valid:
+                LOG.warning(report.to_xml())
+                # TODO: maybe skip this page if report contains any CoordinateValidityError
+
+            #
+            # plausibilize region segmentation (remove redundant text regions)
+            #
+            ro = page.get_ReadingOrder()
+            if ro:
+                rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
+            else:
+                rogroup = None
+            mark_for_deletion = list() # what regions get removed?
+            mark_for_merging = dict() # what regions get merged into which regions?
+            # cover recursive region structure (but compare only at the same level)
+            parents = list(set([region.parent_object_ for region in page.get_AllRegions(classes=['Text'])]))
+            for parent in parents:
+                regions = parent.get_TextRegion()
+                # sort by area to ensure to arrive at a total ordering compatible
+                # with the topological sort along containment/equivalence arcs
+                # (so we can avoid substituting regions with superregions that have
+                #  themselves been substituted/deleted):
+                RegionPolygon = namedtuple('RegionPolygon', ['region', 'polygon'])
+                regionspolys = sorted([RegionPolygon(region, Polygon(polygon_from_points(region.get_Coords().points)))
+                                       for region in regions],
+                                      key=lambda x: x.polygon.area)
+                for i in range(0, len(regionspolys)):
+                    for j in range(i+1, len(regionspolys)):
+                        region1 = regionspolys[i].region
+                        region2 = regionspolys[j].region
+                        poly1 = regionspolys[i].polygon
+                        poly2 = regionspolys[j].polygon
+                        LOG.debug('Comparing regions "%s" and "%s"', region1.id, region2.id)
+
+                        if poly1.almost_equals(poly2):
+                            LOG.warning('Page "%s" region "%s" is almost equal to "%s" %s',
+                                        page_id, region2.id, region1.id,
+                                        '(removing)' if plausibilize else '')
+                            mark_for_deletion.append(region2.id)
+                        elif poly1.contains(poly2):
+                            LOG.warning('Page "%s" region "%s" is within "%s" %s',
+                                        page_id, region2.id, region1.id,
+                                        '(removing)' if plausibilize else '')
+                            mark_for_deletion.append(region2.id)
+                        elif poly2.contains(poly1):
+                            LOG.warning('Page "%s" region "%s" is within "%s" %s',
+                                        page_id, region1.id, region2.id,
+                                        '(removing)' if plausibilize else '')
+                            mark_for_deletion.append(region1.id)
+                        elif poly1.overlaps(poly2):
+                            inter_poly = poly1.intersection(poly2)
+                            union_poly = poly1.union(poly2)
+                            LOG.debug('Page "%s" region "%s" overlaps "%s" by %f/%f',
+                                      page_id, region1.id, region2.id, inter_poly.area/poly1.area, inter_poly.area/poly2.area)
+                            if union_poly.convex_hull.area >= poly1.area + poly2.area:
+                                # skip this pair -- combined polygon encloses previously free segments
+                                pass
+                            elif inter_poly.area / poly2.area > self.parameter['plausibilize_merge_min_overlap']:
+                                LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
+                                            page_id, region2.id, region1.id,
+                                            '(merging)' if plausibilize else '')
+                                mark_for_merging[region2.id] = region1
+                            elif inter_poly.area / poly1.area > self.parameter['plausibilize_merge_min_overlap']:
+                                LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
+                                            page_id, region1.id, region2.id,
+                                            '(merging)' if plausibilize else '')
+                                mark_for_merging[region1.id] = region2
+
+                        # TODO: more merging cases...
+                        #LOG.info('Intersection %i', poly1.intersects(poly2))
+                        #LOG.info('Containment %i', poly1.contains(poly2))
+                        #if poly1.intersects(poly2):
+                        #    LOG.info('Area 1 %d', poly1.area)
+                        #    LOG.info('Area 2 %d', poly2.area)
+                        #    LOG.info('Area intersect %d', poly1.intersection(poly2).area)
+
+                if plausibilize:
+                    # pass the regions sorted (see above)
+                    _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging)
 
             #
             # sanitize region segmentation (shrink to hull of lines)
@@ -87,89 +162,7 @@ class RepairSegmentation(Processor):
             if sanitize:
                 self.sanitize_page(page, page_id)
                 
-            #
-            # plausibilize region segmentation (remove redundant text regions)
-            #
-            mark_for_deletion = list() # what regions get removed?
-            mark_for_merging = dict() # what regions get merged into which regions?
-
-            # TODO: cover recursive region structure (but compare only at the same level)
-            regions = page.get_TextRegion()
-            # sort by area to ensure to arrive at a total ordering compatible
-            # with the topological sort along containment/equivalence arcs
-            # (so we can avoid substituting regions with superregions that have
-            #  themselves been substituted/deleted):
-            RegionPolygon = namedtuple('RegionPolygon', ['region', 'polygon'])
-            regionspolys = sorted([RegionPolygon(region, Polygon(polygon_from_points(region.get_Coords().points)))
-                                   for region in regions],
-                                  key=lambda x: x.polygon.area)
-            for i in range(0, len(regionspolys)):
-                for j in range(i+1, len(regionspolys)):
-                    region1 = regionspolys[i].region
-                    region2 = regionspolys[j].region
-                    poly1 = regionspolys[i].polygon
-                    poly2 = regionspolys[j].polygon
-                    LOG.debug('Comparing regions "%s" and "%s"', region1.id, region2.id)
-                    
-                    if poly1.almost_equals(poly2):
-                        LOG.warning('Page "%s" region "%s" is almost equal to "%s" %s',
-                                    page_id, region2.id, region1.id,
-                                    '(removing)' if plausibilize else '')
-                        mark_for_deletion.append(region2.id)
-                    elif poly1.contains(poly2):
-                        LOG.warning('Page "%s" region "%s" is within "%s" %s',
-                                    page_id, region2.id, region1.id,
-                                    '(removing)' if plausibilize else '')
-                        mark_for_deletion.append(region2.id)
-                    elif poly2.contains(poly1):
-                        LOG.warning('Page "%s" region "%s" is within "%s" %s',
-                                    page_id, region1.id, region2.id,
-                                    '(removing)' if plausibilize else '')
-                        mark_for_deletion.append(region1.id)
-                    elif poly1.overlaps(poly2):
-                        inter_poly = poly1.intersection(poly2)
-                        union_poly = poly1.union(poly2)
-                        LOG.debug('Page "%s" region "%s" overlaps "%s" by %f/%f',
-                                  page_id, region1.id, region2.id, inter_poly.area/poly1.area, inter_poly.area/poly2.area)
-                        if union_poly.convex_hull.area >= poly1.area + poly2.area:
-                            # skip this pair -- combined polygon encloses previously free segments
-                            pass
-                        elif inter_poly.area / poly2.area > self.parameter['plausibilize_merge_min_overlap']:
-                            LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
-                                        page_id, region2.id, region1.id,
-                                        '(merging)' if plausibilize else '')
-                            mark_for_merging[region2.id] = region1
-                        elif inter_poly.area / poly1.area > self.parameter['plausibilize_merge_min_overlap']:
-                            LOG.warning('Page "%s" region "%s" is almost within "%s" %s',
-                                        page_id, region1.id, region2.id,
-                                        '(merging)' if plausibilize else '')
-                            mark_for_merging[region1.id] = region2
-
-                    # TODO: more merging cases...
-                    #LOG.info('Intersection %i', poly1.intersects(poly2))
-                    #LOG.info('Containment %i', poly1.contains(poly2))
-                    #if poly1.intersects(poly2):
-                    #    LOG.info('Area 1 %d', poly1.area)
-                    #    LOG.info('Area 2 %d', poly2.area)
-                    #    LOG.info('Area intersect %d', poly1.intersection(poly2).area)
-                        
-
-            if plausibilize:
-                # the reading order does not have to include all regions
-                # but it may include all types of regions!
-                ro = page.get_ReadingOrder()
-                if ro:
-                    rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
-                else:
-                    rogroup = None
-                # pass the regions sorted (see above)
-                _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging)
-
-            # Use input_file's basename for the new file -
-            # this way the files retain the same basenames:
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
+            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
@@ -180,7 +173,7 @@ class RepairSegmentation(Processor):
                 content=to_xml(pcgts))
     
     def sanitize_page(self, page, page_id):
-        regions = page.get_TextRegion()
+        regions = page.get_AllRegions(classes=['Text'])
         page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id)
         for region in regions:
@@ -239,11 +232,13 @@ class RepairSegmentation(Processor):
                     LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
                                 i, area, total_area, region.id)
                     continue
-                # simplify shape:
+                # simplify shape (until valid):
                 # can produce invalid (self-intersecting) polygons:
                 #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
                 polygon = contour[:, 0, ::] # already ordered x,y
-                polygon = Polygon(polygon).simplify(1).exterior.coords
+                polygon = Polygon(polygon).simplify(1)
+                polygon = make_valid(polygon)
+                polygon = polygon.exterior.coords[:-1] # keep open
                 if len(polygon) < 4:
                     LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
                                 i, region.id)
@@ -258,66 +253,13 @@ class RepairSegmentation(Processor):
                 LOG.info('Using new coordinates for region "%s"', region.id)
                 region.get_Coords().points = points_from_polygon(region_polygon)
     
-    def validate_coords(self, page, page_id):
-        valid = True
-        regions = page.get_TextRegion()
-        if page.get_Border():
-            other_regions = (
-                page.get_AdvertRegion() +
-                page.get_ChartRegion() +
-                page.get_ChemRegion() +
-                page.get_GraphicRegion() +
-                page.get_ImageRegion() +
-                page.get_LineDrawingRegion() +
-                page.get_MathsRegion() +
-                page.get_MusicRegion() +
-                page.get_NoiseRegion() +
-                page.get_SeparatorRegion() +
-                page.get_TableRegion() +
-                page.get_UnknownRegion())
-            for region in regions + other_regions:
-                if not _child_within_parent(region, page.get_Border()):
-                    LOG.warning('Region "%s" extends beyond Border of page "%s"',
-                                region.id, page_id)
-                    valid = False
-        for region in regions:
-            lines = region.get_TextLine()
-            for line in lines:
-                if not _child_within_parent(line, region):
-                    LOG.warning('Line "%s" extends beyond region "%s" on page "%s"',
-                                line.id, region.id, page_id)
-                    valid = False
-                if line.get_Baseline():
-                    baseline = LineString(polygon_from_points(line.get_Baseline().points))
-                    linepoly = Polygon(polygon_from_points(line.get_Coords().points))
-                    if not baseline.within(linepoly):
-                        LOG.warning('Baseline extends beyond line "%s" in region "%s" on page "%s"',
-                                    line.id, region.id, page_id)
-                        valid = False
-                words = line.get_Word()
-                for word in words:
-                    if not _child_within_parent(word, line):
-                        LOG.warning('Word "%s" extends beyond line "%s" in region "%s" on page "%s"',
-                                    word.id, line.id, region.id, page_id)
-                        valid = False
-                    glyphs = word.get_Glyph()
-                    for glyph in glyphs:
-                        if not _child_within_parent(glyph, word):
-                            LOG.warning('Glyph "%s" extends beyond word "%s" in line "%s" of region "%s" on page "%s"',
-                                        glyph.id, word.id, line.id, region.id, page_id)
-                            valid = False
-        return valid
-
-def _child_within_parent(child, parent):
-    child_poly = Polygon(polygon_from_points(child.get_Coords().points))
-    parent_poly = Polygon(polygon_from_points(parent.get_Coords().points))
-    return child_poly.within(parent_poly)
-
 def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
     wait_for_deletion = list()
     reading_order = dict()
     regionrefs = list()
     ordered = False
+    # the reading order does not have to include all regions
+    # but it may include all types of regions!
     if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
         regionrefs = (rogroup.get_RegionRefIndexed() +
                       rogroup.get_OrderedGroupIndexed() +
@@ -353,7 +295,13 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                 # and use-cases in the future
                 superpoly = Polygon(polygon_from_points(superreg.get_Coords().points))
                 superpoly = superpoly.union(poly)
-                superreg.get_Coords().points = points_from_polygon(superpoly.exterior.coords)
+                if superpoly.type == 'MultiPolygon':
+                    superpoly = superpoly.convex_hull
+                if superpoly.minimum_clearance < 1.0:
+                    superpoly = asPolygon(np.round(superpoly.exterior.coords))
+                superpoly = make_valid(superpoly)
+                superpoly = superpoly.exterior.coords[:-1] # keep open
+                superreg.get_Coords().points = points_from_polygon(superpoly)
                 # FIXME should we merge/mix attributes and features?
                 if region.get_orientation() != superreg.get_orientation():
                     LOG.warning('Merging region "%s" with orientation %f into "%s" with %f',
@@ -398,3 +346,18 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
         if region.parent_object_:
             # remove in-place
             region.parent_object_.get_TextRegion().remove(region)
+
+def make_valid(polygon):
+    """Ensures shapely.geometry.Polygon object is valid by repeated simplification"""
+    for split in range(1, len(polygon.exterior.coords)-1):
+        if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
+            break
+        # simplification may not be possible (at all) due to ordering
+        # in that case, try another starting point
+        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
+    for tolerance in range(1, int(polygon.area)):
+        if polygon.is_valid:
+            break
+        # simplification may require a larger tolerance
+        polygon = polygon.simplify(tolerance)
+    return polygon

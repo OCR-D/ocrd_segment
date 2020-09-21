@@ -3,14 +3,12 @@ from __future__ import absolute_import
 import json
 
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
+    assert_file_grp_cardinality,
     coordinates_of_segment,
     polygon_from_points,
     MIME_TO_EXT
-)
-from ocrd_models.ocrd_page import (
-    LabelsType, LabelType,
-    MetadataItemType
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
@@ -63,26 +61,15 @@ class ExtractRegions(Processor):
         * ID + '.nrm.png': region image (if the workflow provides grayscale-normalized images)
         * ID + '.json': region metadata.
         """
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 transparency=self.parameter['transparency'])
@@ -164,7 +151,8 @@ class ExtractRegions(Processor):
                         extension = '.nrm'
                     else:
                         extension = '.raw'
-                    
+
+                    file_id = make_file_id(input_file, self.output_file_grp)
                     file_path = self.workspace.save_image_file(
                         region_image,
                         file_id + '_' + region.id + extension,
@@ -174,5 +162,6 @@ class ExtractRegions(Processor):
                         ID=file_id + '.json',
                         file_grp=self.output_file_grp,
                         local_filename=file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json'),
+                        pageId=input_file.pageId,
                         mimetype='application/json',
                         content=json.dumps(description))

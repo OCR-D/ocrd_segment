@@ -9,14 +9,12 @@ from shapely.validation import explain_validity
 from shapely.prepared import prep
 
 from ocrd_utils import (
-    getLogger, concat_padded,
+    getLogger,
+    make_file_id,
+    assert_file_grp_cardinality,
     coordinates_of_segment,
     xywh_from_polygon,
     MIME_TO_EXT
-)
-from ocrd_models.ocrd_page import (
-    LabelsType, LabelType,
-    MetadataItemType
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
@@ -123,6 +121,7 @@ class ExtractPages(Processor):
         
         (This is intended for training and evaluation of region segmentation models.)
         """
+        assert_file_grp_cardinality(self.input_file_grp, 1)
         file_groups = self.output_file_grp.split(',')
         if len(file_groups) > 3:
             raise Exception("at most 3 output file grps allowed (raw, [binarized, [mask]] image)")
@@ -137,7 +136,7 @@ class ExtractPages(Processor):
             bin_image_grp = file_groups[0]
             LOG.info("No output file group for binarized images specified, falling back to output filegrp '%s'", bin_image_grp)
         self.output_file_grp = file_groups[0]
-        
+
         # COCO: init data structures
         images = list()
         annotations = list()
@@ -161,24 +160,13 @@ class ExtractPages(Processor):
         i = 0
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
-            file_id = input_file.ID.replace(self.input_file_grp, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             num_page_id = int(page_id.strip(page_id.strip("0123456789")))
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
             ptype = page.get_type()
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter])]))
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
                 feature_filter='binarized',
@@ -189,6 +177,7 @@ class ExtractPages(Processor):
                     dpi = round(dpi * 2.54)
             else:
                 dpi = None
+            file_id = make_file_id(input_file, self.output_file_grp)
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id,
                                                        self.output_file_grp,
@@ -310,7 +299,7 @@ class ExtractPages(Processor):
             self.workspace.add_file(
                 ID=file_id + '.json',
                 file_grp=dbg_image_grp,
-                pageId=page_id,
+                pageId=input_file.pageId,
                 local_filename=file_path.replace(MIME_TO_EXT[self.parameter['mimetype']], '.json'),
                 mimetype='application/json',
                 content=json.dumps(description))
@@ -335,6 +324,7 @@ class ExtractPages(Processor):
             file_grp=dbg_image_grp,
             local_filename=os.path.join(dbg_image_grp, file_id),
             mimetype='application/json',
+            pageId=None,
             content=json.dumps(
                 {'categories': categories,
                  'images': images,
