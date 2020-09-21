@@ -11,6 +11,7 @@ from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines
 from .extract_address import ExtractAddress
+from .extract_formdata import ExtractFormData
 from .classify_address_text import ClassifyAddressText
 from .classify_address_layout import ClassifyAddressLayout
 
@@ -63,6 +64,11 @@ def ocrd_segment_extract_lines(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_extract_address(*args, **kwargs):
     return ocrd_cli_wrap_processor(ExtractAddress, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_extract_formdata(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ExtractFormData, *args, **kwargs)
 
 @click.command()
 @ocrd_cli_options
