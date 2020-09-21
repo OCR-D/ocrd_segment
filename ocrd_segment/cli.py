@@ -6,6 +6,7 @@ from .import_image_segmentation import ImportImageSegmentation
 from .import_coco_segmentation import ImportCOCOSegmentation
 from .evaluate import EvaluateSegmentation
 from .replace_original import ReplaceOriginal
+from .replace_page import ReplacePage
 from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines
@@ -34,6 +35,11 @@ def ocrd_segment_evaluate(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_replace_original(*args, **kwargs):
     return ocrd_cli_wrap_processor(ReplaceOriginal, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_replace_page(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ReplacePage, *args, **kwargs)
 
 @click.command()
 @ocrd_cli_options
