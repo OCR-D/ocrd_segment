@@ -75,28 +75,32 @@ class ReplacePage(Processor):
             page2 = pcgts2.get_Page()
             # adjust all coordinates (recursively)
             if adapt_coords:
-                _, page_coords, _ = self.workspace.image_from_page(page, page_id)
-                for region in page2.get_AllRegions():
-                    region_polygon = polygon_from_points(region.get_Coords().points)
-                    region_polygon = coordinates_for_segment(region_polygon, None, page_coords)
-                    region_polygon = polygon_for_parent(region_polygon, page)
-                    region.get_Coords().points = points_from_polygon(region_polygon)
-                    if isinstance(region, TextRegionType):
-                        for line in region.get_TextLine():
-                            line_polygon = polygon_from_points(line.get_Coords().points)
-                            line_polygon = coordinates_for_segment(line_polygon, None, page_coords)
-                            line_polygon = polygon_for_parent(line_polygon, region)
-                            line.get_Coords().points = points_from_polygon(line_polygon)
-                            for word in line.get_Word():
-                                word_polygon = polygon_from_points(word.get_Coords().points)
-                                word_polygon = coordinates_for_segment(word_polygon, None, page_coords)
-                                word_polygon = polygon_for_parent(word_polygon, line)
-                                word.get_Coords().points = points_from_polygon(word_polygon)
-                                for glyph in word.get_Glyph():
-                                    glyph_polygon = polygon_from_points(glyph.get_Coords().points)
-                                    glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
-                                    glyph_polygon = polygon_for_parent(glyph_polygon, word)
-                                    glyph.get_Coords().points = points_from_polygon(glyph_polygon)
+                try:
+                    _, page_coords, _ = self.workspace.image_from_page(page, page_id)
+                    for region in page2.get_AllRegions():
+                        region_polygon = polygon_from_points(region.get_Coords().points)
+                        region_polygon = coordinates_for_segment(region_polygon, None, page_coords)
+                        region_polygon = polygon_for_parent(region_polygon, page)
+                        region.get_Coords().points = points_from_polygon(region_polygon)
+                        if isinstance(region, TextRegionType):
+                            for line in region.get_TextLine():
+                                line_polygon = polygon_from_points(line.get_Coords().points)
+                                line_polygon = coordinates_for_segment(line_polygon, None, page_coords)
+                                line_polygon = polygon_for_parent(line_polygon, region)
+                                line.get_Coords().points = points_from_polygon(line_polygon)
+                                for word in line.get_Word():
+                                    word_polygon = polygon_from_points(word.get_Coords().points)
+                                    word_polygon = coordinates_for_segment(word_polygon, None, page_coords)
+                                    word_polygon = polygon_for_parent(word_polygon, line)
+                                    word.get_Coords().points = points_from_polygon(word_polygon)
+                                    for glyph in word.get_Glyph():
+                                        glyph_polygon = polygon_from_points(glyph.get_Coords().points)
+                                        glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
+                                        glyph_polygon = polygon_for_parent(glyph_polygon, word)
+                                        glyph.get_Coords().points = points_from_polygon(glyph_polygon)
+                except:
+                    LOG.error('invalid coordinates on page %s', page_id)
+                    continue
             # replace all regions
             page.set_ReadingOrder(page2.get_ReadingOrder())
             page.set_TextRegion(page2.get_TextRegion())
