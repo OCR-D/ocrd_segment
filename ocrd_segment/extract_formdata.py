@@ -14,10 +14,7 @@ from ocrd_utils import (
     coordinates_of_segment,
     xywh_from_polygon
 )
-from ocrd_models.ocrd_page import (
-    LabelsType, LabelType,
-    MetadataItemType
-)
+from ocrd_models.ocrd_page import TextLineType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -102,6 +99,12 @@ class ExtractFormData(Processor):
                     fill = 255
                 else:
                     fill = 200
+                if not region.get_TextLine():
+                    LOG.warning('text region "%s" does not contain text lines on page "%s"',
+                                region.id, page_id)
+                    # happens when annotating a new region in LAREX
+                    region.add_TextLine(TextLineType(id=region.id + '_line',
+                                                     Coords=region.get_Coords()))
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
                     polygon = coordinates_of_segment(line, page_image, page_coords)
