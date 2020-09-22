@@ -402,6 +402,7 @@ class CocoDataset(utils.Dataset):
 
         # use first annotated class as source
         source = coco.loadCats(coco.getCatIds())[0]['name']
+        print('using class "%s" as source for all images' % source)
         # Add images
         for i in image_ids:
             file_name = coco.imgs[i]['file_name']
@@ -639,7 +640,7 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=
     cocoEval.accumulate()
     cocoEval.summarize()
 
-def test_coco(model, dataset, verbose=False, limit=0, image_ids=None, plot=False):
+def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=False):
     """Predict images
     dataset: A Dataset object with test data
     verbose: If not False, print summary of detection for each image
@@ -704,7 +705,6 @@ def test_coco(model, dataset, verbose=False, limit=0, image_ids=None, plot=False
 
 def plot_result(image, anns, width, height, filename):
     # show result
-    pyplot.close() # clear axes from previous images
     fig = pyplot.figure(frameon=False)
     pyplot.imshow(image[:,:,:3])
     ax = pyplot.gca()
@@ -720,6 +720,8 @@ def plot_result(image, anns, width, height, filename):
     fig.set_size_inches((width/300, height/300))
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     pyplot.savefig(filename, dpi=300, pad_inches=0, bbox_inches=extent)
+    fig.clf()
+    pyplot.close()
 
 def json_safe(obj):
     if isinstance(obj, np.integer):
@@ -748,39 +750,29 @@ if __name__ == '__main__':
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Run Mask R-CNN for formdata region segmentation.')
-    parser.add_argument('--model', required=False, default='last',
-                        metavar="PATH/TO/WEIGHTS.h5",
+    parser.add_argument('--model', required=False, default='last', metavar="PATH/TO/WEIGHTS.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
-    parser.add_argument('--logs', required=False,
-                        default=DEFAULT_LOGS_DIR,
-                        metavar="PATH/TO/LOGS/",
+    parser.add_argument('--logs', required=False, default=DEFAULT_LOGS_DIR, metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
-    parser.add_argument('--limit', required=False,
-                        type=int, default=0,
-                        metavar="NUM",
+    parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
                         help='Maximum number of images to use (default=all)')
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
-    train_parser.add_argument('--dataset', required=True,
-                              metavar="PATH/TO/COCO.json",
+    train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                               help='File path of the address dataset annotations (randomly split into training and validation)')
-    train_parser.add_argument('--exclude', required=False,
-                              default=None,
-                              metavar="<LAYER-LIST>",
+    train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
-    train_parser.add_argument('--depth', required=False,
-                              default=None,
-                              metavar="DEPTH-SPEC",
+    train_parser.add_argument('--depth', required=False, default=None, metavar="DEPTH-SPEC",
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
+    train_parser.add_argument('--epochs', required=False, type=int, default=100, metavar="NUM",
+                              help='Number of iterations to train (unless multi-staged)'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
-    evaluate_parser.add_argument('--dataset', required=True,
-                                 metavar="PATH/TO/COCO.json",
+    evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                                  help='Create plot files from prediction under *.SUFFIX.png')
     test_parser = subparsers.add_parser('test', help="Apply a model on image files, adding COCO annotations")
-    test_parser.add_argument('--dataset', required=True,
-                             metavar="PATH/TO/COCO.json",
+    test_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                              help='File path of the address dataset annotations (to be filled; needs categories)')
     test_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                              help='Create plot files from prediction under *.SUFFIX.png')
@@ -793,6 +785,8 @@ if __name__ == '__main__':
     if args.command == 'train':
         print("Exclude: ", args.exclude)
         print("Depth: ", args.depth)
+        if args.depth == 'all':
+            print("Epochs: ", args.epochs)
     if args.command in ['evaluate', 'test']:
         print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
@@ -896,7 +890,7 @@ if __name__ == '__main__':
                 print("Training %s" % args.depth)
                 model.train(dataset_train, dataset_val,
                             learning_rate=config.LEARNING_RATE,
-                            epochs=100,
+                            epochs=args.epochs,
                             layers=layers(args.depth),
                             augmentation=augmentation)
             else:
@@ -926,6 +920,9 @@ if __name__ == '__main__':
                             layers='all',
                             augmentation=augmentation)
 
+                model_path = args.dataset.replace('.json', '') + '.h5'
+                print("Saving weights ", model_path)
+                model.keras_model.save_weights(model_path, overwrite=True)
         else:
             dataset = CocoDataset()
             coco_res = dataset.load_coco(coco, #os.path.dirname(args.dataset),
