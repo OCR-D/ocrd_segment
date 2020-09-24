@@ -20,7 +20,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-replace-original'
-LOG = getLogger('processor.ReplaceOriginal')
 
 class ReplaceOriginal(Processor):
 
@@ -44,6 +43,7 @@ class ReplaceOriginal(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ReplaceOriginal')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
         feature_selector = self.parameter['feature_selector']

@@ -17,7 +17,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-lines'
-LOG = getLogger('processor.ExtractLines')
 
 class ExtractLines(Processor):
 
@@ -64,6 +63,7 @@ class ExtractLines(Processor):
         
         (This is intended for training and evaluation of OCR models.)
         """
+        LOG = getLogger('processor.ExtractLines')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init
