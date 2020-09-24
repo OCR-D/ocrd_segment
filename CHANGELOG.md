@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.3] - 2020-09-24
+
+Changed:
+
+ * logging according to OCR-D/core#599
+
 ## [0.1.2] - 2020-09-18
 
 Fixed:
