@@ -45,7 +45,6 @@ from .config import OCRD_TOOL
 from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-from-masks'
-LOG = getLogger('processor.ImportImageSegmentation')
 
 class ImportImageSegmentation(Processor):
 
@@ -67,6 +66,7 @@ class ImportImageSegmentation(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ImportImageSegmentation')
         assert_file_grp_cardinality(self.input_file_grp, 2, 'base and mask')
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
@@ -193,6 +193,7 @@ class ImportImageSegmentation(Processor):
             
     def zip_input_files(self, ifgs):
         """Get a list (for each physical page) of tuples (for each input file group) of METS files."""
+        LOG = getLogger('processor.ImportImageSegmentation')
         ifts = list() # file tuples
         if self.page_id:
             pages = [self.page_id]

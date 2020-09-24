@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.3] - 2020-09-24
+
+Changed:
+
+ * logging according to OCR-D/core#599
+
 ## [0.1.2] - 2020-09-18
 
 Fixed:
@@ -38,6 +44,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.3]: ../../compare/v0.1.3...v0.1.2
 [0.1.2]: ../../compare/v0.1.2...v0.1.1
 [0.1.1]: ../../compare/v0.1.1...v0.1.0
 [0.1.0]: ../../compare/v0.1.0...v0.0.2

@@ -22,7 +22,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-pages'
-LOG = getLogger('processor.ExtractPages')
 # region classes and their colours in mask (dbg) images:
 # (from prima-page-viewer/src/org/primaresearch/page/viewer/ui/render/PageContentColors,
 #  but added alpha channel to also discern subtype, if not visually;
@@ -121,6 +120,7 @@ class ExtractPages(Processor):
         
         (This is intended for training and evaluation of region segmentation models.)
         """
+        LOG = getLogger('processor.ExtractPages')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         file_groups = self.output_file_grp.split(',')
         if len(file_groups) > 3:
