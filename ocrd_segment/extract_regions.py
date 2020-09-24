@@ -17,7 +17,6 @@ from .config import OCRD_TOOL
 from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-extract-regions'
-LOG = getLogger('processor.ExtractRegions')
 
 class ExtractRegions(Processor):
 
@@ -61,6 +60,7 @@ class ExtractRegions(Processor):
         * ID + '.nrm.png': region image (if the workflow provides grayscale-normalized images)
         * ID + '.json': region metadata.
         """
+        LOG = getLogger('processor.ExtractRegions')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init

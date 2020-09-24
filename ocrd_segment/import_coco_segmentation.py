@@ -46,7 +46,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-from-coco'
-LOG = getLogger('processor.ImportCOCOSegmentation')
 
 class ImportCOCOSegmentation(Processor):
 
@@ -79,6 +78,7 @@ class ImportCOCOSegmentation(Processor):
         Afterwards, if there are still COCO images left unaccounted for (i.e. without
         corresponding input files), then show a warning.
         """
+        LOG = getLogger('processor.ImportCOCOSegmentation')
         # Load JSON
         assert_file_grp_cardinality(self.input_file_grp, 2, 'base and COCO')
         # pylint: disable=attribute-defined-outside-init

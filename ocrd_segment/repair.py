@@ -38,7 +38,6 @@ from ocrd_validators.page_validator import PageValidator
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-repair'
-LOG = getLogger('processor.RepairSegmentation')
 
 class RepairSegmentation(Processor):
 
@@ -57,6 +56,7 @@ class RepairSegmentation(Processor):
         Return information on the plausibility of the segmentation into
         regions on the logging level.
         """
+        LOG = getLogger('processor.RepairSegmentation')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
@@ -173,6 +173,7 @@ class RepairSegmentation(Processor):
                 content=to_xml(pcgts))
     
     def sanitize_page(self, page, page_id):
+        LOG = getLogger('processor.RepairSegmentation')
         regions = page.get_AllRegions(classes=['Text'])
         page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id)
@@ -254,6 +255,7 @@ class RepairSegmentation(Processor):
                 region.get_Coords().points = points_from_polygon(region_polygon)
     
 def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
+    LOG = getLogger('processor.RepairSegmentation')
     wait_for_deletion = list()
     reading_order = dict()
     regionrefs = list()
