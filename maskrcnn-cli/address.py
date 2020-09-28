@@ -526,43 +526,6 @@ class CocoDataset(utils.Dataset):
         m = maskUtils.decode(rle)
         return m
 
-    def showAnns(self, anns, height, width):
-        """
-        Display the specified annotations.
-        :param anns (array of object): annotations to display
-        :return: None
-        """
-        if len(anns) == 0:
-            return 0
-        ax = pyplot.gca()
-        ax.set_autoscale_on(False)
-        polygons = []
-        colors = []
-        for ann in anns:
-            category = ann['category_id']
-            color = cm.tab10(category, alpha=0.8)
-            if type(ann['segmentation']) == list:
-                # polygon
-                for seg in ann['segmentation']:
-                    poly = np.array(seg).reshape((int(len(seg)/2), 2))
-                    polygons.append(Polygon(poly))
-                    colors.append(color)
-            else:
-                # mask
-                if type(ann['segmentation']['counts']) == list:
-                    rle = maskUtils.frPyObjects([ann['segmentation']], height, width)
-                else:
-                    rle = [ann['segmentation']]
-                m = maskUtils.decode(rle)
-                ax.imshow(m * color)
-            color = cm.tab10(category, alpha=0.5)
-            x, y, w, h = ann['bbox']
-            ax.add_patch(Rectangle((x, y), w, h, fill=False, color=color))
-        p = PatchCollection(polygons, facecolor=colors, linewidths=0, alpha=0.4)
-        ax.add_collection(p)
-        p = PatchCollection(polygons, facecolor='none', edgecolors=colors, linewidths=2)
-        ax.add_collection(p)
-
 ############################################################
 #  COCO Evaluation
 ############################################################
@@ -682,9 +645,45 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
         ann['id'] = i
     return results, cocoids
 
+def showAnns(anns, height, width):
+    """
+    Display the specified annotations.
+    :param anns (array of object): annotations to display
+    :return: None
+    """
+    if len(anns) == 0:
+        return 0
+    ax = pyplot.gca()
+    ax.set_autoscale_on(False)
+    polygons = []
+    colors = []
+    for ann in anns:
+        category = ann['category_id']
+        color = cm.tab10(category, alpha=0.8)
+        if type(ann['segmentation']) == list:
+            # polygon
+            for seg in ann['segmentation']:
+                poly = np.array(seg).reshape((int(len(seg)/2), 2))
+                polygons.append(Polygon(poly))
+                colors.append(color)
+        else:
+            # mask
+            if type(ann['segmentation']['counts']) == list:
+                rle = maskUtils.frPyObjects([ann['segmentation']], height, width)
+            else:
+                rle = [ann['segmentation']]
+            m = maskUtils.decode(rle)
+            ax.imshow(m * color)
+        color = cm.tab10(category, alpha=0.5)
+        x, y, w, h = ann['bbox']
+        ax.add_patch(Rectangle((x, y), w, h, fill=False, color=color))
+    p = PatchCollection(polygons, facecolor=colors, linewidths=0, alpha=0.4)
+    ax.add_collection(p)
+    p = PatchCollection(polygons, facecolor='none', edgecolors=colors, linewidths=2)
+    ax.add_collection(p)
+
 def plot_result(image, anns, width, height, filename):
     # show result
-    pyplot.close() # clear axes from previous images
     fig = pyplot.figure(frameon=False)
     pyplot.imshow(image[:,:,:3])
     ax = pyplot.gca()
@@ -694,12 +693,14 @@ def plot_result(image, anns, width, height, filename):
     ax.set_frame_on(0)
     ax.set_position([0,0,1,1])
     #ax.title(image_cocoid)
-    dataset.showAnns(anns, width, height)
+    showAnns(anns, width, height)
     # make an extra effort to arrive at the same image size
     # (no frames, axes, margins):
     fig.set_size_inches((width/300, height/300))
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     pyplot.savefig(filename, dpi=300, pad_inches=0, bbox_inches=extent)
+    fig.clf()
+    pyplot.close()
 
 def json_safe(obj):
     if isinstance(obj, np.integer):
