@@ -758,7 +758,7 @@ if __name__ == '__main__':
                         help='Maximum number of images to use (default=all)')
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
-    train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
+    train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path of the address dataset annotations (randomly split into training and validation)')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
@@ -767,7 +767,7 @@ if __name__ == '__main__':
     train_parser.add_argument('--epochs', required=False, type=int, default=100, metavar="NUM",
                               help='Number of iterations to train (unless multi-staged)'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
-    evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
+    evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                                  help='Create plot files from prediction under *.SUFFIX.png')
@@ -838,22 +838,25 @@ if __name__ == '__main__':
 
     # Train or evaluate
     if args.command in ['train', 'evaluate']:
-        coco = COCO(args.dataset)
-        np.random.seed(42)
-        if not args.limit or args.limit > len(coco.imgs):
-            args.limit = len(coco.imgs)
-        indexes = np.random.permutation(args.limit)
-        trainset = indexes[:int(0.7*args.limit)]
-        valset = indexes[int(0.7*args.limit):]
-        
-        if args.command == "train":
-            dataset_train = CocoDataset()
-            dataset_train.load_coco(coco, #os.path.dirname(args.dataset),
-                                    limit=trainset)
-            dataset_val = CocoDataset()
+        dataset_train = CocoDataset()
+        dataset_val = CocoDataset()
+        for dataset in args.dataset:
+            coco = COCO(dataset)
+            np.random.seed(42)
+            limit = args.limit
+            if not limit or limit > len(coco.imgs):
+                limit = len(coco.imgs)
+            indexes = np.random.permutation(limit)
+            trainset = indexes[:int(0.7*limit)]
+            valset = indexes[int(0.7*limit):]
+            if args.command == "train":
+                dataset_train.load_coco(coco, #os.path.dirname(args.dataset),
+                                        limit=trainset)
             dataset_val.load_coco(coco, #os.path.dirname(args.dataset),
                                   limit=valset)
             del coco
+        
+        if args.command == "train":
             dataset_train.prepare()
             dataset_val.prepare()
             print("Running COCO training on {} train / {} val images.".format(
@@ -924,13 +927,12 @@ if __name__ == '__main__':
                 print("Saving weights ", model_path)
                 model.keras_model.save_weights(model_path, overwrite=True)
         else:
-            dataset = CocoDataset()
-            coco_res = dataset.load_coco(coco, #os.path.dirname(args.dataset),
-                                         limit=valset, return_coco=True)
-            del coco
-            dataset.prepare()
-            print("Running COCO evaluation on {} images.".format(dataset.num_images))
-            evaluate_coco(model, dataset, coco_res, "bbox", plot=args.plot)
+            dataset_val.prepare()
+            print("Running COCO evaluation on {} images.".format(dataset_val.num_images))
+            coco = COCO()
+            coco.dataset = dataset_val.dump_coco()
+            coco.createIndex()
+            evaluate_coco(model, dataset_val, coco, "bbox", plot=args.plot)
             #print(model.evaluate(dataset))
         
     elif args.command == "test":
