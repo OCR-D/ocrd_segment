@@ -109,8 +109,8 @@ class CocoConfig(Config):
     # don't have a lot of objects.
     MAX_GT_INSTANCES = 2
     # Max number of final detections
-    DETECTION_MAX_INSTANCES = 2
-    DETECTION_MIN_CONFIDENCE = 0.9
+    DETECTION_MAX_INSTANCES = 1
+    DETECTION_MIN_CONFIDENCE = 0.5
 
     # Use fewer ROIs in training the second stage. This setting
     # is like the batch size for the second stage of the model.
