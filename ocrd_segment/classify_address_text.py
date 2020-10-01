@@ -9,6 +9,7 @@ import requests
 from ocrd_utils import (
     getLogger,
     make_file_id,
+    assert_file_grp_cardinality,
     bbox_from_points,
     MIMETYPE_PAGE
 )
@@ -32,7 +33,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-address-text'
-LOG = getLogger('processor.ClassifyAddressText')
 
 # FIXME: rid of this switch, convert GT instead (from region to line level annotation)
 # set True if input is GT, False to use classifier
@@ -40,6 +40,7 @@ ALREADY_CLASSIFIED = False
 
 # text classification for address snippets
 def classify_address(text):
+    LOG = getLogger('processor.ClassifyAddressText')
     # TODO more simple heuristics to avoid API call
     # when no chance to be an address text
     if 8 > len(text) or len(text) > 100:
@@ -102,6 +103,9 @@ class ClassifyAddressText(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ClassifyAddressText')
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
         
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):

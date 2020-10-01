@@ -20,7 +20,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-address'
-LOG = getLogger('processor.ExtractAddress')
 
 class ExtractAddress(Processor):
 
@@ -59,6 +58,7 @@ class ExtractAddress(Processor):
         
         (This is intended for training and evaluation of region segmentation models.)
         """
+        LOG = getLogger('processor.ExtractAddress')
         assert_file_grp_cardinality(self.output_file_grp, 2, msg="(masked image, JSON GT)")
         image_file_grp, json_file_grp = self.output_file_grp.split(',')
 

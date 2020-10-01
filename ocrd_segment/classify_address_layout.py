@@ -18,6 +18,7 @@ tf.get_logger().setLevel('ERROR')
 from ocrd_utils import (
     getLogger,
     make_file_id,
+    assert_file_grp_cardinality,
     coordinates_of_segment,
     coordinates_for_segment,
     polygon_from_bbox,
@@ -45,7 +46,6 @@ from ocrd import Processor
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-address-layout'
-LOG = getLogger('processor.ClassifyAddressLayout')
 
 class AddressConfig(Config):
     """Configuration for detection on address resegmentation"""
@@ -72,32 +72,37 @@ class ClassifyAddressLayout(Processor):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
         super(ClassifyAddressLayout, self).__init__(*args, **kwargs)
+        if hasattr(self, 'output_file_grp'):
+            # processing context
+            self.setup()
+
+    def setup(self):
+        LOG = getLogger('processor.ClassifyAddressLayout')
         self.categories = ['',
                            'address-rcpt',
                            'address-sndr',
                            'address-contact']
-        if hasattr(self, 'output_file_grp'):
-            def readable(path):
-                return os.path.isfile(path) and os.access(path, os.R_OK)
-            directories = ['', os.path.dirname(os.path.abspath(__file__))]
-            if 'MRCNNDATA' in os.environ:
-                directories = [os.environ['MRCNNDATA']] + directories
-            model_path = ''
-            for directory in directories:
-                if readable(os.path.join(directory, self.parameter['model'])):
-                    model_path = os.path.join(directory, self.parameter['model'])
-                    break
-            if not model_path:
-                raise Exception("model file '%s' not found", self.parameter['model'])
-            LOG.info("Loading model '%s'", model_path)
-            config = AddressConfig()
-            config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
-            #config.display()
-            self.model = model.MaskRCNN(
-                mode="inference", config=config,
-                # not really needed, but must be a path...
-                model_dir=os.getcwd())
-            self.model.load_weights(model_path, by_name=True)
+        def readable(path):
+            return os.path.isfile(path) and os.access(path, os.R_OK)
+        directories = ['', os.path.dirname(os.path.abspath(__file__))]
+        if 'MRCNNDATA' in os.environ:
+            directories = [os.environ['MRCNNDATA']] + directories
+        model_path = ''
+        for directory in directories:
+            if readable(os.path.join(directory, self.parameter['model'])):
+                model_path = os.path.join(directory, self.parameter['model'])
+                break
+        if not model_path:
+            raise Exception("model file '%s' not found", self.parameter['model'])
+        LOG.info("Loading model '%s'", model_path)
+        config = AddressConfig()
+        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
+        #config.display()
+        self.model = model.MaskRCNN(
+            mode="inference", config=config,
+            # not really needed, but must be a path...
+            model_dir=os.getcwd())
+        self.model.load_weights(model_path, by_name=True)
 
     def process(self):
         """Detect and classify+resegment address regions from text recognition results.
@@ -123,6 +128,9 @@ class ClassifyAddressLayout(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ClassifyAddressLayout')
+        assert_file_grp_cardinality(self.input_file_grp, 1)
+        assert_file_grp_cardinality(self.output_file_grp, 1)
         
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
