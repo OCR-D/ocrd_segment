@@ -66,9 +66,12 @@ class ExtractAddress(Processor):
         images = list()
         annotations = list()
         cat2id = dict()
+        type2cat = dict()
         categories = self.parameter['categories']
         for cat in categories:
             cat2id[cat['name']] = cat['id']
+            if "type" in cat:
+                type2cat[cat['type']] = cat['name']
         
         # pylint: disable=attribute-defined-outside-init
         i = 0
@@ -96,7 +99,9 @@ class ExtractAddress(Processor):
             # iterate through all regions that could have lines
             for region in page.get_AllRegions(classes=['Text']):
                 subtype = ''
-                if region.get_type() == 'other' and region.get_custom():
+                if region.get_type() in type2cat:
+                    subtype = type2cat[region.get_type()]
+                elif region.get_type() == 'other' and region.get_custom():
                     subtype = region.get_custom().replace('subtype:', '')
                 if subtype.startswith('address'):
                     fill = 255
