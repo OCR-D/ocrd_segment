@@ -112,7 +112,7 @@ class ExtractLines(Processor):
                 file_grp=self.output_file_grp,
             )
 
-            
+            i = 0
             regions = itertools.chain.from_iterable(
                 [page.get_TextRegion()] +
                 [subregion.get_TextRegion() for subregion in page.get_TableRegion()])
@@ -127,7 +127,6 @@ class ExtractLines(Processor):
                 lines = region.get_TextLine()
                 if not lines:
                     LOG.warning("Region '%s' contains no text lines", region.id)
-                i = 0
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
