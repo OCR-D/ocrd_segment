@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import os
 import json
 import itertools
 import xlsxwriter
@@ -69,6 +70,7 @@ class ExtractLines(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -188,7 +190,6 @@ class ExtractLines(Processor):
                     else:
                         extension = '.raw'
 
-                    file_id = make_file_id(input_file, self.output_file_grp)
                     file_path = self.workspace.save_image_file(
                         line_image,
                         file_id + '_' + region.id + '_' + line.id + extension,
