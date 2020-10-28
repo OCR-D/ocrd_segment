@@ -3,13 +3,12 @@ from __future__ import absolute_import
 from shapely.geometry import Polygon
 
 from ocrd import Processor
-from ocrd_utils import getLogger, concat_padded
+from ocrd_utils import getLogger, assert_file_grp_cardinality
 from ocrd_modelfactory import page_from_file
 
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-evaluate'
-LOG = getLogger('processor.EvaluateSegmentation')
 
 class EvaluateSegmentation(Processor):
 
@@ -27,7 +26,11 @@ class EvaluateSegmentation(Processor):
         
         Compare region polygons with each other.
         """
+        LOG = getLogger('processor.EvaluateSegmentation')
 
+        assert_file_grp_cardinality(self.output_file_grp, 0, 'no output files are written')
+        # TODO assert_file_grp_cardinality only supports == check not <= or >=
+        # assert_file_grp_cardinality(self.input_file_grp, 2, 'GT and evaluation data')
         ifgs = self.input_file_grp.split(",") # input file groups
         if len(ifgs) < 2:
             raise Exception("need multiple input file groups to compare")
@@ -51,6 +54,7 @@ class EvaluateSegmentation(Processor):
                 self._compare_segmentation(gt_page, pred_page, input_file.pageId)
     
     def _compare_segmentation(self, gt_page, pred_page, page_id):
+        LOG = getLogger('processor.EvaluateSegmentation')
         gt_regions = gt_page.get_TextRegion()
         pred_regions = pred_page.get_TextRegion()
         if len(gt_regions) != len(pred_regions):
@@ -58,6 +62,7 @@ class EvaluateSegmentation(Processor):
                         page_id, len(gt_regions), len(pred_regions))
 
     def _zip_input_files(self, ifgs):
+        LOG = getLogger('processor.EvaluateSegmentation')
         ifts = list() # file tuples
         for page_id in ([self.page_id] if self.page_id else
                         self.workspace.mets.physical_pages):

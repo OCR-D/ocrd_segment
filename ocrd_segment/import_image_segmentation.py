@@ -7,7 +7,8 @@ import cv2
 
 from ocrd_utils import (
     getLogger,
-    concat_padded,
+    make_file_id,
+    assert_file_grp_cardinality,
     points_from_polygon,
     MIMETYPE_PAGE,
     pushd_popd,
@@ -17,8 +18,6 @@ from ocrd_modelfactory import page_from_file
 # pragma pylint: disable=unused-import
 # (region types will be referenced indirectly via globals())
 from ocrd_models.ocrd_page import (
-    MetadataItemType,
-    LabelsType, LabelType,
     CoordsType,
     TextRegionType,
     ImageRegionType,
@@ -46,7 +45,6 @@ from .config import OCRD_TOOL
 from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-from-masks'
-LOG = getLogger('processor.ImportImageSegmentation')
 
 class ImportImageSegmentation(Processor):
 
@@ -68,6 +66,10 @@ class ImportImageSegmentation(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ImportImageSegmentation')
+        assert_file_grp_cardinality(self.input_file_grp, 2, 'base and mask')
+        assert_file_grp_cardinality(self.output_file_grp, 1)
+
         colordict = self.parameter['colordict']
         if not colordict:
             LOG.info('Using default PAGE colordict')
@@ -78,8 +80,6 @@ class ImportImageSegmentation(Processor):
                     "GraphicRegion": GraphicsTypeSimpleType,
                     "ChartType": ChartTypeSimpleType}
         ifgs = self.input_file_grp.split(",") # input file groups
-        if len(ifgs) != 2:
-            raise Exception("need 2 input file groups (base and mask)")
         # collect input file tuples
         ifts = self.zip_input_files(ifgs) # input file tuples
         # process input file tuples
@@ -87,20 +87,8 @@ class ImportImageSegmentation(Processor):
             input_file, segmentation_file = ift
             LOG.info("processing page %s", input_file.pageId)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            self.add_metadata(pcgts)
             page = pcgts.get_Page()
-
-            # add metadata about this operation and its runtime parameters:
-            metadata = pcgts.get_Metadata() # ensured by from_file()
-            metadata.add_MetadataItem(
-                MetadataItemType(type_="processingStep",
-                                 name=self.ocrd_tool['steps'][0],
-                                 value=TOOL,
-                                 Labels=[LabelsType(
-                                     externalModel="ocrd-tool",
-                                     externalId="parameters",
-                                     Label=[LabelType(type_=name,
-                                                      value=self.parameter[name])
-                                            for name in self.parameter.keys()])]))
 
             # import mask image
             segmentation_filename = self.workspace.download_file(segmentation_file).local_filename
@@ -192,12 +180,8 @@ class ImportImageSegmentation(Processor):
                                            Coords=CoordsType(points=points_from_polygon(poly)))
                         # add region
                         getattr(page, 'add_%s' % classname)(region)
-                    
-            # Use input_file's basename for the new file -
-            # this way the files retain the same basenames:
-            file_id = input_file.ID.replace(ifgs[0], self.output_file_grp)
-            if file_id == input_file.ID:
-                file_id = concat_padded(self.output_file_grp, n)
+
+            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
@@ -209,6 +193,7 @@ class ImportImageSegmentation(Processor):
             
     def zip_input_files(self, ifgs):
         """Get a list (for each physical page) of tuples (for each input file group) of METS files."""
+        LOG = getLogger('processor.ImportImageSegmentation')
         ifts = list() # file tuples
         if self.page_id:
             pages = [self.page_id]

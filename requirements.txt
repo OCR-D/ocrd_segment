@@ -1,5 +1,5 @@
-ocrd >= 2.4.0
-shapely
+ocrd >= 2.16.2
+shapely >= 1.7.1
 scikit-image
 numpy
 xlsxwriter
