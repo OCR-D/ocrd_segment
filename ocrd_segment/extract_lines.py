@@ -104,6 +104,11 @@ class ExtractLines(Processor):
             url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
             workbook = xlsxwriter.Workbook(url)
             worksheet = workbook.add_worksheet()
+            bold = workbook.add_format({'bold': True})
+            worksheet.write('A1', 'ID', bold)
+            worksheet.write('B1', 'Text', bold)
+            worksheet.write('C1', 'Status', bold)
+            worksheet.write('D1', 'Image', bold)
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
@@ -127,7 +132,8 @@ class ExtractLines(Processor):
                 lines = region.get_TextLine()
                 if not lines:
                     LOG.warning("Region '%s' contains no text lines", region.id)
-                i = 0
+                i = 2
+                max_text_length = 0
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
@@ -203,15 +209,22 @@ class ExtractLines(Processor):
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
+                    
+                    # modify excel
                     worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id)
-                    worksheet.insert_image('B%d' % i, file_path)
-                    worksheet.write('C%d' % i, ltext)
+                    if len(ltext) > max_text_length:
+                        max_text_length = len(ltext)
+                        worksheet.set_column('B:B', max_text_length)
+                    worksheet.write('B%d' % i, ltext)
+                    worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                    worksheet.insert_image('D%d' % i, file_path, {'object_position': 1})
+
                     file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
-                    i += 1
+                    i += 4
 
             workbook.close()
 
