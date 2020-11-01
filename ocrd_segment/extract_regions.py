@@ -157,6 +157,7 @@ class ExtractRegions(Processor):
                         region_image,
                         file_id + '_' + region.id + extension,
                         self.output_file_grp,
+                        pageId=input_file.pageId,
                         mimetype=self.parameter['mimetype'])
                     self.workspace.add_file(
                         ID=file_id + '.json',
