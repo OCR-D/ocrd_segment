@@ -7,6 +7,7 @@ from scipy.ndimage import filters, morphology
 import cv2
 import numpy as np
 from shapely.geometry import asPolygon, Polygon, LineString
+from shapely.ops import unary_union
 
 from ocrd import Processor
 from ocrd_utils import (
@@ -22,6 +23,7 @@ from ocrd_utils import (
 )
 from ocrd_modelfactory import page_from_file
 from ocrd_models.ocrd_page import (
+    PageType,
     CoordsType,
     to_xml
 )
@@ -34,7 +36,11 @@ from ocrd_models.ocrd_page_generateds import (
     UnorderedGroupIndexedType,
     ReadingOrderType
 )
-from ocrd_validators.page_validator import PageValidator
+from ocrd_validators.page_validator import (
+    CoordinateConsistencyError,
+    CoordinateValidityError,
+    PageValidator
+)
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-repair'
@@ -77,8 +83,54 @@ class RepairSegmentation(Processor):
                                             page_textequiv_consistency='off',
                                             check_baseline=False)
             if not report.is_valid:
+                errors = report.errors
+                report.errors = []
+                for error in errors:
+                    if isinstance(error, (CoordinateConsistencyError,CoordinateValidityError)):
+                        if error.tag.endswith('Region'):
+                            element = next((region
+                                            for region in page.get_AllRegions()
+                                            if region.id == error.ID), None)
+                        elif error.tag == 'TextLine':
+                            element = next((line
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            if line.id == error.ID), None)
+                        elif error.tag == 'Word':
+                            element = next((word
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            for word in line.get_Word()
+                                            if word.id == error.ID), None)
+                        elif error.tag == 'Glyph':
+                            element = next((glyph
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            for word in line.get_Word()
+                                            for glyph in word.get_Glyph()
+                                            if glyph.id == error.ID), None)
+                        else:
+                            LOG.error("Unrepairable error for unknown segment type: %s",
+                                      str(error))
+                            report.add_error(error)
+                            continue
+                        if not element:
+                            LOG.error("Unrepairable error for unknown segment element: %s",
+                                      str(error))
+                            report.add_error(error)
+                            continue
+                        if isinstance(error, CoordinateConsistencyError):
+                            try:
+                                ensure_consistent(element)
+                            except Exception as e:
+                                LOG.error(str(e))
+                                report.add_error(error)
+                                continue
+                        else:
+                            ensure_valid(element)
+                        LOG.warning("Fixed %s for segment '%s'", error.__class__.__name__, element.id)
+            if not report.is_valid:
                 LOG.warning(report.to_xml())
-                # TODO: maybe skip this page if report contains any CoordinateValidityError
 
             #
             # plausibilize region segmentation (remove redundant text regions)
@@ -306,29 +358,29 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                 superreg.get_Coords().points = points_from_polygon(superpoly)
                 # FIXME should we merge/mix attributes and features?
                 if region.get_orientation() != superreg.get_orientation():
-                    LOG.warning('Merging region "%s" with orientation %f into "%s" with %f',
-                                region.id, region.get_orientation(),
-                                superreg.id, superreg.get_orientation())
+                    LOG.warning('Merging region "{}" with orientation {} into "{}" with {}'.format(
+                        region.id, region.get_orientation(),
+                        superreg.id, superreg.get_orientation()))
                 if region.get_type() != superreg.get_type():
-                    LOG.warning('Merging region "%s" with type %s into "%s" with %s',
-                                region.id, region.get_type(),
-                                superreg.id, superreg.get_type())
+                    LOG.warning('Merging region "{}" with type {} into "{}" with {}'.format(
+                        region.id, region.get_type(),
+                        superreg.id, superreg.get_type()))
                 if region.get_primaryScript() != superreg.get_primaryScript():
-                    LOG.warning('Merging region "%s" with primaryScript %s into "%s" with %s',
-                                region.id, region.get_primaryScript(),
-                                superreg.id, superreg.get_primaryScript())
+                    LOG.warning('Merging region "{}" with primaryScript {} into "{}" with {}'.format(
+                        region.id, region.get_primaryScript(),
+                        superreg.id, superreg.get_primaryScript()))
                 if region.get_primaryLanguage() != superreg.get_primaryLanguage():
-                    LOG.warning('Merging region "%s" with primaryLanguage %s into "%s" with %s',
-                                region.id, region.get_primaryLanguage(),
-                                superreg.id, superreg.get_primaryLanguage())
+                    LOG.warning('Merging region "{}" with primaryLanguage {} into "{}" with {}'.format(
+                        region.id, region.get_primaryLanguage(),
+                        superreg.id, superreg.get_primaryLanguage()))
                 if region.get_TextStyle():
-                    LOG.warning('Merging region "%s" with TextStyle %s into "%s" with %s',
-                                region.id, region.get_TextStyle(), # FIXME needs repr...
-                                superreg.id, superreg.get_TextStyle()) # ...to be informative
+                    LOG.warning('Merging region "{}" with TextStyle {} into "{}" with {}'.format(
+                        region.id, region.get_TextStyle(), # FIXME needs repr...
+                        superreg.id, superreg.get_TextStyle())) # ...to be informative
                 if region.get_TextEquiv():
-                    LOG.warning('Merging region "%s" with TextEquiv %s into "%s" with %s',
-                                region.id, region.get_TextEquiv(), # FIXME needs repr...
-                                superreg.id, superreg.get_TextEquiv()) # ...to be informative
+                    LOG.warning('Merging region "{}" with TextEquiv {} into "{}" with {}'.format(
+                        region.id, region.get_TextEquiv(), # FIXME needs repr...
+                        superreg.id, superreg.get_TextEquiv())) # ...to be informative
             wait_for_deletion.append(region)
             if region.id in reading_order:
                 regionref = reading_order[region.id]
@@ -348,6 +400,66 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
         if region.parent_object_:
             # remove in-place
             region.parent_object_.get_TextRegion().remove(region)
+
+def ensure_consistent(child):
+    """Clip segment element polygon to parent polygon range."""
+    points = child.get_Coords().points
+    polygon = polygon_from_points(points)
+    parent = child.parent_object_
+    childp = Polygon(polygon)
+    if isinstance(parent, PageType):
+        if parent.get_Border():
+            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+        else:
+            parentp = Polygon([[0, 0], [0, parent.get_imageHeight()],
+                               [parent.get_imageWidth(), parent.get_imageHeight()],
+                               [parent.get_imageWidth(), 0]])
+    else:
+        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+    # check if clipping is necessary
+    if childp.within(parentp):
+        return
+    # ensure input coords have valid paths (without self-intersection)
+    # (this can happen when shapes valid in floating point are rounded)
+    childp = make_valid(childp)
+    parentp = make_valid(parentp)
+    # clip to parent
+    interp = childp.intersection(parentp)
+    if interp.is_empty or interp.area == 0.0:
+        if hasattr(parent, 'pcGtsId'):
+            parent_id = parent.pcGtsId
+        elif hasattr(parent, 'imageFilename'):
+            parent_id = parent.imageFilename
+        else:
+            parent_id = parent.id
+        raise Exception("Segment '%s' does not intersect its parent '%s'" % (
+            child.id, parent_id))
+    if interp.type == 'GeometryCollection':
+        # heterogeneous result: filter zero-area shapes (LineString, Point)
+        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
+    if interp.type == 'MultiPolygon':
+        # homogeneous result: construct convex hull to connect
+        # FIXME: construct concave hull / alpha shape
+        interp = interp.convex_hull
+    if interp.minimum_clearance < 1.0:
+        # follow-up calculations will necessarily be integer;
+        # so anticipate rounding here and then ensure validity
+        interp = asPolygon(np.round(interp.exterior.coords))
+        interp = make_valid(interp)
+    polygon = interp.exterior.coords[:-1] # keep open
+    points = points_from_polygon(polygon)
+    child.get_Coords().set_points(points)
+
+def ensure_valid(element):
+    coords = element.get_Coords()
+    points = coords.points
+    polygon = polygon_from_points(points)
+    poly = Polygon(polygon)
+    if not poly.is_valid:
+        poly = make_valid(poly)
+        polygon = poly.exterior.coords[:-1]
+        points = points_from_polygon(polygon)
+        coords.set_points(points)
 
 def make_valid(polygon):
     """Ensures shapely.geometry.Polygon object is valid by repeated simplification"""
