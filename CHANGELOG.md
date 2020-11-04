@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.4]
+
+Changed:
+
+ * repair: fix coordinate consistency/validity errors
+
 ## [0.1.3] - 2020-09-24
 
 Changed:
