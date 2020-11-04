@@ -4,6 +4,17 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.5]
+
+Fixed:
+
+ * evaluate: adapt to `zip_input_files` in core
+
+Changed:
+
+ * replace-original: delegate to `repair.ensure_consistent`
+ * replace-page: new CLI (inverse or replace-original)
+
 ## [0.1.4]
 
 Changed:
@@ -50,6 +61,8 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.5]: ../../compare/v0.1.4...v0.1.5
+[0.1.4]: ../../compare/v0.1.3...v0.1.4
 [0.1.3]: ../../compare/v0.1.2...v0.1.3
 [0.1.2]: ../../compare/v0.1.1...v0.1.2
 [0.1.1]: ../../compare/v0.1.0...v0.1.1
