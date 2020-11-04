@@ -3,7 +3,11 @@ from __future__ import absolute_import
 from shapely.geometry import Polygon
 
 from ocrd import Processor
-from ocrd_utils import getLogger, assert_file_grp_cardinality
+from ocrd_utils import (
+    getLogger,
+    assert_file_grp_cardinality,
+    MIMETYPE_PAGE
+)
 from ocrd_modelfactory import page_from_file
 
 from .config import OCRD_TOOL
@@ -17,7 +21,6 @@ class EvaluateSegmentation(Processor):
         kwargs['version'] = OCRD_TOOL['version']
         super(EvaluateSegmentation, self).__init__(*args, **kwargs)
 
-
     def process(self):
         """Performs segmentation evaluation with Shapely on the workspace.
         
@@ -28,15 +31,16 @@ class EvaluateSegmentation(Processor):
         """
         LOG = getLogger('processor.EvaluateSegmentation')
 
-        assert_file_grp_cardinality(self.output_file_grp, 0, 'no output files are written')
+        # commented due to core#632
+        #assert_file_grp_cardinality(self.output_file_grp, 0, 'no output files are written')
         # TODO assert_file_grp_cardinality only supports == check not <= or >=
         # assert_file_grp_cardinality(self.input_file_grp, 2, 'GT and evaluation data')
         ifgs = self.input_file_grp.split(",") # input file groups
         if len(ifgs) < 2:
             raise Exception("need multiple input file groups to compare")
         
-        # get input files:
-        ifts = self._zip_input_files(ifgs) # input file tuples
+        # get input file tuples:
+        ifts = self.zip_input_files(mimetype=MIMETYPE_PAGE)
         for ift in ifts:
             pages = []
             for i, input_file in enumerate(ift):
@@ -45,13 +49,16 @@ class EvaluateSegmentation(Processor):
                 if not input_file:
                     # file/page was not found in this group
                     continue
-                LOG.info("INPUT FILE for '%s': '%s'", ifgs[i], input_file.ID)
+                LOG.info("INPUT FILE for '%s': '%s'", input_file.fileGrp, input_file.ID)
                 pcgts = page_from_file(self.workspace.download_file(input_file))
                 pages.append(pcgts.get_Page())
+            if not len(pages) > 1:
+                LOG.warning("Nothing to compare on page '%s'", ift[0].pageId)
+                continue
             gt_page = pages[0]
             for pred_page in pages[1:]:
                 #
-                self._compare_segmentation(gt_page, pred_page, input_file.pageId)
+                self._compare_segmentation(gt_page, pred_page, ift[0].pageId)
     
     def _compare_segmentation(self, gt_page, pred_page, page_id):
         LOG = getLogger('processor.EvaluateSegmentation')
@@ -60,34 +67,4 @@ class EvaluateSegmentation(Processor):
         if len(gt_regions) != len(pred_regions):
             LOG.warning("page '%s': %d vs %d text regions",
                         page_id, len(gt_regions), len(pred_regions))
-
-    def _zip_input_files(self, ifgs):
-        LOG = getLogger('processor.EvaluateSegmentation')
-        ifts = list() # file tuples
-        for page_id in ([self.page_id] if self.page_id else
-                        self.workspace.mets.physical_pages):
-            ifiles = list()
-            for ifg in ifgs:
-                LOG.debug("adding input file group %s to page %s", ifg, page_id)
-                files = self.workspace.mets.find_files(pageId=page_id, fileGrp=ifg)
-                if not files:
-                    # fall back for missing pageId via Page imageFilename:
-                    all_files = self.workspace.mets.find_files(fileGrp=ifg)
-                    for file_ in all_files:
-                        pcgts = page_from_file(self.workspace.download_file(file_))
-                        image_url = pcgts.get_Page().get_imageFilename()
-                        img_files = self.workspace.mets.find_files(url=image_url)
-                        if img_files and img_files[0].pageId == page_id:
-                            files = [file_]
-                            break
-                if not files:
-                    # other fallback options?
-                    LOG.error('found no page "%s" in file group %s',
-                              page_id, ifg)
-                    ifiles.append(None)
-                else:
-                    ifiles.append(files[0])
-            if ifiles[0]:
-                ifts.append(tuple(ifiles))
-        return ifts
-        
+        # FIXME: add actual layout alignment and comparison
