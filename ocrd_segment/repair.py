@@ -304,7 +304,7 @@ class RepairSegmentation(Processor):
                 region_polygon = coordinates_for_segment(polygon, page_image, page_coords)
             if region_polygon is not None:
                 LOG.info('Using new coordinates for region "%s"', region.id)
-                region.get_Coords().points = points_from_polygon(region_polygon)
+                region.get_Coords().set_points(points_from_polygon(region_polygon))
     
 def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_merging):
     LOG = getLogger('processor.RepairSegmentation')
@@ -355,7 +355,7 @@ def _plausibilize_group(regionspolys, rogroup, mark_for_deletion, mark_for_mergi
                     superpoly = asPolygon(np.round(superpoly.exterior.coords))
                 superpoly = make_valid(superpoly)
                 superpoly = superpoly.exterior.coords[:-1] # keep open
-                superreg.get_Coords().points = points_from_polygon(superpoly)
+                superreg.get_Coords().set_points(points_from_polygon(superpoly))
                 # FIXME should we merge/mix attributes and features?
                 if region.get_orientation() != superreg.get_orientation():
                     LOG.warning('Merging region "{}" with orientation {} into "{}" with {}'.format(
