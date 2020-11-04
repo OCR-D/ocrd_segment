@@ -1,9 +1,6 @@
 from __future__ import absolute_import
 
 import os.path
-import numpy as np
-from shapely.geometry import Polygon, asPolygon
-from shapely.ops import unary_union
 
 from ocrd_utils import (
     getLogger, concat_padded,
@@ -16,13 +13,13 @@ from ocrd_utils import (
 )
 from ocrd_models.ocrd_page import (
     TextRegionType,
-    PageType,
     to_xml
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
 from .config import OCRD_TOOL
+from .repair import ensure_consistent
 
 TOOL = 'ocrd-segment-replace-page'
 
@@ -78,26 +75,30 @@ class ReplacePage(Processor):
                 try:
                     _, page_coords, _ = self.workspace.image_from_page(page, page_id)
                     for region in page2.get_AllRegions():
-                        region_polygon = polygon_from_points(region.get_Coords().points)
+                        region_coords = region.get_Coords()
+                        region_polygon = polygon_from_points(region_coords.points)
                         region_polygon = coordinates_for_segment(region_polygon, None, page_coords)
-                        region_polygon = polygon_for_parent(region_polygon, page)
-                        region.get_Coords().points = points_from_polygon(region_polygon)
+                        region_coords.set_points(points_from_polygon(region_polygon))
+                        ensure_consistent(region)
                         if isinstance(region, TextRegionType):
                             for line in region.get_TextLine():
-                                line_polygon = polygon_from_points(line.get_Coords().points)
+                                line_coords = line.get_Coords()
+                                line_polygon = polygon_from_points(line_coords.points)
                                 line_polygon = coordinates_for_segment(line_polygon, None, page_coords)
-                                line_polygon = polygon_for_parent(line_polygon, region)
-                                line.get_Coords().points = points_from_polygon(line_polygon)
+                                line_coords.set_points(points_from_polygon(line_polygon))
+                                ensure_consistent(line)
                                 for word in line.get_Word():
-                                    word_polygon = polygon_from_points(word.get_Coords().points)
+                                    word_coords = word.get_Coords()
+                                    word_polygon = polygon_from_points(word_coords.points)
                                     word_polygon = coordinates_for_segment(word_polygon, None, page_coords)
-                                    word_polygon = polygon_for_parent(word_polygon, line)
-                                    word.get_Coords().points = points_from_polygon(word_polygon)
+                                    word_coords.set_points(points_from_polygon(word_polygon))
+                                    ensure_consistent(word)
                                     for glyph in word.get_Glyph():
-                                        glyph_polygon = polygon_from_points(glyph.get_Coords().points)
+                                        glyph_coords = glyph.get_Coords()
+                                        glyph_polygon = polygon_from_points(glyph_coords.points)
                                         glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
-                                        glyph_polygon = polygon_for_parent(glyph_polygon, word)
-                                        glyph.get_Coords().points = points_from_polygon(glyph_polygon)
+                                        glyph_coords.set_points(points_from_polygon(glyph_polygon))
+                                        ensure_consistent(glyph)
                 except:
                     LOG.error('invalid coordinates on page %s', page_id)
                     continue
@@ -159,59 +160,3 @@ class ReplacePage(Processor):
                 ifts.append(tuple(ifiles))
         return ifts
 
-def polygon_for_parent(polygon, parent):
-    """Clip polygon to parent polygon range.
-    
-    (Should be moved to ocrd_utils.coordinates_for_segment.)
-    """
-    childp = Polygon(polygon)
-    if isinstance(parent, PageType):
-        if parent.get_Border():
-            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
-        else:
-            parentp = Polygon([[0,0], [0,parent.get_imageHeight()],
-                               [parent.get_imageWidth(),parent.get_imageHeight()],
-                               [parent.get_imageWidth(),0]])
-    else:
-        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
-    # check if clipping is necessary
-    if childp.within(parentp):
-        return polygon
-    # ensure input coords have valid paths (without self-intersection)
-    # (this can happen when shapes valid in floating point are rounded)
-    childp = make_valid(childp)
-    parentp = make_valid(parentp)
-    # clip to parent
-    interp = childp.intersection(parentp)
-    # post-process
-    if interp.is_empty or interp.area == 0.0:
-        # FIXME: we need a better strategy against this
-        raise Exception("intersection of would-be segment with parent is empty")
-    if interp.type == 'GeometryCollection':
-        # heterogeneous result: filter zero-area shapes (LineString, Point)
-        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
-    if interp.type == 'MultiPolygon':
-        # homogeneous result: construct convex hull to connect
-        # FIXME: construct concave hull / alpha shape
-        interp = interp.convex_hull
-    if interp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        interp = asPolygon(np.round(interp.exterior.coords))
-        interp = make_valid(interp)
-    return interp.exterior.coords[:-1] # keep open
-
-def make_valid(polygon):
-    for split in range(1, len(polygon.exterior.coords)-1):
-        if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
-            break
-        # simplification may not be possible (at all) due to ordering
-        # in that case, try another starting point
-        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
-    for tolerance in range(1, int(polygon.area)):
-        if polygon.is_valid:
-            break
-        # simplification may require a larger tolerance
-        polygon = polygon.simplify(tolerance)
-    return polygon
-    
