@@ -18,6 +18,7 @@ from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
 from .config import OCRD_TOOL
+from .repair import ensure_consistent
 
 TOOL = 'ocrd-segment-replace-original'
 
@@ -80,17 +81,21 @@ class ReplaceOriginal(Processor):
             if adapt_coords:
                 for region in page.get_AllRegions():
                     region_polygon = coordinates_of_segment(region, page_image, page_coords)
-                    region.get_Coords().points = points_from_polygon(region_polygon)
+                    region.get_Coords().set_points(points_from_polygon(region_polygon))
+                    ensure_consistent(region)
                     if isinstance(region, TextRegionType):
                         for line in region.get_TextLine():
                             line_polygon = coordinates_of_segment(line, page_image, page_coords)
-                            line.get_Coords().points = points_from_polygon(line_polygon)
+                            line.get_Coords().set_points(points_from_polygon(line_polygon))
+                            ensure_consistent(line)
                             for word in line.get_Word():
                                 word_polygon = coordinates_of_segment(word, page_image, page_coords)
-                                word.get_Coords().points = points_from_polygon(word_polygon)
+                                word.get_Coords().set_points(points_from_polygon(word_polygon))
+                                ensure_consistent(word)
                                 for glyph in word.get_Glyph():
                                     glyph_polygon = coordinates_of_segment(glyph, page_image, page_coords)
-                                    glyph.get_Coords().points = points_from_polygon(glyph_polygon)
+                                    glyph.get_Coords().set_points(points_from_polygon(glyph_polygon))
+                                    ensure_consistent(glyph)
 
             # update METS (add the PAGE file):
             out = self.workspace.add_file(
