@@ -55,9 +55,8 @@ class ReplacePage(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
         adapt_coords = self.parameter['transform_coordinates']
         
-        ifgs = self.input_file_grp.split(",") # input file groups
         # collect input file tuples
-        ifts = self.zip_input_files(ifgs) # input file tuples
+        ifts = self.zip_input_files(mimetype=MIMETYPE_PAGE) # input file tuples
         # process input file tuples
         for n, ift in enumerate(ifts):
             input_file, page_file = ift
@@ -131,31 +130,3 @@ class ReplacePage(Processor):
                 content=to_xml(pcgts))
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
-    
-    def zip_input_files(self, ifgs):
-        """Get a list (for each physical page) of tuples (for each input file group) of METS files."""
-        ifts = list() # file tuples
-        if self.page_id:
-            pages = [self.page_id]
-        else:
-            pages = self.workspace.mets.physical_pages
-        for page_id in pages:
-            ifiles = list()
-            for ifg in ifgs:
-                #LOG.debug("adding input file group %s to page %s", ifg, page_id)
-                files = self.workspace.mets.find_files(pageId=page_id, fileGrp=ifg)
-                # find_files cannot filter by MIME type yet
-                files = [file_ for file_ in files if (
-                    file_.mimetype.startswith('image/') or
-                    file_.mimetype == MIMETYPE_PAGE)]
-                if not files:
-                    # other fallback options?
-                    LOG.error('found no page %s in file group %s',
-                              page_id, ifg)
-                    ifiles.append(None)
-                else:
-                    ifiles.append(files[0])
-            if ifiles[0]:
-                ifts.append(tuple(ifiles))
-        return ifts
-
