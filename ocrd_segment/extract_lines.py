@@ -1,7 +1,9 @@
 from __future__ import absolute_import
 
+import os
 import json
 import itertools
+import xlsxwriter
 
 from ocrd_utils import (
     getLogger,
@@ -68,6 +70,7 @@ class ExtractLines(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -83,7 +86,27 @@ class ExtractLines(Processor):
             else:
                 dpi = None
             ptype = page.get_type()
-            
+
+            # add excel file
+            LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
+            url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
+            workbook = xlsxwriter.Workbook(url)
+            worksheet = workbook.add_worksheet()
+            bold = workbook.add_format({'bold': True})
+            worksheet.write('A1', 'ID', bold)
+            worksheet.write('B1', 'Text', bold)
+            worksheet.write('C1', 'Status', bold)
+            worksheet.write('D1', 'Image', bold)
+            self.workspace.add_file(
+                ID=file_id,
+                mimetype='application/vnd.ms-excel',
+                pageId=page_id,
+                url=url,
+                file_grp=self.output_file_grp,
+            )
+
+            i = 2
+            max_text_length = 0
             regions = itertools.chain.from_iterable(
                 [page.get_TextRegion()] +
                 [subregion.get_TextRegion() for subregion in page.get_TableRegion()])
@@ -167,15 +190,27 @@ class ExtractLines(Processor):
                     else:
                         extension = '.raw'
 
-                    file_id = make_file_id(input_file, self.output_file_grp)
                     file_path = self.workspace.save_image_file(
                         line_image,
                         file_id + '_' + region.id + '_' + line.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
+                    
+                    # modify excel
+                    worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id)
+                    if len(ltext) > max_text_length:
+                        max_text_length = len(ltext)
+                        worksheet.set_column('B:B', max_text_length)
+                    worksheet.write('B%d' % i, ltext)
+                    worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                    worksheet.insert_image('D%d' % i, file_path, {'object_position': 1})
+
                     file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
+                    i += 4
+
+            workbook.close()

@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw
 from shapely.geometry import Polygon
 from shapely.validation import explain_validity
 from shapely.prepared import prep
+import xlsxwriter
 
 from ocrd_utils import (
     getLogger,
@@ -181,7 +182,7 @@ class ExtractPages(Processor):
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id,
                                                        self.output_file_grp,
-                                                       page_id=page_id,
+                                                       page_id=input_file.pageId,
                                                        mimetype=self.parameter['mimetype'])
             try:
                 page_image_bin, _, _ = self.workspace.image_from_page(
@@ -191,7 +192,7 @@ class ExtractPages(Processor):
                 self.workspace.save_image_file(page_image_bin,
                                                file_id + '.bin',
                                                bin_image_grp,
-                                               page_id=page_id)
+                                               page_id=input_file.pageId)
             except Exception as err:
                 if err.args[0].startswith('Found no AlternativeImage'):
                     LOG.warning('Page "%s" has no binarized images, skipping .bin', page_id)
@@ -294,7 +295,7 @@ class ExtractPages(Processor):
             self.workspace.save_image_file(page_image_dbg,
                                            file_id + '.dbg',
                                            dbg_image_grp,
-                                           page_id=page_id,
+                                           page_id=input_file.pageId,
                                            mimetype=self.parameter['mimetype'])
             self.workspace.add_file(
                 ID=file_id + '.json',
