@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Fixed:
+
+ * repair: also fix negative coords, also on page level
+
 ## [0.1.5]
 
 Fixed:
