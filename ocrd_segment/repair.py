@@ -87,7 +87,9 @@ class RepairSegmentation(Processor):
                 report.errors = []
                 for error in errors:
                     if isinstance(error, (CoordinateConsistencyError,CoordinateValidityError)):
-                        if error.tag.endswith('Region'):
+                        if error.tag == 'Page':
+                            element = page.get_Border()
+                        elif error.tag.endswith('Region'):
                             element = next((region
                                             for region in page.get_AllRegions()
                                             if region.id == error.ID), None)
@@ -128,7 +130,8 @@ class RepairSegmentation(Processor):
                                 continue
                         else:
                             ensure_valid(element)
-                        LOG.warning("Fixed %s for segment '%s'", error.__class__.__name__, element.id)
+                        LOG.warning("Fixed %s for %s '%s'", error.__class__.__name__,
+                                    error.tag, error.ID)
             if not report.is_valid:
                 LOG.warning(report.to_xml())
 
@@ -454,6 +457,7 @@ def ensure_valid(element):
     coords = element.get_Coords()
     points = coords.points
     polygon = polygon_from_points(points)
+    polygon = np.maximum(0, polygon).tolist()
     poly = Polygon(polygon)
     if not poly.is_valid:
         poly = make_valid(poly)
