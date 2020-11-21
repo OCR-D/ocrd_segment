@@ -193,7 +193,7 @@ class ExtractAddress(Processor):
             ID='id' + file_id,
             file_grp=json_file_grp,
             pageId=None,
-            local_filename=os.path.join(json_file_grp, file_id + '.json'),
+            local_filename=file_id + '.json',
             mimetype='application/json',
             content=json.dumps(
                 {'categories': categories,
