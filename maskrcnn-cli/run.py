@@ -10,7 +10,7 @@ from matplotlib.patches import Rectangle
 
 import numpy as np
 
-from layout_dataset import LayoutDataset, LayoutTrainConfig, LayoutPredictConfig
+from .layout_dataset import LayoutDataset, LayoutTrainConfig, LayoutPredictConfig
 from mrcnn.visualize import display_instances
 from mrcnn.utils import extract_bboxes
 from mrcnn.utils import compute_ap

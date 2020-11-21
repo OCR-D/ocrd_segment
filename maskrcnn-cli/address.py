@@ -729,7 +729,7 @@ def store_coco(coco, filename):
 ############################################################
 
 
-if __name__ == '__main__':
+def main():
     import argparse
 
     # Parse command line arguments
@@ -938,4 +938,5 @@ if __name__ == '__main__':
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
 
-    
+if __name__ == '__main__':
+    main()

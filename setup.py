@@ -2,6 +2,10 @@
 """
 Installs:
 
+    - maskrcnn-address
+    - maskrcnn-formdata
+    - maskrcnn-publaynet
+    - maskrcnn-run
     - ocrd-segment-repair
     - ocrd-segment-from-masks
     - ocrd-segment-from-coco
@@ -41,6 +45,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'maskrcnn-address=maskrcnn_cli.address:main',
+            'maskrcnn-formdata=maskrcnn_cli.formdata:main',
+            'maskrcnn-publaynet=maskrcnn_cli.publaynet:main',
+            'maskrcnn-run=maskrcnn_cli.run:cli',
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
             'ocrd-segment-from-masks=ocrd_segment.cli:ocrd_segment_from_masks',
             'ocrd-segment-from-coco=ocrd_segment.cli:ocrd_segment_from_coco',
