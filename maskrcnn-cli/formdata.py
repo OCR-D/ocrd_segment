@@ -760,6 +760,10 @@ def main():
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path of the address dataset annotations (randomly split into training and validation)')
+    train_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                              help='ratio of trainset in random train/test split (default=0.7 equals 70%)')
+    train_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                              help='seed value for random train/test split')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
     train_parser.add_argument('--depth', required=False, default=None, metavar="DEPTH-SPEC",
@@ -769,6 +773,10 @@ def main():
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
     evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
+    evaluate_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                                 help='ratio of trainset in random train/test split (default=0.7 equals 70%)')
+    evaluate_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                                 help='seed value for random train/test split')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                                  help='Create plot files from prediction under *.SUFFIX.png')
     test_parser = subparsers.add_parser('test', help="Apply a model on image files, adding COCO annotations")
@@ -790,6 +798,8 @@ def main():
     if args.command in ['evaluate', 'test']:
         print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
+    if args.command in ['evaluate', 'train']:
+        print("Split: ", args.split)
     if args.command == 'test':
         print("Files: ", len(args.files))
     print("Limit: ", args.limit)
@@ -842,13 +852,13 @@ def main():
         dataset_val = CocoDataset()
         for dataset in args.dataset:
             coco = COCO(dataset)
-            np.random.seed(42)
+            np.random.seed(args.seed)
             limit = args.limit
             if not limit or limit > len(coco.imgs):
                 limit = len(coco.imgs)
             indexes = np.random.permutation(limit)
-            trainset = indexes[:int(0.7*limit)]
-            valset = indexes[int(0.7*limit):]
+            trainset = indexes[:int(args.split*limit)]
+            valset = indexes[int(args.split*limit):]
             if args.command == "train":
                 dataset_train.load_coco(coco, #os.path.dirname(args.dataset),
                                         limit=trainset)
