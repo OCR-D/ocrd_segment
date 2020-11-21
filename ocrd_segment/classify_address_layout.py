@@ -116,9 +116,10 @@ class ClassifyAddressLayout(Processor):
         Next, retrieve the page image according to the layout annotation (from
         the alternative image of the page, or by cropping at Border and deskewing
         according to @orientation) in raw RGB form. Represent it as an array with
-        an alpha channel where the text lines are marked according to their class.
+        2 extra channels, one marking text lines, the other marking text lines
+        containing address components.
         
-        Pass that array to a visual address detector model, and retrieve region
+        Pass that array to the visual address detector model, and retrieve region
         candidates as tuples of region class, bounding box, and pixel mask.
         Postprocess the mask and bbox to ensure no words are cut off accidentally.
         
@@ -159,13 +160,10 @@ class ClassifyAddressLayout(Processor):
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
             def mark_line(line):
-                text_class = line.get_custom()
-                if not text_class:
-                    return
+                text_class = line.get_custom() or ''
                 text_class = text_class.replace('subtype: ', '')
-                if (not text_class.startswith('ADDRESS_') or
-                    text_class == 'ADDRESS_NONE'):
-                    return
+                if not text_class.startswith('ADDRESS_'):
+                    text_class = 'ADDRESS_NONE'
                 # add to mask image (alpha channel for input image)
                 polygon = coordinates_of_segment(line, page_image, page_coords)
                 # draw line mask:
