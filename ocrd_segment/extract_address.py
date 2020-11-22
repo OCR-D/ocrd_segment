@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 
 import json
-import itertools
-import os.path
 from shapely.geometry import Polygon
 from PIL import Image, ImageDraw
 
@@ -199,4 +197,3 @@ class ExtractAddress(Processor):
                 {'categories': categories,
                  'images': images,
                  'annotations': annotations}))
-

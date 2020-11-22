@@ -746,7 +746,7 @@ def main():
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path of the address dataset annotations (randomly split into training and validation)')
     train_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
-                              help='ratio of trainset in random train/test split (default=0.7 equals 70%)')
+                              help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
     train_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
                               help='seed value for random train/test split')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
@@ -759,7 +759,7 @@ def main():
     evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
     evaluate_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
-                                 help='ratio of trainset in random train/test split (default=0.7 equals 70%)')
+                                 help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
     evaluate_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
                                  help='seed value for random train/test split')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",

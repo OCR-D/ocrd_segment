@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import json
-import itertools
 import os.path
 from shapely.geometry import Polygon
 from PIL import Image, ImageDraw
@@ -9,7 +8,6 @@ from PIL import Image, ImageDraw
 from ocrd_utils import (
     getLogger,
     make_file_id,
-    concat_padded,
     assert_file_grp_cardinality,
     coordinates_of_segment,
     xywh_from_polygon
@@ -191,4 +189,3 @@ class ExtractFormData(Processor):
                 {'categories': categories,
                  'images': images,
                  'annotations': annotations}))
-

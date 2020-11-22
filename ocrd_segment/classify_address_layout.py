@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import json
 import os.path
 import os
 import numpy as np
@@ -26,8 +25,6 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
-    MetadataItemType,
-    LabelsType, LabelType,
     to_xml, TextRegionType,
     CoordsType
 )
@@ -38,7 +35,7 @@ from ocrd_models.ocrd_page_generateds import (
     OrderedGroupIndexedType,
     UnorderedGroupType,
     UnorderedGroupIndexedType,
-    PageType, TextEquivType
+    TextEquivType
 )
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
