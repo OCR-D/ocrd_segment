@@ -252,8 +252,9 @@ class ClassifyAddressLayout(Processor):
                 if not cat:
                     raise Exception('detected region for background class')
                 if score < best[cat]:
-                    # ignore non-best
-                    continue
+                    LOG.debug("Degrading instance for class %d with non-maximum score to class 3",
+                              preds['class_ids'][i])
+                    cat = 3
                 name = self.categories[cat]
                 mask = preds['masks'][:,:,i]
                 bbox = np.around(preds['rois'][i])
