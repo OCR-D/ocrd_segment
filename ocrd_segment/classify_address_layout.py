@@ -3,8 +3,9 @@ from __future__ import absolute_import
 import os.path
 import os
 import numpy as np
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, asPolygon
 from shapely.prepared import prep
+from shapely.ops import unary_union
 import cv2
 from PIL import Image, ImageDraw
 
@@ -25,7 +26,9 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
-    to_xml, TextRegionType,
+    to_xml,
+    TextRegionType,
+    PageType,
     CoordsType
 )
 from ocrd_models.ocrd_page_generateds import (
@@ -148,9 +151,26 @@ class ClassifyAddressLayout(Processor):
                     dpi = round(dpi * 2.54)
             else:
                 dpi = None
-            # page_image_binarized, _, _ = self.workspace.image_from_page(
-            #     page, page_id,
-            #     feature_selector='binarized')
+            page_image_binarized, _, _ = self.workspace.image_from_page(
+                page, page_id,
+                feature_selector='binarized')
+            
+            page_array_bin = np.array(page_image_binarized)
+            if page_array_bin.ndim == 3:
+                if page_array_bin.shape[-1] == 3:
+                    page_array_bin = np.mean(page_array_bin, 2)
+                elif page_array_bin.shape[-1] == 4:
+                    dtype = page_array_bin.dtype
+                    drange = np.iinfo(dtype).max
+                    alpha = np.array(page_array_bin[:,:,3], np.float) / drange
+                    color = page_array_bin[:,:,:3]
+                    color = color * alpha + drange * (1.0 - alpha)
+                    page_array_bin = np.array(np.mean(color, 2), dtype=dtype)
+                else:
+                    page_array_bin = page_array_bin[:,:,0]
+            threshold = 0.5 * (page_array_bin.min() + page_array_bin.max())
+            page_array_bin = np.array(page_array_bin <= threshold, np.bool)
+            _, components  = cv2.connectedComponents(page_array_bin.astype(np.uint8))
             
             # ensure RGB (if raw was merely grayscale)
             page_image = page_image.convert(mode='RGB')
@@ -207,7 +227,7 @@ class ClassifyAddressLayout(Processor):
                 for j in range(i + 1, len(preds['class_ids'])):
                     imask = preds['masks'][:,:,i]
                     jmask = preds['masks'][:,:,j]
-                    if np.any(imask * jmask):
+                    if np.count_nonzero(imask * jmask) / np.count_nonzero(imask + jmask) > 0.5:
                         worse.append(i if preds['scores'][i] < preds['scores'][j] else j)
             best = np.zeros(4)
             for i in range(len(preds['class_ids'])):
@@ -240,8 +260,21 @@ class ClassifyAddressLayout(Processor):
                 area = np.count_nonzero(mask)
                 scale = int(np.sqrt(area)//10)
                 scale = scale + (scale+1)%2 # odd
-                LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
-                          name, str(bbox), area, score)
+                LOG.debug("post-processing prediction for '%s' at %s area %d scale %d score %f",
+                          name, str(bbox), area, scale, score)
+                # fill pixel mask from (padded) inner bboxes
+                complabels = np.unique(mask * components)
+                for label in complabels:
+                    if not label:
+                        continue # bg/white
+                    left, top, w, h = cv2.boundingRect((components==label).astype(np.uint8))
+                    right = left + w
+                    bottom = top + h
+                    left = max(0, left - 4)
+                    top = max(0, top - 4)
+                    right = min(page_image.width, right + 4)
+                    bottom = min(page_image.height, bottom + 4)
+                    mask[top:bottom, left:right] = mask.max()
                 # dilate and find (outer) contour
                 contours = [None, None]
                 for _ in range(10):
@@ -252,17 +285,15 @@ class ClassifyAddressLayout(Processor):
                     contours, _ = cv2.findContours(mask.astype(np.uint8),
                                                    cv2.RETR_EXTERNAL,
                                                    cv2.CHAIN_APPROX_SIMPLE)
-                region_poly = Polygon(contours[0][:,0,:]) # already in x,y order
-                for tolerance in range(2, int(area)):
-                    region_poly = region_poly.simplify(tolerance)
-                    if region_poly.is_valid:
-                        break
-                region_polygon = region_poly.exterior.coords[:-1] # keep open
+                region_polygon = contours[0][:,0,:] # already in x,y order
                 #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
-                # TODO: post-process (closure/majority in binarized, then clip to parent/border)
-                # annotate new region
                 region_polygon = coordinates_for_segment(region_polygon,
                                                          page_image, page_coords)
+                region_polygon = polygon_for_parent(region_polygon, page)
+                if region_polygon is None:
+                    LOG.warning('Ignoring extant region for class %s', category)
+                    continue
+                # annotate new region
                 region_coords = CoordsType(points_from_polygon(region_polygon), conf=score)
                 region_id = 'addressregion%02d' % (i+1)
                 region = TextRegionType(id=region_id,
@@ -273,11 +304,12 @@ class ClassifyAddressLayout(Processor):
                          name, region_id, page_id)
                 has_address = False
                 # remove overlapping existing regions
+                region_poly = Polygon(coordinates_of_segment(region, page_image, page_coords))
                 for neighbour, neighpoly in zip(allregions, allpolys):
                     if neighbour in oldregions:
                         continue
                     if (neighpoly.within(region_poly) or
-                        neighpoly.within(region_poly.buffer(4*scale)) or
+                        neighpoly.within(region_poly.buffer(scale)) or
                         (neighpoly.intersects(region_poly) and (
                             neighpoly.context.almost_equals(region_poly) or
                             neighpoly.context.intersection(region_poly).area > 0.8 * neighpoly.context.area))):
@@ -329,6 +361,7 @@ class ClassifyAddressLayout(Processor):
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
                                      file_id + '.xml')
+            pcgts.set_pcGtsId(file_id)
             out = self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
@@ -338,6 +371,61 @@ class ClassifyAddressLayout(Processor):
                 content=to_xml(pcgts))
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
+
+def polygon_for_parent(polygon, parent):
+    """Clip polygon to parent polygon range.
+    
+    (Should be moved to ocrd_utils.coordinates_for_segment.)
+    """
+    childp = Polygon(polygon)
+    if isinstance(parent, PageType):
+        if parent.get_Border():
+            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+        else:
+            parentp = Polygon([[0,0], [0,parent.get_imageHeight()],
+                               [parent.get_imageWidth(),parent.get_imageHeight()],
+                               [parent.get_imageWidth(),0]])
+    else:
+        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+    # ensure input coords have valid paths (without self-intersection)
+    # (this can happen when shapes valid in floating point are rounded)
+    childp = make_valid(childp)
+    parentp = make_valid(parentp)
+    # check if clipping is necessary
+    if childp.within(parentp):
+        return childp.exterior.coords[:-1]
+    # clip to parent
+    interp = childp.intersection(parentp)
+    # post-process
+    if interp.is_empty or interp.area == 0.0:
+        return None
+    if interp.type == 'GeometryCollection':
+        # heterogeneous result: filter zero-area shapes (LineString, Point)
+        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
+    if interp.type == 'MultiPolygon':
+        # homogeneous result: construct convex hull to connect
+        # FIXME: construct concave hull / alpha shape
+        interp = interp.convex_hull
+    if interp.minimum_clearance < 1.0:
+        # follow-up calculations will necessarily be integer;
+        # so anticipate rounding here and then ensure validity
+        interp = asPolygon(np.round(interp.exterior.coords))
+        interp = make_valid(interp)
+    return interp.exterior.coords[:-1] # keep open
+
+def make_valid(polygon):
+    for split in range(1, len(polygon.exterior.coords)-1):
+        if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
+            break
+        # simplification may not be possible (at all) due to ordering
+        # in that case, try another starting point
+        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
+    for tolerance in range(1, int(polygon.area)):
+        if polygon.is_valid:
+            break
+        # simplification may require a larger tolerance
+        polygon = polygon.simplify(tolerance)
+    return polygon
 
 def page_get_reading_order(ro, rogroup):
     """Add all elements from the given reading order group to the given dictionary.
