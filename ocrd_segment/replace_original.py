@@ -11,6 +11,7 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
+    AlternativeImageType,
     TextRegionType,
     to_xml
 )
@@ -77,6 +78,16 @@ class ReplaceOriginal(Processor):
                                                        mimetype='image/png')
             # replace original image
             page.set_imageFilename(file_path)
+            # remove all coordinate-sensitive page-level annotations
+            page.set_Border(None)
+            page.set_orientation(None)
+            # also add image as derived image (in order to preserve image features)
+            # (but exclude coordinate-sensitive features that have already been applied over the "original")
+            features = ','.join(filter(lambda f: f not in [
+                "cropped", "deskewed", "rotated-90", "rotated-180", "rotated-270"],
+                                       page_coords['features'].split(",")))
+            page.add_AlternativeImage(AlternativeImageType(
+                filename=file_path, comments=features))
             # adjust all coordinates
             if adapt_coords:
                 for region in page.get_AllRegions():

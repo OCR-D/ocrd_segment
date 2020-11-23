@@ -419,13 +419,13 @@ def ensure_consistent(child):
                                [parent.get_imageWidth(), 0]])
     else:
         parentp = Polygon(polygon_from_points(parent.get_Coords().points))
-    # check if clipping is necessary
-    if childp.within(parentp):
-        return
     # ensure input coords have valid paths (without self-intersection)
     # (this can happen when shapes valid in floating point are rounded)
     childp = make_valid(childp)
     parentp = make_valid(parentp)
+    # check if clipping is necessary
+    if childp.within(parentp):
+        return
     # clip to parent
     interp = childp.intersection(parentp)
     if interp.is_empty or interp.area == 0.0:
