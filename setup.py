@@ -19,6 +19,9 @@ Installs:
     - ocrd-segment-extract-formdata
     - ocrd-segment-classify-address-text
     - ocrd-segment-classify-address-layout
+    - ocrd-segment-classify-formdata-dummy
+    - ocrd-segment-classify-formdata-text
+    - ocrd-segment-classify-formdata-layout
 """
 import codecs
 
@@ -62,6 +65,9 @@ setup(
             'ocrd-segment-extract-formdata=ocrd_segment.cli:ocrd_segment_extract_formdata',
             'ocrd-segment-classify-address-text=ocrd_segment.cli:ocrd_segment_classify_address_text',
             'ocrd-segment-classify-address-layout=ocrd_segment.cli:ocrd_segment_classify_address_layout',
+            'ocrd-segment-classify-formdata-dummy=ocrd_segment.cli:ocrd_segment_classify_formdata_dummy',
+            'ocrd-segment-classify-formdata-text=ocrd_segment.cli:ocrd_segment_classify_formdata_text',
+            'ocrd-segment-classify-formdata-layout=ocrd_segment.cli:ocrd_segment_classify_formdata_layout',
         ]
     },
 )

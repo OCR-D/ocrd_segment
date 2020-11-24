@@ -79,6 +79,45 @@ ALPHA_CTXT_CHANNEL = 255
 #  Configurations
 ############################################################
 
+FIELDS = [None,
+          "abrechnungszeitraum",
+          "nutzungszeitraum",
+          "gebaeude_heizkosten_raumwaerme",
+          "gebaeude_heizkosten_warmwasser",
+          "anteil_grundkost_heizen", # "prozent_grundkosten_raumwaerme"
+          "anteil_grundkost_warmwasser", # "prozent_grundkosten_warmwasser"
+          "energietraeger", # not used
+          "energietraeger_verbrauch",
+          "energietraeger_einheit",
+          "energietraeger_kosten",
+          "gebaeude_flaeche",
+          "wohnung_flaeche",
+          "gebaeude_verbrauchseinheiten",
+          "wohnung_verbrauchseinheiten",
+          "gebaeude_warmwasser_verbrauch",
+          "gebaeude_warmwasser_verbrauch_einheit",
+          "kaltwasser_fuer_warmwasser",
+          "wohnung_warmwasser_verbrauch",
+          "wohnung_warmwasser_verbrauch_einheit",
+          "gebaeude_grundkost_heizen", # "gebaeude_grundkosten_raumwaerme",
+          "gebaeude_grundkost_warmwasser", # "gebaeude_grundkosten_warmwasser",
+          # "gebaeude_heizkosten_gesamt",
+          # "anteil_verbrauchskosten_heizen", # "prozent_verbrauchskosten_raumwaerme"
+          # "anteil_verbrauchskosten_warmwasser", # "prozent_verbrauchskosten_warmwasser"
+          # "gebaeude_verbrauchskosten_raumwaerme",
+          # "gebaeude_verbrauchskosten_warmwasser",
+          # "wohnung_heizkosten_gesamt",
+          # "wohnung_grundkosten_raumwaerme",
+          # "wohnung_verbrauchskosten_raumwaerme",
+          # "wohnung_grundkosten_warmwasser",
+          # "wohnung_verbrauchskosten_warmwasser",
+          # "warmwasser_temperatur",
+          #
+          ## "nebenkosten_betriebsstrom",
+          ## "nebenkosten_wartung_heizung",
+          ## "nebenkosten_messgeraet_miete",
+          ## "nebenkosten_messung_abrechnung",
+]
 
 class CocoConfig(Config):
     """Configuration for training on MS COCO.
@@ -96,7 +135,7 @@ class CocoConfig(Config):
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 19 + 1  # formdata has 19 classes
+    NUM_CLASSES = 21 + 1  # formdata has 21 classes
 
     # ...settings to reduce GPU memory requirements...
     
@@ -339,26 +378,7 @@ class CocoDataset(utils.Dataset):
     def __init__(self):
         super().__init__()
         # Add classes
-        for i, name in enumerate([None,
-                                  "abrechnungszeitraum",
-                                  "nutzungszeitraum",
-                                  "gebaeude_heizkosten_raumwaerme",
-                                  "gebaeude_heizkosten_warmwasser",
-                                  "anteil_grundkost_heizen",
-                                  "anteil_grundkost_warmwasser",
-                                  "energietraeger",
-                                  "energietraeger_verbrauch",
-                                  "energietraeger_einheit",
-                                  "energietraeger_kosten",
-                                  "gebaeude_flaeche",
-                                  "wohnung_flaeche",
-                                  "gebaeude_verbrauchseinheiten",
-                                  "wohnung_verbrauchseinheiten",
-                                  "gebaeude_warmwasser_verbrauch",
-                                  "gebaeude_warmwasser_verbrauch_einheit",
-                                  "kaltwasser_fuer_warmwasser",
-                                  "wohnung_warmwasser_verbrauch",
-                                  "wohnung_warmwasser_verbrauch_einheit"]):
+        for i, name in enumerate(FIELDS):
             if name:
                 # use class name as source so we can train on each class dataset
                 # after another while only one class is active at a time
