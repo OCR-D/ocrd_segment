@@ -53,8 +53,19 @@
       "parameters": {
         "categories": {
           "type": "array",
-          "default": [],
-          "description": "List of target classes in COCO format (dict with numeric `id`, string `name` and string `source`, string `type`). IDs may start with zero and collide with other data sources. Categories are extracted from `TextRegion/@type=type` if given or `TextRegion[@type=other]/@custom[substring-after(.,'subtype:')]` otherwise."
+          "default": [{"id": 1,
+                       "name": "address-rcpt",
+                       "source": "IAO",
+                       "type": "paragraph"},
+                      {"id": 2,
+                       "name": "address-sndr",
+                       "source": "IAO",
+                       "type": "page-number"},
+                      {"id": 3,
+                       "name": "address-contact",
+                       "source": "IAO",
+                       "type": "marginalia"}],
+          "description": "List of target classes in COCO format (dict with numeric `id`, string `name` and string `source`, string `type`). IDs may start with zero and collide with other data sources. Categories are extracted from `TextRegion/@type=type` if given or `TextRegion[@type=other]/@custom[substring-after(.,'subtype:')]` or `TextLine/@custom[substring-after(.,'subtype:')]` otherwise."
         }
       }
     },

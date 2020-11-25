@@ -113,6 +113,8 @@ class ExtractAddress(Processor):
                                                      Coords=region.get_Coords()))
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
+                    if line.get_custom() and line.get_custom().startswith('subtype: ADDRESS'):
+                       fill = 255
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
