@@ -79,7 +79,9 @@ class ReplaceOriginal(Processor):
             # replace original image
             page.set_imageFilename(file_path)
             # remove all coordinate-sensitive page-level annotations
-            page.set_Border(None)
+            page.set_imageWidth(page_image.width)
+            page.set_imageHeight(page_image.height)
+            page.set_Border(None) # also removes all derived images
             page.set_orientation(None)
             # also add image as derived image (in order to preserve image features)
             # (but exclude coordinate-sensitive features that have already been applied over the "original")
