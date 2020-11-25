@@ -4,9 +4,13 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.6]
+
 Fixed:
 
  * repair: also fix negative coords, also on page level
+ * replace-original: also remove page border/@orientation
+ * replace-original: add new original as derived image, too
 
 ## [0.1.5]
 
@@ -65,6 +69,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.6]: ../../compare/v0.1.5...v0.1.6
 [0.1.5]: ../../compare/v0.1.4...v0.1.5
 [0.1.4]: ../../compare/v0.1.3...v0.1.4
 [0.1.3]: ../../compare/v0.1.2...v0.1.3
