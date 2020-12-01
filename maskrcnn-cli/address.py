@@ -919,7 +919,7 @@ def main():
                             layers='all',
                             augmentation=augmentation)
 
-                model_path = args.dataset.replace('.json', '') + '.h5'
+                model_path = os.path.basename(os.getcwd()) + str(os.getpid()) + '.h5'
                 print("Saving weights ", model_path)
                 model.keras_model.save_weights(model_path, overwrite=True)
         else:
