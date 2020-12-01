@@ -755,6 +755,8 @@ def main():
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
     train_parser.add_argument('--epochs', required=False, type=int, default=100, metavar="NUM",
                               help='Number of iterations to train (unless multi-staged)'),
+    train_parser.add_argument('--rate', required=False, type=float, default=1e-3, metavar="NUM",
+                              help='Base learning rate during training'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
     evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
@@ -780,6 +782,7 @@ def main():
         print("Depth: ", args.depth)
         if args.depth == 'all':
             print("Epochs: ", args.epochs)
+        print("Rate: ", args.rate)
     if args.command in ['evaluate', 'test']:
         print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
@@ -792,6 +795,7 @@ def main():
     # Configurations
     if args.command == "train":
         config = CocoConfig()
+        config.LEARNING_RATE = args.rate
     else:
         config = InferenceConfig()
     config.display()
