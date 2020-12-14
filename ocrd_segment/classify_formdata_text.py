@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import json
 import os.path
 import os
+import math
 from fuzzywuzzy import fuzz, process as fuzz_process
 
 from ocrd_utils import (
@@ -22,30 +23,45 @@ from maskrcnn_cli.formdata import FIELDS
 
 TOOL = 'ocrd-segment-classify-formdata-text'
 
+NUMBER = "0123456789,."
 KEYWORDS = { # FIXME We need a data-driven model for this (including confidence).
     # (derived intellectually from most frequent OCR results on GT
     #  for each context category, mixed across providers/models)
     None: [],
     "abrechnungszeitraum": ["Abrechnungszeitraum",
                             "Abrechnungszeit",
+                            "Abrechnungstage",
                             "Ablesetage",
                             "Ab",
                             "Abrechnung für",
                             # extra context (only unsystematic/initially?):
                             "Einzelabrechnung",
+                            "Einzelabrechnung der Energiekosten",
+                            "Einzelabrechnung der Energie- und Betriebskosten",
                             "Einzelabrechnung der Heizkosten",
                             "Einzelabrechnung der Heiz- und Warmwasserkosten",
                             "Einzelabrechnung der Kaltwasserkosten",
+                            "Einzelabrechnung pro Nutzer",
                             "Gesamtabrechnung",
+                            "Energieabrechnung",
                             "Heizkostenabrechnung",
+                            "Heizkosten- und Warmwasserkosten-Abrechnung",
+                            "Heiz- und Warmwasserkostenabrechnung",
                             "Heizung, Warmwasser, Kaltwasser",
                             "Heiz-, Warm- und Kaltwasser-",
                             "Heiz-, Warmwasser- und Haus-",
+                            "nebenkostenabrechnung",
                             "kostenabrechnung"],
     "nutzungszeitraum": ["Nutzungszeit",
                          "Nutzungszeitraum",
+                         "Ihr Nutzungszeitraum",
+                         "Zeitraum",
                          "anteiliger Zeitraum",
                          "Kosten für den Zeitraum",
+                         "Ihre Kosten für den Zeitraum",
+                         "Ihr anteiliger Zeitraum",
+                         "Ihre Abrechnung für",
+                         "Ihre BRUNATA-Abrechnung für",
                          # extra context (only unsystematic/initially?):
                          "Einzelabrechnung",
                          "Einzelabrechnung der Heizkosten",
@@ -60,48 +76,102 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
     "gebaeude_heizkosten_raumwaerme": ["Aufteilung der Gesamtkosten",
                                        "Aufteilung der Kosten",
                                        "Aufteilung der Kosten von",
+                                       "Aufteilung der Kosten der Heizanlage",
+                                       "Aufteilung der Kosten für Wärmeversorgung",
+                                       "Insgesamt zu verteilende Kosten",
                                        "Verteilung der Gesamtkosten",
+                                       "Berechnung und Aufteilung der Kosten für Heizung",
+                                       "Abrechnungsgrundlage für die Kostenverteilung auf die Nutzergruppen",
                                        "Kostenart",
+                                       "Kostenaufstellung",
+                                       "Kosten in EUR",
+                                       "Kosten für Heizung",
+                                       "Kosten für Heizung gesamt",
+                                       "Kosten nur für Heizung",
+                                       "Ihre Kosten",
                                        "Gesamt",
                                        "Gesamtkosten",
+                                       "Heizungs Anteile",
                                        "Heizkosten",
                                        "Heizung",
+                                       "Betrag",
+                                       "in EUR",
+                                       "EUR",
+                                       "Euro",
+                                       "Summe Heizung",
                                        "Summe Kosten für Heizung"],
-    "gebaeude_heizkosten_warmwasser": ["Aufteilung der Gesamtkosten",
+    "gebaeude_heizkosten_warmwasser": ["Anteil an den Gesamtkosten",
+                                       "Aufteilung der Gesamtkosten",
+                                       "Aufteilung der Heiz- und Warmwasserkosten",
                                        "Aufteilung der Kosten",
                                        "Aufteilung der Kosten von",
+                                       "Aufstellung der Kosten",
+                                       "Verteilung der Kosten",
                                        "Verteilung der Gesamtkosten",
+                                       "Berechnung und Verteilung der Kosten für Warmwasser",
+                                       "Insgesamt zu verteilende Kosten",
+                                       "zu verteilende Kosten",
+                                       "Ermittlung Ihres Kostenanteils",
                                        "Kostenart",
+                                       "Kostenaufstellung",
                                        "Gesamt",
                                        "Gesamtkosten",
+                                       "Warmwasser Anteile",
                                        "Warmwasserkosten",
+                                       "Warmwasserkosten (Wassererwärmungskosten)",
                                        "Warmwasser",
-                                       "Kosten für Warmwasser"],
+                                       "Betrag",
+                                       "in EUR",
+                                       "EUR",
+                                       "Euro",
+                                       "Kosten für Warmwasser",
+                                       "Kosten nur für Warmwasser",
+                                       "Kosten für Warmwasser-Erwärmung",
+                                       "Kosten Wassererwärmung",
+                                       "Summe Warmwasser"],
     # "prozent_grundkosten_raumwaerme"
     "anteil_grundkost_heizen": ["Anteil an den Gesamtkosten",
                                 "Aufteilung der Gesamtkosten",
                                 "Aufteilung der Kosten",
                                 "Aufteilung der Kosten von",
                                 "Verteilung der Gesamtkosten",
+                                "Verteilung der Kosten",
+                                "Ermittlung Ihres Kostenanteils",
+                                "Aufstellung der Kosten",
+                                "Berechnung Ihres Kostenanteils",
+                                "Berechnung und Verteilung",
+                                "Berechnung und Verteilung der Kosten für Heizung",
                                 "Betrag", "in EUR",
-                                "30%", "40%", "50%",
+                                #"30%", "40%", "50%",
+                                "Festkosten",
                                 "Grundkosten",
+                                "Grundkosten Heizung",
                                 "Heizkosten",
                                 "Heizung",
+                                "Heizungskosten",
+                                "Kosten",
                                 "Kosten für Heizung"],
     # "prozent_grundkosten_warmwasser"
     "anteil_grundkost_warmwasser": ["Anteil an den Gesamtkosten",
-                                "Aufteilung der Gesamtkosten",
-                                "Aufteilung der Kosten",
-                                "Aufteilung der Kosten von",
-                                "Verteilung der Gesamtkosten",
-                                "Betrag", "in EUR",
-                                "30%", "40%", "50%",
-                                "Grundkosten Warmwasser",
-                                "Grundk. Warmwasser",
-                                "Warmwasserkosten",
-                                "Warmwasser",
-                                "Kosten für Warmwasser"],
+                                    "Aufteilung der Gesamtkosten",
+                                    "Aufteilung der Kosten",
+                                    "Aufteilung der Kosten von",
+                                    "Verteilung der Gesamtkosten",
+                                    "Verteilung der Kosten",
+                                    "Ermittlung Ihres Kostenanteils",
+                                    "Berechnung Ihres Kostenanteils",
+                                    "Berechnung und Verteilung",
+                                    "Berechnung und Verteilung der Kosten für Warmwasser",
+                                    "Betrag", "in EUR",
+                                    #"30%", "40%", "50%",
+                                    "Festkosten",
+                                    "Grundkosten Warmwasser",
+                                    "Grundk.",
+                                    "Grundk. Warmwasser",
+                                    "Warmwasserkosten",
+                                    "Warmwasserkosten (Wassererwärmungskosten)",
+                                    "Warmwasser",
+                                    "Kosten für Warmwasser"],
     # not used in layout model (ONLY textually), cf. KEYS
     "energietraeger": ["Gas",
                        "bwGas",
@@ -120,100 +190,194 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
                                  "Bezug",
                                  "Bezüge",
                                  "Verbrauch",
+                                 "Gesamtverbrauch",
+                                 "Brennstoff",
                                  "Summe",
+                                 "Summe Brennstoffe",
+                                 "Summe Verbrauch",
                                  "Menge",
+                                 "Menge in kWh",
+                                 "Position",
+                                 "kwh",
+                                 "kWh",
+                                 "MWh",
                                  "Gas",
                                  "bwGas",
                                  "Erdgas",
                                  "Stadtgas",
                                  "Fl.-Gas",
                                  "Flüssiggas",
-                                 "Fernwärme",
-                                 "Wärmelieferung",
                                  "Fernw.",
+                                 "Fernwärme",
+                                 "Nahwärme",
+                                 "Wärmelieferung",
                                  "Heizöl",
                                  "Öl"],
     "energietraeger_einheit": ["Kostenaufstellung des gesamten Objektes",
+                               "Kostenaufstellung",
+                               "Fortsetzung der Kostenaufstellung",
+                               "Aufstellung der Gesamtkosten",
                                "Einheit",
                                "Position",
+                               "Brennstofflieferungen",
                                "Wärmelieferung",
                                "Menge",
                                "bwGas",
                                "Gas",
                                "Erdgas",
+                               "Erdgas H",
+                               "Erdgas L",
                                "Stadtgas",
                                "Fl.-Gas",
                                "Flüssiggas",
+                               "Fernw.",
                                "Fernwärme",
+                               "Wärme",
                                "Wärmelieferung",
                                "Fernw.",
                                "Heizöl",
                                "Öl"],
-    "energietraeger_kosten": ["Kostenaufstellung des gesamten Objektes",
+    "energietraeger_kosten": ["Aufstellung der Gesamtkosten",
+                              "Aufstellung der Kosten",
+                              "Kostenaufstellung",
+                              "Kostenaufstellung des gesamten Objektes",
                               "Betrag",
                               "Betrag EUR",
+                              "Kosten EUR",
                               "Gesamt",
+                              "Gesamtverbrauch",
                               "in EUR",
                               "EUR",
+                              "Euro",
+                              "Position",
                               "Summe",
                               "Summe Brennstoffkosten",
+                              "Summe Brennstoffverbrauch/-kosten",
                               "Summe Verbrauch",
                               "Summe Wärmekosten",
+                              "Verbrauch",
                               "Kostenart",
+                              "Brennstoff",
                               "Brennstoffkosten",
+                              "Brennstoffkosten Summe",
+                              "Brennstoff- /Energiekosten",
                               "Energiekosten"],
-    "gebaeude_flaeche": ["qm", "m2", "Quadratmeter",
+    "gebaeude_flaeche": ["qm", "m2", "m²", "Quadratmeter",
+                         "Nutzfläche",
+                         "Fläche",
+                         "Wohnfläche",
                          "Gesamteinheiten",
                          "der Liegenschaft"],
-    "wohnung_flaeche": ["qm", "m2", "Quadratmeter",
+    "wohnung_flaeche": ["qm", "m2", "m²", "Quadratmeter",
+                        "anteilige Einheiten",
                         "Einheiten",
+                        "Ihre Einheiten",
+                        "Ihre Fläche",
+                        "Ihr Flächenanteil",
+                        "beheizb. Wohnfl.",
+                        "Nutzfläche",
                         "Wohnfläche"],
     "gebaeude_verbrauchseinheiten": ["Gesamteinheiten",
                                      "der Liegenschaft",
                                      "Einheiten",
+                                     "Aufteilung der Kosten", #really?
+                                     "Berechnung und Verteilung der Kosten für Heizung", #really?
                                      "HKV-Einheiten",
-                                     "kWh", "MWh",
+                                     "kwh", "kWh", "MWh",
                                      "Kilowatt-Stunden",
                                      "Megawattstunden",
                                      "Striche",
                                      "Stricheinheiten",
+                                     "Verbrauchskosten",
                                      "Verbrauchswerte"],
     "wohnung_verbrauchseinheiten": ["Einheiten",
+                                    "Ihre Einheiten",
+                                    #"Ihre Kosten", # really?
+                                    "Verbrauchskosten",
+                                    "kwh", "kWh", "MWh",
                                     "Striche"],
     "gebaeude_warmwasser_verbrauch": ["Gesamteinheiten",
                                       "der Liegenschaft",
+                                      "Kosten für Warmwasser",
+                                      "Kosten für Warmwasser-Erwärmung",
+                                      "verteilt über Verbrauch Warmwasserzähler",
+                                      "Wasser",
                                       "Warmwasser",
                                       "Warmwasserkosten"],
     "gebaeude_warmwasser_verbrauch_einheit": ["Gesamteinheiten",
+                                              "gesamte Einheiten",
+                                              NUMBER,
                                               "Warmwasser"],
     "kaltwasser_fuer_warmwasser": [],
     "wohnung_warmwasser_verbrauch": ["Einheiten",
+                                     "Ihre Einheiten",
+                                     "verteilt über Verbrauch Warmwasserzähler",
                                      "Striche"],
-    "wohnung_warmwasser_verbrauch_einheit": ["Einheiten"],
+    "wohnung_warmwasser_verbrauch_einheit": ["Einheiten",
+                                             "Ihre Einheiten",
+                                             NUMBER],
     # "gebaeude_grundkosten_raumwaerme",
     "gebaeude_grundkost_heizen": ["Betrag",
+                                  "EUR",
+                                  "Euro",
                                   "in EUR",
                                   "20%", "30%", "40%", "50%",
                                   "Heizung",
                                   "Heizkosten",
+                                  "Kosten in EUR",
+                                  "Kosten für Heizung",
+                                  "Ihre Kosten",
+                                  "Kostenart",
+                                  "Festkosten",
                                   "Grundkosten",
+                                  "Grundkosten Heizung",
+                                  "Gesamtbetrag",
+                                  "Gesamtsumme",
+                                  "Insgesamt zu verteilende Kosten",
+                                  "Ermittlung Ihres Kostenanteils",
+                                  "Berechnung Ihres Kostenanteils",
+                                  "Berechnungsweg für Ihren Kostenanteil",
+                                  "Berechnung und Verteilung der Kosten für Heizung",
                                   "Anteil an den Gesamtkosten",
+                                  "Aufteilung der Kosten",
                                   "Aufteilung der Kosten von",
                                   "Aufteilung der Gesamtkosten",
-                                  "Verteilung der Grundkosten"],
+                                  "Verteilung der Gesamtkosten",
+                                  "Verteilung der Grundkosten",
+                                  "Verteilung der Kosten",
+                                  "Verteilung der Kosten auf die Nutzer für den Abrechnungsbereich Heizung"],
     # "gebaeude_grundkosten_warmwasser",
     "gebaeude_grundkost_warmwasser": ["Betrag",
+                                      "EUR",
+                                      "Euro",
                                       "in EUR",
                                       "20%", "30%", "40%", "50%", "100%",
                                       "Warmwasser",
                                       "Warmwasserkosten",
+                                      "Warmwasserkosten (Wassererwärmungskosten)",
+                                      "Kosten in EUR",
                                       "Kosten für Warmwasser",
+                                      "Kosten für Warmwasser-Erwärmung",
                                       "Verbrauchsk. Warmw.",
-                                      "Grundkosten",
+                                      "Verbrauchskosten",
+                                      "Festkosten",
+                                      "Grundk.",
                                       "Grundk. Warmwasser",
+                                      "Grundkosten",
+                                      "Gesamtbetrag",
+                                      "Gesamtsumme",
+                                      "Insgesamt zu verteilende Kosten",
+                                      "Ermittlung Ihres Kostenanteils",
+                                      "Berechnung Ihres Kostenanteils",
+                                      "Berechnung Ihres Kostenanteils",
+                                      "Berechnungsweg für Ihren Kostenanteil",
+                                      "Berechnung und Aufteilung der Kosten für Warmwasser-Erwärmung",
+                                      "Berechnung und Verteilung der Kosten für Warmwasser",
                                       "Anteil an den Gesamtkosten",
+                                      "Aufteilung der Kosten",
                                       "Aufteilung der Kosten von",
                                       "Aufteilung der Gesamtkosten",
+                                      "Verteilung der Gesamtkosten",
                                       "Verteilung der Grundkosten"],
 }
 
@@ -228,7 +392,20 @@ KEYS = {"energietraeger": {"Gas": "erdgas",
                            "Wärmelieferung": "fernwaerme",
                            "Heizöl": "heizoel",
                            "Öl": "heizoel",
-                           "Strom": "strom"}
+                           "Strom": "strom"},
+        "energietraeger_einheit": {"Ltr.": "liter",
+                                   "Liter": "liter",
+                                   "cbm": "cbm",
+                                   "m³": "cbm",
+                                   "m3": "cbm",
+                                   "Kubikmeter": "cbm",
+                                   "kWh": "kwh",
+                                   "MWh": "mwh",
+                                   "m²": "qm",
+                                   "m2": "qm",
+                                   "qm": "qm"}
+        # "gebaeude_warmwasser_verbrauch_einheit"
+        # "wohnung_warmwasser_verbrauch_einheit"
 }
 
 # normalize spelling
@@ -239,10 +416,10 @@ def normalize(text):
     # TODO more simple heuristics
     if text.endswith(':') or text.endswith(';'):
         text = text[:-1]
-    if text.startswith('Ihr '):
-        text = text[4:]
-    if text.startswith('Ihre '):
-        text = text[5:]
+    # if text.startswith('Ihr '):
+    #     text = text[4:]
+    # if text.startswith('Ihre '):
+    #     text = text[5:]
     text = text.strip()
     # try reducing allcaps to titlecase
     text = ' '.join(word.title() if word.isupper() else word
@@ -252,18 +429,44 @@ def normalize(text):
 def classify(text, threshold=95, tag=''):
     LOG = getLogger('processor.ClassifyFormDataText')
     classes = []
+    if not text:
+        return classes
     for class_id, category in enumerate(FIELDS):
         if category not in KEYWORDS:
             LOG.warning("No keywords known for category '%s'", category)
+            continue
+        if (NUMBER in KEYWORDS[category] and
+            text.translate(str.maketrans('', '', ',. ')).isnumeric()):
+            classes.append(class_id)
+            LOG.debug("numeric %s match: %s in %s", tag, text, category)
             continue
         if text in KEYWORDS[category]:
             classes.append(class_id)
             LOG.debug("direct %s match: %s in %s", tag, text, category)
             continue
+        # FIXME: Fuzzy string search is very different from robust OCR search:
+        #        We don't want to tolerate arbitrary differences, but only
+        #        graphemically likely ones; e.g.
+        #        - `Ihr Kosten-` vs `Ihre Kosten`
+        #        - `Verbrauchs-` vs `Verbrauch`
+        #        - `100` or `100€` vs `100%`
+        #        - `ab` vs `Ab-`
+        #        But OCR with alternative hypotheses is hard to get by...
+        #
+        if (text.startswith('m') and
+            ('m²' in KEYWORDS[category] or 'm³' in KEYWORDS[category]) and
+            len(text) <= 2):
+            classes.append(class_id)
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+            continue
+        # fuzz scores are relative to length, but we actually
+        # want to have a measure of the edit distance, or a
+        # mix of both; so here we just attenuate short strings
+        min_score = (1-math.exp(-len(text))) * threshold
         result = fuzz_process.extractOne(text, KEYWORDS[category],
                                          processor=normalize,
                                          scorer=fuzz.UQRatio, #UWRatio
-                                         score_cutoff=threshold)
+                                         score_cutoff=min_score)
         if result:
             keyword, score = result
             classes.append(class_id)
