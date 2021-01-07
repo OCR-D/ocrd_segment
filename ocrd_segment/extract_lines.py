@@ -13,6 +13,7 @@ from ocrd_utils import (
     polygon_from_points,
     MIME_TO_EXT
 )
+from ocrd_models.constants import NAMESPACES
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -106,6 +107,30 @@ class ExtractLines(Processor):
                 url=url,
                 file_grp=self.output_file_grp,
             )
+            # get Kitodo.Presentation image URL
+            url = self.workspace.mets._tree.getroot().xpath(
+                '//mets:structMap[@TYPE="LOGICAL"]/mets:div/mets:mptr/@xlink:href',
+                namespaces=NAMESPACES)
+            NAMESPACES.update({'slub': 'http://slub-dresden.de/'})
+            slub = self.workspace.mets._tree.getroot().xpath(
+                '//mods:mods/mods:extension/slub:slub',
+                namespaces=NAMESPACES)
+            if input_file.pageId.startswith('PHYS_'):
+                base = '_tif/jpegs/0000' + input_file.pageId[5:] + '.tif.original.jpg'
+                if url and url[0].endswith('_anchor.xml'):
+                    url = url[0]
+                    url = url[:url.rindex('_anchor.xml')]
+                    url += base
+                elif slub:
+                    digital = slub[0].xpath('slub:id[@type="digital"]', namespaces=NAMESPACES)
+                    ats = slub[0].xpath('slub:id[@type="tsl-ats"]', namespaces=NAMESPACES)
+                    if digital and ats:
+                        url = ats[0].text + '_' + digital[0].text
+                        url = 'https://digital.slub-dresden.de/data/kitodo/' + url + '/' + url + base
+                    else:
+                        url = ''
+            else:
+                url = ''
 
             i = 2
             max_text_length = 0
