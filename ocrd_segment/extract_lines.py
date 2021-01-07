@@ -96,10 +96,14 @@ class ExtractLines(Processor):
             workbook = xlsxwriter.Workbook(url)
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
+            normal = workbook.add_format({'valign': 'top'})
+            worksheet.set_default_row(height=40)
+            worksheet.freeze_panes(1, 0)
             worksheet.write('A1', 'ID', bold)
             worksheet.write('B1', 'Text', bold)
             worksheet.write('C1', 'Status', bold)
             worksheet.write('D1', 'Image', bold)
+            worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ 	ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
@@ -224,20 +228,23 @@ class ExtractLines(Processor):
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
                     
-                    # modify excel
-                    worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id)
-                    if len(ltext) > max_text_length:
-                        max_text_length = len(ltext)
-                        worksheet.set_column('B:B', max_text_length)
-                    worksheet.write('B%d' % i, ltext)
-                    worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
-                    worksheet.insert_image('D%d' % i, file_path, {'object_position': 1})
+                    # plausibilize and modify excel
+                    if len(ltext) > 10 and line_image.width > 200 and line_image.height > 30:
+                        scale = 40.0 / line_image.height
+                        worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id, normal)
+                        if len(ltext) > max_text_length:
+                            max_text_length = len(ltext)
+                            worksheet.set_column('B:B', max_text_length)
+                        worksheet.write('B%d' % i, ltext, normal)
+                        worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                        worksheet.insert_image('D%d' % i, file_path, {
+                            'object_position': 1, 'url': url, 'y_scale': scale, 'x_scale': scale})
 
                     file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                     json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
                     with open(file_path, 'wb') as f:
                         f.write((ltext + '\n').encode('utf-8'))
-                    i += 4
+                    i += 1
 
             workbook.close()
