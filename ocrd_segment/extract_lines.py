@@ -90,6 +90,8 @@ class ExtractLines(Processor):
             # add excel file
             LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
             url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
+            if not os.path.isdir(self.output_file_grp):
+                os.mkdir(self.output_file_grp)
             workbook = xlsxwriter.Workbook(url)
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
