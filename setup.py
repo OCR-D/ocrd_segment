@@ -2,6 +2,10 @@
 """
 Installs:
 
+    - maskrcnn-address
+    - maskrcnn-formdata
+    - maskrcnn-publaynet
+    - maskrcnn-run
     - ocrd-segment-repair
     - ocrd-segment-from-masks
     - ocrd-segment-from-coco
@@ -15,6 +19,9 @@ Installs:
     - ocrd-segment-extract-formdata
     - ocrd-segment-classify-address-text
     - ocrd-segment-classify-address-layout
+    - ocrd-segment-classify-formdata-dummy
+    - ocrd-segment-classify-formdata-text
+    - ocrd-segment-classify-formdata-layout
 """
 import codecs
 
@@ -30,8 +37,8 @@ setup(
     description='Page segmentation and segmentation evaluation',
     long_description=codecs.open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
-    author='Konstantin Baierer, Kay-Michael Würzner, Robert Sachunsky',
-    author_email='unixprog@gmail.com, wuerzner@gmail.com, sachunsky@informatik.uni-leipzig.de',
+    author='Robert Sachunsky, Kay-Michael Würzner',
+    author_email='sachunsky@informatik.uni-leipzig.de, wuerzner@gmail.com',
     url='https://github.com/OCR-D/ocrd_segment',
     license='Apache License 2.0',
     packages=find_packages(exclude=('tests', 'docs')),
@@ -41,6 +48,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'maskrcnn-address=maskrcnn_cli.address:main',
+            'maskrcnn-formdata=maskrcnn_cli.formdata:main',
+            'maskrcnn-publaynet=maskrcnn_cli.publaynet:main',
+            'maskrcnn-run=maskrcnn_cli.run:cli',
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
             'ocrd-segment-from-masks=ocrd_segment.cli:ocrd_segment_from_masks',
             'ocrd-segment-from-coco=ocrd_segment.cli:ocrd_segment_from_coco',
@@ -54,6 +65,9 @@ setup(
             'ocrd-segment-extract-formdata=ocrd_segment.cli:ocrd_segment_extract_formdata',
             'ocrd-segment-classify-address-text=ocrd_segment.cli:ocrd_segment_classify_address_text',
             'ocrd-segment-classify-address-layout=ocrd_segment.cli:ocrd_segment_classify_address_layout',
+            'ocrd-segment-classify-formdata-dummy=ocrd_segment.cli:ocrd_segment_classify_formdata_dummy',
+            'ocrd-segment-classify-formdata-text=ocrd_segment.cli:ocrd_segment_classify_formdata_text',
+            'ocrd-segment-classify-formdata-layout=ocrd_segment.cli:ocrd_segment_classify_formdata_layout',
         ]
     },
 )

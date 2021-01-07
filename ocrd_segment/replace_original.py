@@ -11,6 +11,7 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
+    AlternativeImageType,
     TextRegionType,
     to_xml
 )
@@ -18,7 +19,7 @@ from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
 from .config import OCRD_TOOL
-from .repair import ensure_consistent
+from .repair import ensure_valid
 
 TOOL = 'ocrd-segment-replace-original'
 
@@ -77,25 +78,37 @@ class ReplaceOriginal(Processor):
                                                        mimetype='image/png')
             # replace original image
             page.set_imageFilename(file_path)
+            # remove all coordinate-sensitive page-level annotations
+            page.set_imageWidth(page_image.width)
+            page.set_imageHeight(page_image.height)
+            page.set_Border(None) # also removes all derived images
+            page.set_orientation(None)
+            # also add image as derived image (in order to preserve image features)
+            # (but exclude coordinate-sensitive features that have already been applied over the "original")
+            features = ','.join(filter(lambda f: f not in [
+                "cropped", "deskewed", "rotated-90", "rotated-180", "rotated-270"],
+                                       page_coords['features'].split(",")))
+            page.add_AlternativeImage(AlternativeImageType(
+                filename=file_path, comments=features))
             # adjust all coordinates
             if adapt_coords:
                 for region in page.get_AllRegions():
                     region_polygon = coordinates_of_segment(region, page_image, page_coords)
                     region.get_Coords().set_points(points_from_polygon(region_polygon))
-                    ensure_consistent(region)
+                    ensure_valid(region)
                     if isinstance(region, TextRegionType):
                         for line in region.get_TextLine():
                             line_polygon = coordinates_of_segment(line, page_image, page_coords)
                             line.get_Coords().set_points(points_from_polygon(line_polygon))
-                            ensure_consistent(line)
+                            ensure_valid(line)
                             for word in line.get_Word():
                                 word_polygon = coordinates_of_segment(word, page_image, page_coords)
                                 word.get_Coords().set_points(points_from_polygon(word_polygon))
-                                ensure_consistent(word)
+                                ensure_valid(word)
                                 for glyph in word.get_Glyph():
                                     glyph_polygon = coordinates_of_segment(glyph, page_image, page_coords)
                                     glyph.get_Coords().set_points(points_from_polygon(glyph_polygon))
-                                    ensure_consistent(glyph)
+                                    ensure_valid(glyph)
 
             # update METS (add the PAGE file):
             out = self.workspace.add_file(

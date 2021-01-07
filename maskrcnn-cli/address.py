@@ -729,7 +729,7 @@ def store_coco(coco, filename):
 ############################################################
 
 
-if __name__ == '__main__':
+def main():
     import argparse
 
     # Parse command line arguments
@@ -745,15 +745,25 @@ if __name__ == '__main__':
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path of the address dataset annotations (randomly split into training and validation)')
+    train_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                              help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
+    train_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                              help='seed value for random train/test split')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
     train_parser.add_argument('--depth', required=False, default=None, metavar="DEPTH-SPEC",
                               help='Layer depth to train on (heads, 3+, ..., all; default: multi-staged)'),
     train_parser.add_argument('--epochs', required=False, type=int, default=100, metavar="NUM",
                               help='Number of iterations to train (unless multi-staged)'),
+    train_parser.add_argument('--rate', required=False, type=float, default=1e-3, metavar="NUM",
+                              help='Base learning rate during training'),
     evaluate_parser = subparsers.add_parser('evaluate', help="Evaluate a model on images with COCO annotations")
     evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
+    evaluate_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                                 help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
+    evaluate_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                                 help='seed value for random train/test split')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                                  help='Create plot files from prediction under *.SUFFIX.png')
     test_parser = subparsers.add_parser('test', help="Apply a model on image files, adding COCO annotations")
@@ -772,9 +782,12 @@ if __name__ == '__main__':
         print("Depth: ", args.depth)
         if args.depth == 'all':
             print("Epochs: ", args.epochs)
+        print("Rate: ", args.rate)
     if args.command in ['evaluate', 'test']:
         print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
+    if args.command in ['evaluate', 'train']:
+        print("Split: ", args.split)
     if args.command == 'test':
         print("Files: ", len(args.files))
     print("Limit: ", args.limit)
@@ -782,6 +795,7 @@ if __name__ == '__main__':
     # Configurations
     if args.command == "train":
         config = CocoConfig()
+        config.LEARNING_RATE = args.rate
     else:
         config = InferenceConfig()
     config.display()
@@ -827,13 +841,13 @@ if __name__ == '__main__':
         dataset_val = CocoDataset()
         for dataset in args.dataset:
             coco = COCO(dataset)
-            np.random.seed(42)
+            np.random.seed(args.seed)
             limit = args.limit
             if not limit or limit > len(coco.imgs):
                 limit = len(coco.imgs)
             indexes = np.random.permutation(limit)
-            trainset = indexes[:int(0.7*limit)]
-            valset = indexes[int(0.7*limit):]
+            trainset = indexes[:int(args.split*limit)]
+            valset = indexes[int(args.split*limit):]
             if args.command == "train":
                 dataset_train.load_coco(coco, os.path.dirname(dataset),
                                         limit=trainset)
@@ -909,7 +923,7 @@ if __name__ == '__main__':
                             layers='all',
                             augmentation=augmentation)
 
-                model_path = args.dataset.replace('.json', '') + '.h5'
+                model_path = os.path.basename(os.getcwd()) + str(os.getpid()) + '.h5'
                 print("Saving weights ", model_path)
                 model.keras_model.save_weights(model_path, overwrite=True)
         else:
@@ -938,4 +952,5 @@ if __name__ == '__main__':
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
 
-    
+if __name__ == '__main__':
+    main()

@@ -13,20 +13,7 @@ from ocrd_utils import (
     bbox_from_points,
     MIMETYPE_PAGE
 )
-from ocrd_models.ocrd_page import (
-    PageType,
-    MetadataItemType,
-    LabelsType, LabelType,
-    to_xml
-)
-from ocrd_models.ocrd_page_generateds import (
-    RegionRefType,
-    RegionRefIndexedType,
-    OrderedGroupType,
-    OrderedGroupIndexedType,
-    UnorderedGroupType,
-    UnorderedGroupIndexedType
-)
+from ocrd_models.ocrd_page import to_xml
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -43,7 +30,7 @@ def classify_address(text):
     LOG = getLogger('processor.ClassifyAddressText')
     # TODO more simple heuristics to avoid API call
     # when no chance to be an address text
-    if 8 > len(text) or len(text) > 100:
+    if not 8 <= len(text) <= 100:
         return 'ADDRESS_NONE'
     # reduce allcaps to titlecase
     words = [word.title() if word.isupper() else word for word in text.split(' ')]
@@ -177,6 +164,7 @@ class ClassifyAddressText(Processor):
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
                                      file_id + '.xml')
+            pcgts.set_pcGtsId(file_id)
             out = self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

@@ -15,7 +15,8 @@ disable =
     too-many-statements,
     too-many-locals,
     too-few-public-methods,
-    duplicate-code
+    duplicate-code,
+    bad-whitespace # cf pycodestyle#373 (array slicing FP)
 
 # allow indented whitespace (as required by interpreter):
 no-space-check=empty-line

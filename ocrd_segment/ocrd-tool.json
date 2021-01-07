@@ -53,8 +53,19 @@
       "parameters": {
         "categories": {
           "type": "array",
-          "default": [],
-          "description": "List of target classes in COCO format (dict with numeric `id`, string `name` and string `source`, string `type`). IDs may start with zero and collide with other data sources. Categories are extracted from `TextRegion/@type=type` if given or `TextRegion[@type=other]/@custom[substring-after(.,'subtype:')]` otherwise."
+          "default": [{"id": 1,
+                       "name": "address-rcpt",
+                       "source": "IAO",
+                       "type": "paragraph"},
+                      {"id": 2,
+                       "name": "address-sndr",
+                       "source": "IAO",
+                       "type": "page-number"},
+                      {"id": 3,
+                       "name": "address-contact",
+                       "source": "IAO",
+                       "type": "marginalia"}],
+          "description": "List of target classes in COCO format (dict with numeric `id`, string `name` and string `source`, string `type`). IDs may start with zero and collide with other data sources. Categories are extracted from `TextRegion/@type=type` if given or `TextRegion[@type=other]/@custom[substring-after(.,'subtype:')]` or `TextLine/@custom[substring-after(.,'subtype:')]` otherwise."
         }
       }
     },
@@ -90,6 +101,85 @@
           "content-type": "application/x-hdf;subtype=bag",
           "default": "address.h5",
           "description": "path of h5py weight file for model trained with address.py",
+          "cacheable": true
+        },
+        "min_confidence": {
+          "type": "number",
+          "format": "float",
+          "default": 0.5,
+          "description": "minimum probability for region candidates"
+        }
+      }
+    },
+    "ocrd-segment-classify-formdata-dummy": {
+      "executable": "ocrd-segment-classify-formdata-dummy",
+      "categories": ["Layout analysis"],
+      "description": "",
+      "input_file_grp": [
+        "OCR-D-OCR-FORMDATA"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-FORMDATA"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "categories": {
+          "type": "array",
+          "default": [],
+          "description": "List of class names matching the list of (non-first) input fileGrps."
+        },
+        "context-type": {
+          "type": "string",
+          "enum": ["paragraph", "heading", "caption", "header", "footer", "page-number", "drop-capital", "credit", "floating", "signature-mark", "catch-word", "marginalia", "footnote", "footnote-continued", "endnote", "TOC-entry", "list-label", "other"],
+          "default": "page-number",
+          "description": "`TextRegion/@type` used to mark context [mrcnn input] regions."
+        },
+        "target-type": {
+          "type": "string",
+          "enum": ["paragraph", "heading", "caption", "header", "footer", "page-number", "drop-capital", "credit", "floating", "signature-mark", "catch-word", "marginalia", "footnote", "footnote-continued", "endnote", "TOC-entry", "list-label", "other"],
+          "default": "paragraph",
+          "description": "`TextRegion/@type` used to mark target [mrcnn output] regions."
+        }
+      }
+    },
+    "ocrd-segment-classify-formdata-text": {
+      "executable": "ocrd-segment-classify-formdata-text",
+      "categories": ["Text recognition and optimization"],
+      "description": "",
+      "input_file_grp": [
+        "OCR-D-OCR-FORMDATA"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-FORMDATA"
+      ],
+      "steps": ["layout/segmentation/classification"],
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "format": "integer",
+          "default": 95,
+          "description": "minimum percentage of character/word match against pre-defined keywords"
+        }
+      }
+    },
+    "ocrd-segment-classify-formdata-layout": {
+      "executable": "ocrd-segment-classify-formdata-layout",
+      "categories": ["Layout analysis"],
+      "description": "",
+      "input_file_grp": [
+        "OCR-D-OCR-FORMDATA"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-FORMDATA"
+      ],
+      "steps": ["layout/segmentation/region"],
+      "parameters": {
+        "model": {
+          "type": "string",
+          "format": "uri",
+          "content-type": "application/x-hdf;subtype=bag",
+          "default": "address.h5",
+          "description": "path of h5py weight file for model trained with formdata.py",
           "cacheable": true
         },
         "min_confidence": {

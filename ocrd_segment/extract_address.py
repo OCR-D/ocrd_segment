@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 
 import json
-import itertools
-import os.path
 from shapely.geometry import Polygon
 from PIL import Image, ImageDraw
 
@@ -115,6 +113,8 @@ class ExtractAddress(Processor):
                                                      Coords=region.get_Coords()))
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
+                    if line.get_custom() and line.get_custom().startswith('subtype: ADDRESS'):
+                       fill = 255
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
@@ -193,10 +193,9 @@ class ExtractAddress(Processor):
             ID='id' + file_id,
             file_grp=json_file_grp,
             pageId=None,
-            local_filename=os.path.join(json_file_grp, file_id + '.json'),
+            local_filename=file_id + '.json',
             mimetype='application/json',
             content=json.dumps(
                 {'categories': categories,
                  'images': images,
                  'annotations': annotations}))
-
