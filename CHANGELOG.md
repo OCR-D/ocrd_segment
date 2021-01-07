@@ -4,6 +4,13 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.7]
+
+Fixed:
+
+ * repair: also ensure polygons have at least 3 points
+ * replace-page: allow non-PAGE input files, too
+
 ## [0.1.6]
 
 Fixed:
