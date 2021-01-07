@@ -76,6 +76,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.7]: ../../compare/v0.1.6...v0.1.7
 [0.1.6]: ../../compare/v0.1.5...v0.1.6
 [0.1.5]: ../../compare/v0.1.4...v0.1.5
 [0.1.4]: ../../compare/v0.1.3...v0.1.4
