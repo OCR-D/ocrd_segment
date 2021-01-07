@@ -56,7 +56,7 @@ class ReplacePage(Processor):
         adapt_coords = self.parameter['transform_coordinates']
         
         # collect input file tuples
-        ifts = self.zip_input_files(mimetype=MIMETYPE_PAGE) # input file tuples
+        ifts = self.zip_input_files() # input file tuples
         # process input file tuples
         for n, ift in enumerate(ifts):
             input_file, page_file = ift
