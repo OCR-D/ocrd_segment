@@ -54,13 +54,28 @@ class RepairSegmentation(Processor):
 
 
     def process(self):
-        """Performs segmentation evaluation with Shapely on the workspace.
+        """Performs segmentation post-processing with Shapely on the workspace.
         
         Open and deserialize PAGE input files and their respective images,
-        then iterate over the element hierarchy down to the region level.
+        then validate, checking for invalid or inconsistent segmentation.
+        Fix invalidities by simplifying and/or re-ordering polygon paths.
+        Fix inconsistencies by shrinking segment polygons to their parents.
         
-        Return information on the plausibility of the segmentation into
-        regions on the logging level.
+        Then iterate over the element hierarchy down to the region level.
+        Check regions for overlaps, looking for pairs of regions that are
+        (almost) equal, or (almost) contain each other.
+        
+        If ``plausibilize`` is true, then act on each overlapping pair:
+        Remove one region from each equality, and remove/merge the
+        smaller region from each pair of containment. Adapt reading order,
+        accordingly.
+        
+        Otherwise, just report overlapping pairs via logging.
+        
+        If ``sanitize`` is true, then shrink each region to the convex hull
+        of its constituent lines.
+        
+        Produce a new output file by serialising the resulting hierarchy.
         """
         LOG = getLogger('processor.RepairSegmentation')
         assert_file_grp_cardinality(self.input_file_grp, 1)
