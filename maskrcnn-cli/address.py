@@ -651,6 +651,42 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
         ann['id'] = i
     return results, cocoids
 
+def compare_coco(coco1, coco2, limit=None, image_ids=None):
+    # assert dataset1.class_names == dataset2.class_names
+    # assert dataset1.image_ids == dataset2.image_ids
+    # image_ids = image_ids or dataset1.image_ids
+    # for image_id in tqdm(image_ids):
+    #     #image_info[image_id]['id']?
+    #     path1 = dataset1.image_info[image_id]['path']
+    #     path2 = dataset2.image_info[image_id]['path']
+    #     assert os.path.basename(path1) == os.path.basename(path2)
+    #     masks1, classes1 = dataset1.load_mask(image_id)
+    #     masks2, classes2 = dataset2.load_mask(image_id)
+    cocoEval = COCOeval(coco1, coco2, 'segm') # 'bbox'
+    print("Evaluating predictions against GT with classes")
+    #cocoEval.params.imgIds = cocoids
+    #cocoEval.params.catIds = [...]
+    #cocoEval.params.iouThrs = [.5:.05:.95]
+    #cocoEval.params.maxDets = [10]
+    cocoEval.params.useCats = 1
+    cocoEval.evaluate()
+    for img in sorted(cocoEval.evalImgs, key=lambda img: img['image_id'] if img else 0):
+        if not img:
+            continue
+        if img['aRng'] != cocoEval.params.areaRng[0]:
+            continue
+        print((coco1.imgs[img['image_id']]['file_name'] + '|' +
+               coco1.cats[img['category_id']]['name'] + ': ' +
+               'GT matches=' + str(img['gtMatches'][0] > 0) + ' ' +
+               'pred scores=' + str(img['dtScores'])))
+    cocoEval.accumulate()
+    cocoEval.summarize()
+    cocoEval.params.useCats = 0
+    print("Evaluating predictions against GT ignoring classes")
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()
+
 def showAnns(anns, height, width):
     """
     Display the specified annotations.
@@ -773,6 +809,11 @@ def main():
                              help='Create plot files from prediction under *.SUFFIX.png')
     test_parser.add_argument('files', nargs='+',
                              help='Image files to annotate')
+    compare_parser = subparsers.add_parser('compare', help="Evaluate COCO annotations w.r.t. GT COCO annotations")
+    compare_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
+                                help='File path of the address dataset annotations (from prediction)')
+    compare_parser.add_argument('--dataset-gt', required=True, metavar="PATH/TO/COCO.json",
+                                help='File path of the address dataset annotations (from ground truth)')
     args = parser.parse_args()
     print("Command: ", args.command)
     print("Model: ", args.model)
@@ -790,6 +831,8 @@ def main():
         print("Split: ", args.split)
     if args.command == 'test':
         print("Files: ", len(args.files))
+    if args.command == 'test':
+        print("GT: ", args.dataset_gt)
     print("Limit: ", args.limit)
 
     # Configurations
@@ -809,7 +852,9 @@ def main():
                                   model_dir=args.logs)
 
     # Select weights file to load
-    if args.model.lower() == "last":
+    if args.command == 'compare':
+        model_path = None
+    elif args.model.lower() == "last":
         # Find last trained weights
         model_path = model.find_last()
     elif args.model.lower() == "imagenet":
@@ -819,7 +864,6 @@ def main():
         model_path = args.model
 
     # Load weights
-    print("Loading weights ", model_path)
     if args.command == 'train':
         if args.exclude in ['final', 'heads']:
             exclude = ["mrcnn_class_logits", "mrcnn_bbox_fc", "mrcnn_bbox", "mrcnn_mask"]
@@ -833,7 +877,9 @@ def main():
             exclude.append("conv1")
     else:
         exclude = list()
-    model.load_weights(model_path, by_name=True, exclude=exclude)
+    if model_path:
+        print("Loading weights ", model_path)
+        model.load_weights(model_path, by_name=True, exclude=exclude)
 
     # Train or evaluate
     if args.command in ['train', 'evaluate']:
@@ -948,6 +994,22 @@ def main():
         coco.loadRes(result)
         store_coco(coco, args.dataset)
         
+    elif args.command == "compare":
+        dataset = CocoDataset()
+        dataset_gt = CocoDataset()
+        coco = COCO(args.dataset)
+        coco_gt = COCO(args.dataset_gt)
+        # convert annotations from polygons to compressed format
+        for ann in coco.anns.values():
+            ann['segmentation'] = coco.annToRLE(ann)
+        for ann in coco_gt.anns.values():
+            ann['segmentation'] = coco.annToRLE(ann)
+        print("prediction dataset: %d imgs %d cats" % (
+            len(coco.imgs), len(coco.cats)))
+        print("ground-truth dataset: %d imgs %d cats" % (
+            len(coco_gt.imgs), len(coco_gt.cats)))
+        compare_coco(coco_gt, coco)
+    
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
