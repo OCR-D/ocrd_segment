@@ -71,6 +71,9 @@ class ExtractLines(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
         library_convention = self.parameter['library-convention']
+        min_line_length = self.parameter['min-line-length']
+        min_line_width = self.parameter['min-line-width']
+        min_line_height = self.parameter['min-line-height']
 
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
@@ -236,11 +239,11 @@ class ExtractLines(Processor):
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
-                    
+
                     # plausibilize and modify excel
-                    if (len(ltext) >= self.parameter['min-length'] and
-                        line_image.width >= self.parameter['min-width'] and
-                        line_image.height >= self.parameter['min-height']):
+                    if (len(ltext) >= min_line_length and
+                        line_image.width >= min_line_width and
+                        line_image.height >= min_line_height):
                         scale = 40.0 / line_image.height
                         worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id, normal)
                         if len(ltext) > max_text_length:

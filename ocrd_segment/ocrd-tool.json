@@ -146,29 +146,26 @@
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
         },
-        "min-height": {
-          "type": "number",
-          "format": "int",
-          "default": 30,
-          "description": "minimum annotated height (in px) for a line to be extracted"
-        },
-        "min-width": {
-          "type": "number",
-          "format": "int",
-          "default": 200,
-          "description": "minimum annotated width (in px) for a line to be extracted"
-        },
-        "min-length": {
-          "type": "number",
-          "format": "int",
-          "default": 5,
-          "description": "minimum annotated text length (in characters) for a line to be extracted"
-        },
         "library-convention": {
           "type": "string",
           "enum": ["slub", "sbb"],
           "default": "slub",
           "description": "Libraries have slightly different conventions in their METS files"
+        },
+        "min-line-length": {
+          "type": "number",
+          "default": 5,
+          "description": "Only extract lines with at least this many characters."
+        },
+        "min-line-width": {
+          "type": "number",
+          "default": 200,
+          "description": "Only extract lines that are at least this wide (in px)."
+        },
+        "min-line-height": {
+          "type": "number",
+          "default": 30,
+          "description": "Only extract lines that are at least this high (in px)."
         }
       }
     },
