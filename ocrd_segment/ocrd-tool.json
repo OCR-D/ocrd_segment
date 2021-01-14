@@ -333,6 +333,12 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "library-convention": {
+          "type": "string",
+          "enum": ["slub", "sbb"],
+          "default": "slub",
+          "description": "Libraries have slightly different conventions in their METS files"
         }
       }
     },
