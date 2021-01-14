@@ -339,6 +339,21 @@
           "enum": ["slub", "sbb"],
           "default": "slub",
           "description": "Libraries have slightly different conventions in their METS files"
+        },
+        "min-line-length": {
+          "type": "number",
+          "default": 10,
+          "description": "Only add lines with at least this many characters to the excel file. Set to -1 to disable."
+        },
+        "min-line-width": {
+          "type": "number",
+          "default": 200,
+          "description": "Only add lines that are at least this wide to the excel file. Set to -1 to disable."
+        },
+        "min-line-height": {
+          "type": "number",
+          "default": 30,
+          "description": "Only add lines that are at least this high to the excel file. Set to -1 to disable."
         }
       }
     },
