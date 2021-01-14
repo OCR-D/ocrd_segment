@@ -97,10 +97,12 @@ class ExtractAddress(Processor):
             # iterate through all regions that could have lines
             for region in page.get_AllRegions(classes=['Text']):
                 subtype = ''
+                score = 1.0
                 if region.get_type() in type2cat:
                     subtype = type2cat[region.get_type()]
                 elif region.get_type() == 'other' and region.get_custom():
                     subtype = region.get_custom().replace('subtype:', '')
+                    score = region.get_Coords().get_conf() or 1.0
                 if subtype.startswith('address'):
                     fill = 255
                 else:
@@ -150,6 +152,7 @@ class ExtractAddress(Processor):
                      'segmentation': polygon2,
                      'area': area,
                      'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
+                     'score': score,
                      'iscrowd': 0})
             # write raw+mask RGBA PNG
             if page_image.mode.startswith('I') or page_image.mode == 'F':
