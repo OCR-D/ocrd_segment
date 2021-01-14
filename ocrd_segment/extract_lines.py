@@ -271,29 +271,34 @@ class ExtractLines(Processor):
             return self._get_presentation_image_sbb(input_file)
         raise NotImplementedError("Unsupported library convention '%s'" % library_convention)
 
+    def _get_presentation_image_sbb(self, input_file):
+        ppn = self.workspace.mets._tree.getroot().xpath('//mods:recordIdentifier[@source="gbv-ppn"]', namespaces=NAMESPACES)[0].text
+        pageId = input_file.pageId
+        return f'https://digital.staatsbibliothek-berlin.de/werkansicht?PPN={ppn}&PHYSID={pageId}'
+
     def _get_presentation_image_slub(self, input_file):
-            # get Kitodo.Presentation image URL
-            url = self.workspace.mets._tree.getroot().xpath(
-                '//mets:structMap[@TYPE="LOGICAL"]/mets:div/mets:mptr/@xlink:href',
-                namespaces=NAMESPACES)
-            NAMESPACES.update({'slub': 'http://slub-dresden.de/'})
-            slub = self.workspace.mets._tree.getroot().xpath(
-                '//mods:mods/mods:extension/slub:slub',
-                namespaces=NAMESPACES)
-            if input_file.pageId.startswith('PHYS_'):
-                base = '_tif/jpegs/0000' + input_file.pageId[5:] + '.tif.original.jpg'
-                if url and url[0].endswith('_anchor.xml'):
-                    url = url[0]
-                    url = url[:url.rindex('_anchor.xml')]
-                    url += base
-                elif slub:
-                    digital = slub[0].xpath('slub:id[@type="digital"]', namespaces=NAMESPACES)
-                    ats = slub[0].xpath('slub:id[@type="tsl-ats"]', namespaces=NAMESPACES)
-                    if digital and ats:
-                        url = ats[0].text + '_' + digital[0].text
-                        url = 'https://digital.slub-dresden.de/data/kitodo/' + url + '/' + url + base
-                    else:
-                        url = ''
-            else:
-                url = ''
-            return url
+        # get Kitodo.Presentation image URL
+        url = self.workspace.mets._tree.getroot().xpath(
+            '//mets:structMap[@TYPE="LOGICAL"]/mets:div/mets:mptr/@xlink:href',
+            namespaces=NAMESPACES)
+        NAMESPACES.update({'slub': 'http://slub-dresden.de/'})
+        slub = self.workspace.mets._tree.getroot().xpath(
+            '//mods:mods/mods:extension/slub:slub',
+            namespaces=NAMESPACES)
+        if input_file.pageId.startswith('PHYS_'):
+            base = '_tif/jpegs/0000' + input_file.pageId[5:] + '.tif.original.jpg'
+            if url and url[0].endswith('_anchor.xml'):
+                url = url[0]
+                url = url[:url.rindex('_anchor.xml')]
+                url += base
+            elif slub:
+                digital = slub[0].xpath('slub:id[@type="digital"]', namespaces=NAMESPACES)
+                ats = slub[0].xpath('slub:id[@type="tsl-ats"]', namespaces=NAMESPACES)
+                if digital and ats:
+                    url = ats[0].text + '_' + digital[0].text
+                    url = 'https://digital.slub-dresden.de/data/kitodo/' + url + '/' + url + base
+                else:
+                    url = ''
+        else:
+            url = ''
+        return url
