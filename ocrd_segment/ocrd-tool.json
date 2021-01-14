@@ -163,6 +163,12 @@
           "format": "int",
           "default": 5,
           "description": "minimum annotated text length (in characters) for a line to be extracted"
+        },
+        "library-convention": {
+          "type": "string",
+          "enum": ["slub", "sbb"],
+          "default": "slub",
+          "description": "Libraries have slightly different conventions in their METS files"
         }
       }
     },

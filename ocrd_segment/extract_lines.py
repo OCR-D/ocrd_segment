@@ -69,6 +69,9 @@ class ExtractLines(Processor):
         LOG = getLogger('processor.ExtractLines')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
+
+        library_convention = self.parameter['library-convention']
+
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
             file_id = make_file_id(input_file, self.output_file_grp)
@@ -90,12 +93,13 @@ class ExtractLines(Processor):
 
             # add excel file
             LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
-            url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
+            excel_path = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
             if not os.path.isdir(self.output_file_grp):
                 os.mkdir(self.output_file_grp)
-            workbook = xlsxwriter.Workbook(url, {'strings_to_numbers':  False,
-                                                 'strings_to_formulas': False,
-                                                 'strings_to_urls':     False})
+            workbook = xlsxwriter.Workbook(excel_path,
+                                           {'strings_to_numbers':  False,
+                                            'strings_to_formulas': False,
+                                            'strings_to_urls':     False})
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
             normal = workbook.add_format({'valign': 'top'})
@@ -134,34 +138,10 @@ class ExtractLines(Processor):
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
                 pageId=page_id,
-                url=url,
+                url=excel_path,
                 file_grp=self.output_file_grp,
             )
-            # get Kitodo.Presentation image URL
-            url = self.workspace.mets._tree.getroot().xpath(
-                '//mets:structMap[@TYPE="LOGICAL"]/mets:div/mets:mptr/@xlink:href',
-                namespaces=NAMESPACES)
-            NAMESPACES.update({'slub': 'http://slub-dresden.de/'})
-            slub = self.workspace.mets._tree.getroot().xpath(
-                '//mods:mods/mods:extension/slub:slub',
-                namespaces=NAMESPACES)
-            if input_file.pageId.startswith('PHYS_'):
-                base = '_tif/jpegs/0000' + input_file.pageId[5:] + '.tif.original.jpg'
-                if url and url[0].endswith('_anchor.xml'):
-                    url = url[0]
-                    url = url[:url.rindex('_anchor.xml')]
-                    url += base
-                elif slub:
-                    digital = slub[0].xpath('slub:id[@type="digital"]', namespaces=NAMESPACES)
-                    ats = slub[0].xpath('slub:id[@type="tsl-ats"]', namespaces=NAMESPACES)
-                    if digital and ats:
-                        url = ats[0].text + '_' + digital[0].text
-                        url = 'https://digital.slub-dresden.de/data/kitodo/' + url + '/' + url + base
-                    else:
-                        url = ''
-            else:
-                url = ''
-
+            url = self._get_presentation_image(input_file, library_convention)
             i = 2
             max_text_length = 0
             regions = itertools.chain.from_iterable(
@@ -280,3 +260,37 @@ class ExtractLines(Processor):
                     i += 1
 
             workbook.close()
+
+    def _get_presentation_image(self, input_file, library_convention):
+        if library_convention == 'slub':
+            return self._get_presentation_image_slub(input_file)
+        elif library_convention == 'sbb':
+            return self._get_presentation_image_sbb(input_file)
+        raise NotImplementedError("Unsupported library convention '%s'" % library_convention)
+
+    def _get_presentation_image_slub(self, input_file):
+            # get Kitodo.Presentation image URL
+            url = self.workspace.mets._tree.getroot().xpath(
+                '//mets:structMap[@TYPE="LOGICAL"]/mets:div/mets:mptr/@xlink:href',
+                namespaces=NAMESPACES)
+            NAMESPACES.update({'slub': 'http://slub-dresden.de/'})
+            slub = self.workspace.mets._tree.getroot().xpath(
+                '//mods:mods/mods:extension/slub:slub',
+                namespaces=NAMESPACES)
+            if input_file.pageId.startswith('PHYS_'):
+                base = '_tif/jpegs/0000' + input_file.pageId[5:] + '.tif.original.jpg'
+                if url and url[0].endswith('_anchor.xml'):
+                    url = url[0]
+                    url = url[:url.rindex('_anchor.xml')]
+                    url += base
+                elif slub:
+                    digital = slub[0].xpath('slub:id[@type="digital"]', namespaces=NAMESPACES)
+                    ats = slub[0].xpath('slub:id[@type="tsl-ats"]', namespaces=NAMESPACES)
+                    if digital and ats:
+                        url = ats[0].text + '_' + digital[0].text
+                        url = 'https://digital.slub-dresden.de/data/kitodo/' + url + '/' + url + base
+                    else:
+                        url = ''
+            else:
+                url = ''
+            return url
