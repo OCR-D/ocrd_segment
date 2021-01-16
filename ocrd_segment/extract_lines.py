@@ -109,7 +109,12 @@ class ExtractLines(Processor):
             worksheet.write('B1', 'Text', bold)
             worksheet.write('C1', 'Status', bold)
             worksheet.write('D1', 'Image', bold)
-            worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ 	ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
+            symbols = 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι ' \
+                      'Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω'.split(' ')
+            for i, s in enumerate(symbols):
+                col_idx = 3 + i
+                worksheet.write_string(0, col_idx, s)
+                worksheet.set_column(col_idx, col_idx, 2)
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
