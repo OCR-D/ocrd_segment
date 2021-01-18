@@ -150,7 +150,7 @@
           "type": "string",
           "enum": ["slub", "sbb"],
           "default": "slub",
-          "description": "Libraries have slightly different conventions in their METS files"
+          "description": "Scheme to reconstruct presentation URL of original pages, used to make line images hyperlinked. Libraries have different conventions in their METS files. Set to none to disable."
         },
         "min-line-length": {
           "type": "number",
