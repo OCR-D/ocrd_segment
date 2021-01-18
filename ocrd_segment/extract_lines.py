@@ -243,7 +243,7 @@ class ExtractLines(Processor):
             return self._get_presentation_image_slub(input_file)
         elif library_convention == 'sbb':
             return self._get_presentation_image_sbb(input_file)
-        raise NotImplementedError("Unsupported library convention '%s'" % library_convention)
+        return ''
 
     def _get_presentation_image_sbb(self, input_file):
         ppn = self.workspace.mets._tree.getroot().xpath('//mods:recordIdentifier[@source="gbv-ppn"]', namespaces=NAMESPACES)[0].text
