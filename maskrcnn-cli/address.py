@@ -578,6 +578,21 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=
     cocoEval.params.imgIds = cocoids
     cocoEval.evaluate()
     cocoEval.accumulate()
+    # show precision/recall at:
+    # T[0]=0.5 IoU
+    # R[*] recall threshold equal to max recall
+    # K[*] each class
+    # A[0] all areas
+    # M[-1]=100 max detections
+    print("class precision/recall at IoU=0.5 max-recall all-area max-detections:")
+    recalls = cocoEval.eval['recall'][0,:,0,-1]
+    recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
+    classInds = np.arange(len(recalls))
+    precisions = cocoEval.eval['precision'][0,recallInds,classInds,0,-1]
+    for i, cat in coco1.cats.items():
+        name = cat['name']
+        print(name + ' prc: ' + str(precisions[i-1]))
+        print(name + ' rec: ' + str(recalls[i-1]))
     cocoEval.summarize()
 
 def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=None, active_classes=None):
@@ -667,6 +682,7 @@ def compare_coco(coco1, coco2, limit=None, image_ids=None):
     #cocoEval.params.imgIds = cocoids
     #cocoEval.params.catIds = [...]
     #cocoEval.params.iouThrs = [.5:.05:.95]
+    ##cocoEval.params.iouThrs = np.linspace(.3, .95, 14)
     #cocoEval.params.maxDets = [10]
     cocoEval.params.useCats = 1
     cocoEval.evaluate()
@@ -680,6 +696,21 @@ def compare_coco(coco1, coco2, limit=None, image_ids=None):
                'GT matches=' + str(img['gtMatches'][0] > 0) + ' ' +
                'pred scores=' + str(img['dtScores'])))
     cocoEval.accumulate()
+    # show precision/recall at:
+    # T[0]=0.5 IoU
+    # R[*] recall threshold equal to max recall
+    # K[*] each class
+    # A[0] all areas
+    # M[-1]=100 max detections
+    print("class precision/recall at IoU=0.5 max-recall all-area max-detections:")
+    recalls = cocoEval.eval['recall'][0,:,0,-1]
+    recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
+    classInds = np.arange(len(recalls))
+    precisions = cocoEval.eval['precision'][0,recallInds,classInds,0,-1]
+    for i, cat in coco1.cats.items():
+        name = cat['name']
+        print(name + ' prc: ' + str(precisions[i-1]))
+        print(name + ' rec: ' + str(recalls[i-1]))
     cocoEval.summarize()
     cocoEval.params.useCats = 0
     print("Evaluating predictions against GT ignoring classes")
