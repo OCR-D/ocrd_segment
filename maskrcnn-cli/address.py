@@ -563,7 +563,7 @@ def build_coco_results(dataset, image_id, rois, class_ids, scores, masks):
     return results
 
 
-def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=None, plot=None):
+def evaluate_coco(model, dataset, coco, eval_type="segm", limit=None, image_ids=None, plot=None):
     """Runs official COCO evaluation.
     dataset: A Dataset object with validation data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
@@ -577,6 +577,15 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=
     cocoEval = COCOeval(coco, coco_results, eval_type)
     cocoEval.params.imgIds = cocoids
     cocoEval.evaluate()
+    for img in sorted(cocoEval.evalImgs, key=lambda img: img['image_id'] if img else 0):
+        if not img:
+            continue
+        if img['aRng'] != cocoEval.params.areaRng[0]:
+            continue
+        print((str(coco.imgs[img['image_id']]['file_name']) + '|' +
+               coco.cats[img['category_id']]['name'] + ': ' +
+               'GT matches=' + str(img['gtMatches'][0] > 0) + ' ' +
+               'pred scores=' + str(img['dtScores'])))
     cocoEval.accumulate()
     # show precision/recall at:
     # T[0]=0.5 IoU
@@ -589,10 +598,12 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=None, image_ids=
     recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
     classInds = np.arange(len(recalls))
     precisions = cocoEval.eval['precision'][0,recallInds,classInds,0,-1]
-    for i, cat in coco1.cats.items():
+    catIds = coco.getCatIds()
+    for id_, cat in coco.cats.items():
         name = cat['name']
-        print(name + ' prc: ' + str(precisions[i-1]))
-        print(name + ' rec: ' + str(recalls[i-1]))
+        i = catIds.index(id_)
+        print(name + ' prc: ' + str(precisions[i]))
+        print(name + ' rec: ' + str(recalls[i]))
     cocoEval.summarize()
 
 def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=None, active_classes=None):
@@ -691,7 +702,7 @@ def compare_coco(coco1, coco2, limit=None, image_ids=None):
             continue
         if img['aRng'] != cocoEval.params.areaRng[0]:
             continue
-        print((coco1.imgs[img['image_id']]['file_name'] + '|' +
+        print((str(coco1.imgs[img['image_id']]['file_name']) + '|' +
                coco1.cats[img['category_id']]['name'] + ': ' +
                'GT matches=' + str(img['gtMatches'][0] > 0) + ' ' +
                'pred scores=' + str(img['dtScores'])))
@@ -707,10 +718,12 @@ def compare_coco(coco1, coco2, limit=None, image_ids=None):
     recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
     classInds = np.arange(len(recalls))
     precisions = cocoEval.eval['precision'][0,recallInds,classInds,0,-1]
-    for i, cat in coco1.cats.items():
+    catIds = coco1.getCatIds()
+    for id_, cat in coco1.cats.items():
         name = cat['name']
-        print(name + ' prc: ' + str(precisions[i-1]))
-        print(name + ' rec: ' + str(recalls[i-1]))
+        i = catIds.index(id_)
+        print(name + ' prc: ' + str(precisions[i]))
+        print(name + ' rec: ' + str(recalls[i]))
     cocoEval.summarize()
     cocoEval.params.useCats = 0
     print("Evaluating predictions against GT ignoring classes")
