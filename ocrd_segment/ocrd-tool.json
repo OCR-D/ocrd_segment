@@ -178,7 +178,6 @@
           "type": "string",
           "format": "uri",
           "content-type": "application/x-hdf;subtype=bag",
-          "default": "address.h5",
           "description": "path of h5py weight file for model trained with formdata.py",
           "cacheable": true
         },
