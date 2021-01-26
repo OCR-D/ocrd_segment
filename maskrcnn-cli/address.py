@@ -10,27 +10,33 @@ Based on coco.py in matterport/MaskRCNN.
 Usage: import the module, or run from the command line as such:
 
     # Train a new model starting from pre-trained COCO weights
-    python3 address.py --model=/path/to/mask_rcnn_coco.h5 train --dataset=/path/to/coco.json
+    python3 address.py --model=/path/to/mask_rcnn_coco.h5 train --dataset=/path/to/coco*.json
 
     # Train a new model starting from ImageNet weights
-    python3 address.py --model=imagenet train --dataset=/path/to/coco.json
+    python3 address.py --model=imagenet train --dataset=/path/to/coco*.json
 
     # Continue training a model that you had trained earlier
-    python3 address.py --model=/path/to/weights.h5 train --dataset=/path/to/coco.json
+    python3 address.py --model=/path/to/weights.h5 train --dataset=/path/to/coco*.json
 
     # Continue training the last model you trained
-    python3 address.py --model=last train --dataset=/path/to/coco.json
+    python3 address.py --model=last train --dataset=/path/to/coco*.json
 
-    # Run COCO evaluation on the last model you trained
-    python3 address.py --model=last evaluate --dataset=/path/to/coco.json
+    # Run COCO prediction+evaluation on the last model you trained
+    python3 address.py --model=last evaluate --dataset=/path/to/coco*.json
 
-    # Run COCO evaluation on the last model you trained (only first 100 files, writing plot files)
-    python3 address.py --model=last --limit 100 --plot pred evaluate --dataset=/path/to/coco.json
+    # Run COCO prediction+evaluation on the last model you trained (only first 100 files, writing plot files)
+    python3 address.py --model=last --limit 100 --plot pred evaluate --dataset=/path/to/coco*.json
 
-    # Run COCO prediction on the last model you trained
+    # Run COCO prediction on the last model you trained (creating new COCO along existing COCO for comparison)
+    python3 address.py --model=last predict --dataset-gt=/path/to/coco.json --dataset=/path/to/coco-pred.json
+
+    # Run COCO evaluation between original and predicted dataset:
+    python3 address.py compare --dataset-gt=/path/to/coco.json --dataset=/path/to/coco-pred.json
+
+    # Run COCO prediction on the last model you trained (creating new COCO for arbitrary files)
     python3 address.py --model=last test --dataset=/path/to/files.json /path/to/files*
 
-    # Run COCO prediction on the last model you trained (writing plot files)
+    # Run COCO prediction on the last model you trained (...also writing plot files)
     python3 address.py --model=last test --plot pred --dataset=/path/to/files.json /path/to/files*
 """
 
@@ -385,7 +391,7 @@ class CocoDataset(utils.Dataset):
             ann_ids = coco.getAnnIds(
                 imgIds=[id_], catIds=class_ids, iscrowd=None)
             self.add_image(
-                "IAO", image_id=i,
+                "IAO", image_id=id_ if return_coco else i,
                 path=os.path.join(dataset_dir, file_name),
                 width=coco.imgs[id_]["width"],
                 height=coco.imgs[id_]["height"],
@@ -798,7 +804,7 @@ def main():
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path of the address dataset annotations (randomly split into training and validation)')
     train_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
-                              help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
+                              help='ratio of train-set in random train/test split (default=0.7 equals 70%%)')
     train_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
                               help='seed value for random train/test split')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
@@ -813,11 +819,16 @@ def main():
     evaluate_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                                  help='File path of the address dataset annotations (randomly split into skip and evaluation)')
     evaluate_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
-                                 help='ratio of trainset in random train/test split (default=0.7 equals 70%%)')
+                                 help='ratio of (ignored) train-set in random train/test split (default=0.7 equals 70%%)')
     evaluate_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
                                  help='seed value for random train/test split')
     evaluate_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
                                  help='Create plot files from prediction under *.SUFFIX.png')
+    predict_parser = subparsers.add_parser('predict', help="Apply a model on images with COCO annotations, creating new annotations")
+    predict_parser.add_argument('--dataset-gt', required=True, metavar="PATH/TO/COCO.json",
+                                help='File path of the address dataset annotations (ground truth)')
+    predict_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
+                                help='File path of the address dataset annotations (to be filled)')
     test_parser = subparsers.add_parser('test', help="Apply a model on image files, adding COCO annotations")
     test_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                              help='File path of the address dataset annotations (to be filled)')
@@ -830,6 +841,10 @@ def main():
                                 help='File path of the address dataset annotations (from prediction)')
     compare_parser.add_argument('--dataset-gt', required=True, metavar="PATH/TO/COCO.json",
                                 help='File path of the address dataset annotations (from ground truth)')
+    compare_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                                help='ratio of (ignored) train-set in random train/test split (default=0.7 equals 70%%)')
+    compare_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                                help='seed value for random train/test split')
     args = parser.parse_args()
     print("Command: ", args.command)
     print("Model: ", args.model)
@@ -843,11 +858,11 @@ def main():
     if args.command in ['evaluate', 'test']:
         print("Plot: ", args.plot)
     print("Dataset: ", args.dataset)
-    if args.command in ['evaluate', 'train']:
+    if args.command in ['evaluate', 'train', 'compare']:
         print("Split: ", args.split)
     if args.command == 'test':
         print("Files: ", len(args.files))
-    if args.command == 'compare':
+    if args.command in ['predict', 'compare']:
         print("GT: ", args.dataset_gt)
     print("Limit: ", args.limit)
 
@@ -996,10 +1011,33 @@ def main():
             coco.createIndex()
             results, _ = test_coco(model, dataset_val, limit=limit, plot=args.plot)
             # Load results. This modifies results with additional attributes.
-            coco_results = coco.loadRes(results)
+            if results:
+                coco_results = coco.loadRes(results)
+            else:
+                coco_results = COCO()
+                coco_results.dataset = coco.dataset.copy()
+                coco_results.dataset['annotations'] = []
+                coco_results.createIndex()
             # Evaluate
             evaluate_coco(coco, coco_results)
         
+    elif args.command == "predict":
+        dataset = CocoDataset()
+        coco_gt = dataset.load_coco(args.dataset_gt,
+                                    os.path.dirname(args.dataset_gt),
+                                    limit=args.limit or None,
+                                    return_coco=True)
+        dataset.prepare()
+        print("Running COCO prediction on {} images.".format(dataset.num_images))
+        results, _ = test_coco(model, dataset)
+        if results:
+            coco = coco_gt.loadRes(results)
+        else:
+            coco = coco_gt
+            coco.dataset['annotations'] = []
+            coco.createIndex()
+        store_coco(coco, args.dataset)
+    
     elif args.command == "test":
         # Test dataset (read images from args.files)
         dataset = CocoDataset()
@@ -1009,8 +1047,9 @@ def main():
         coco = COCO()
         coco.dataset = dataset.dump_coco(os.path.dirname(args.dataset))
         coco.createIndex()
-        result, _ = test_coco(model, dataset, verbose=True, plot=args.plot)
-        coco = coco.loadRes(result)
+        results, _ = test_coco(model, dataset, verbose=True, plot=args.plot)
+        if results:
+            coco = coco.loadRes(results)
         store_coco(coco, args.dataset)
         
     elif args.command == "compare":
@@ -1018,16 +1057,27 @@ def main():
         dataset_gt = CocoDataset()
         coco = COCO(args.dataset)
         coco_gt = COCO(args.dataset_gt)
+        np.random.seed(args.seed)
+        limit = args.limit
+        if not limit or limit > len(coco_gt.imgs):
+            limit = len(coco_gt.imgs)
+        indexes = np.random.permutation(limit)
+        trainset = indexes[:int(args.split*limit)]
+        valset = indexes[int(args.split*limit):]
+        image_ids = coco_gt.getImgIds()
+        image_ids = np.array(image_ids).take(valset)
         # convert annotations from polygons to compressed format
         for ann in coco.anns.values():
             ann['segmentation'] = coco.annToRLE(ann)
         for ann in coco_gt.anns.values():
             ann['segmentation'] = coco.annToRLE(ann)
         print("prediction dataset: %d imgs %d cats" % (
-            len(coco.imgs), len(coco.cats)))
+            len(image_ids), len(set([ann['category_id']
+                                     for ann in coco.loadAnns(coco.getAnnIds(imgIds=image_ids))]))))
         print("ground-truth dataset: %d imgs %d cats" % (
-            len(coco_gt.imgs), len(coco_gt.cats)))
-        evaluate_coco(coco_gt, coco)
+            len(image_ids), len(set([ann['category_id']
+                                     for ann in coco_gt.loadAnns(coco_gt.getAnnIds(imgIds=image_ids))]))))
+        evaluate_coco(coco_gt, coco, image_ids=image_ids)
     
     else:
         print("'{}' is not recognized. "
