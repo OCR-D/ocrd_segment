@@ -42,7 +42,6 @@ from ocrd_models.ocrd_page_generateds import (
 from ocrd import Processor
 
 from .config import OCRD_TOOL
-from .extract_pages import CLASSES
 
 TOOL = 'ocrd-segment-from-masks'
 
@@ -71,11 +70,6 @@ class ImportImageSegmentation(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
         colordict = self.parameter['colordict']
-        if not colordict:
-            LOG.info('Using default PAGE colordict')
-            colordict = dict(('#' + col, name)
-                             for name, col in CLASSES.items()
-                             if name)
         typedict = {"TextRegion": TextTypeSimpleType,
                     "GraphicRegion": GraphicsTypeSimpleType,
                     "ChartType": ChartTypeSimpleType}
@@ -96,9 +90,9 @@ class ImportImageSegmentation(Processor):
                 segmentation_pil = Image.open(segmentation_filename)
             has_alpha = segmentation_pil.mode == 'RGBA'
             if has_alpha:
-                colorformat = "#%08X"
+                colorformat = "%08X"
             else:
-                colorformat = "#%06X"
+                colorformat = "%06X"
                 if segmentation_pil.mode != 'RGB':
                     segmentation_pil = segmentation_pil.convert('RGB')
             # convert to array
