@@ -26,6 +26,7 @@ TOOL = 'ocrd-segment-extract-pages'
 # (from prima-page-viewer/src/org/primaresearch/page/viewer/ui/render/PageContentColors,
 #  but added alpha channel to also discern subtype, if not visually;
 #  ordered such that overlaps still allows maximum separation)
+# (Not used any more; now as default to ocrd-tool.json parameter.)
 # pragma pylint: disable=bad-whitespace
 CLASSES = {
     '':                                     'FFFFFF00',
@@ -136,13 +137,14 @@ class ExtractPages(Processor):
             bin_image_grp = file_groups[0]
             LOG.info("No output file group for binarized images specified, falling back to output filegrp '%s'", bin_image_grp)
         self.output_file_grp = file_groups[0]
+        classes = self.parameter['colordict']
 
         # COCO: init data structures
         images = list()
         annotations = list()
         categories = list()
         i = 0
-        for cat, color in CLASSES.items():
+        for cat, color in classes.items():
             # COCO format does not allow alpha channel
             color = (int(color[0:2], 16),
                      int(color[2:4], 16),
@@ -198,18 +200,20 @@ class ExtractPages(Processor):
                 else:
                     raise
             page_image_dbg = Image.new(mode='RGBA', size=page_image.size,
-                                       color='#' + CLASSES[''])
-            if page.get_Border():
+                                       color='#' + classes[''])
+            if 'Border' not in classes:
+                pass
+            elif page.get_Border():
                 polygon = coordinates_of_segment(
                     page.get_Border(), page_image, page_coords).tolist()
                 ImageDraw.Draw(page_image_dbg).polygon(
                     list(map(tuple, polygon)),
-                    fill='#' + CLASSES['Border'])
+                    fill='#' + classes['Border'])
             else:
-                page_image_dbg.paste('#' + CLASSES['Border'],
+                page_image_dbg.paste('#' + classes['Border'],
                                      (0, 0, page_image.width, page_image.height))
             regions = dict()
-            for name in CLASSES.keys():
+            for name in classes.keys():
                 if not name or name == 'Border' or ':' in name:
                     # no subtypes here
                     continue
@@ -279,7 +283,7 @@ class ExtractPages(Processor):
                     # draw region:
                     ImageDraw.Draw(page_image_dbg).polygon(
                         list(map(tuple, polygon)),
-                        fill='#' + CLASSES[(rtype + ':' + subrtype) if subrtype else rtype])
+                        fill='#' + classes[(rtype + ':' + subrtype) if subrtype else rtype])
                     # COCO: add annotations
                     i += 1
                     annotations.append(
@@ -334,7 +338,7 @@ class ExtractPages(Processor):
         file_id = dbg_image_grp + '.colordict.json'
         LOG.info('Writing colordict file "%s" in .', file_id)
         with open(file_id, 'w') as out:
-            json.dump(dict(('#' + col, name)
-                           for name, col in CLASSES.items()
+            json.dump(dict((col, name)
+                           for name, col in classes.items()
                            if name),
                       out)
