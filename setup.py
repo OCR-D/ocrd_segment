@@ -8,6 +8,8 @@ Installs:
     - ocrd-segment-extract-pages
     - ocrd-segment-extract-regions
     - ocrd-segment-extract-lines
+    - ocrd-segment-extract-words
+    - ocrd-segment-extract-glyphs
     - ocrd-segment-replace-original
     - ocrd-segment-replace-page
     - ocrd-segment-evaluate
@@ -43,6 +45,8 @@ setup(
             'ocrd-segment-extract-pages=ocrd_segment.cli:ocrd_segment_extract_pages',
             'ocrd-segment-extract-regions=ocrd_segment.cli:ocrd_segment_extract_regions',
             'ocrd-segment-extract-lines=ocrd_segment.cli:ocrd_segment_extract_lines',
+            'ocrd-segment-extract-words=ocrd_segment.cli:ocrd_segment_extract_words',
+            'ocrd-segment-extract-glyphs=ocrd_segment.cli:ocrd_segment_extract_glyphs',
             'ocrd-segment-replace-original=ocrd_segment.cli:ocrd_segment_replace_original',
             'ocrd-segment-replace-page=ocrd_segment.cli:ocrd_segment_replace_page',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',

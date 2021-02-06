@@ -148,6 +148,58 @@
         }
       }
     },
+    "ocrd-segment-extract-words": {
+      "executable": "ocrd-segment-extract-words",
+      "categories": ["Image preprocessing"],
+      "description": "Extract word segmentation as word images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "input_file_grp": [
+        "OCR-D-SEG-WORD",
+        "OCR-D-GT-SEG-WORD"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-glyphs": {
+      "executable": "ocrd-segment-extract-glyphs",
+      "categories": ["Image preprocessing"],
+      "description": "Extract glyph segmentation as glyph images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "input_file_grp": [
+        "OCR-D-SEG-GLYPH",
+        "OCR-D-GT-SEG-GLYPH"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-CROP"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
     "ocrd-segment-replace-original": {
       "executable": "ocrd-segment-replace-original",
       "categories": ["Image preprocessing"],
