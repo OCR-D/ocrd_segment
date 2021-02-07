@@ -146,6 +146,20 @@
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
         },
+        "plot_overlay": {
+          "type": "boolean",
+          "default": false,
+          "description": "When generating mask images with `plot_segmasks`, instead of starting with a blank image and having layers and segments replace each other, start with the raw image and superimpose (alpha-composite) layers and segments."
+        },
+        "plot_segmasks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["page", "region", "line", "word", "glyph"]
+          },
+          "default": ["region"],
+          "description": "Generate mask images of the page segmentation in the last output fileGrp. Draw a separate file foreach specified PAGE hierarchy level in the list (in that order), where 'page' denotes the Border polygon, 'region' denotes Region types, 'line' denotes TextLine, 'word' denotes Word and 'glyph' denotes Glyph. Each type must be mapped in `colordict`. Where neighbors of the same type intersect, show a warning (unless `plot_overlay` is true)."
+        },
         "colordict": {
           "type": "object",
           "default": {
@@ -200,8 +214,11 @@
             "NoiseRegion":                          "FF0000FF",
             "SeparatorRegion":                      "FF00FFFF",
             "UnknownRegion":                        "646464FF",
-            "CustomRegion":                         "637C81FF"},
-          "description": "Mapping from region types to extract to color values in the output mask images and COCO; color must be encoded hexadecimal (e.g. '00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped region types will be ignored (i.e. treated as background)). Default is PageViewer color scheme. Cf. colordict parameter of ocrd-segment-from-masks."
+            "CustomRegion":                         "637C81FF",
+            "TextLine":                             "32CD32FF",
+            "Word":                                 "B22222FF",
+            "Glyph":                                "2E8B08FF"},
+          "description": "Mapping from segment types to extract to color values in the output mask images and COCO; color must be encoded hexadecimal (e.g. '00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped region types will be ignored (i.e. treated as background)). Default is PageViewer color scheme. Cf. colordict parameter of ocrd-segment-from-masks."
         }
       }
     },
