@@ -22,7 +22,6 @@ from .config import OCRD_TOOL
 from .repair import ensure_consistent
 
 TOOL = 'ocrd-segment-replace-page'
-LOG = getLogger('processor.ReplacePage')
 
 class ReplacePage(Processor):
 
@@ -51,6 +50,7 @@ class ReplacePage(Processor):
         
         Produce a new output file by serialising the resulting hierarchy.
         """
+        LOG = getLogger('processor.ReplacePage')
         assert_file_grp_cardinality(self.input_file_grp, 2, 'original, page')
         assert_file_grp_cardinality(self.output_file_grp, 1)
         adapt_coords = self.parameter['transform_coordinates']
