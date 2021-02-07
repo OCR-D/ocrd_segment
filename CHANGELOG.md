@@ -4,6 +4,19 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.8]
+
+Fixed:
+
+ * replace-page: `getLogger` context
+
+Changed:
+
+ * extract-words: new
+ * extract-glyphs: new
+ * extract-pages: expose `colordict` parameter (w/ same default)
+ * extract-pages: multi-level mask output via `plot_segmasks`
+
 ## [0.1.7]
 
 Fixed:
@@ -76,6 +89,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.8]: ../../compare/v0.1.7...v0.1.8
 [0.1.7]: ../../compare/v0.1.6...v0.1.7
 [0.1.6]: ../../compare/v0.1.5...v0.1.6
 [0.1.5]: ../../compare/v0.1.4...v0.1.5
