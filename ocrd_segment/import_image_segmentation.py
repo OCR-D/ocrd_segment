@@ -73,11 +73,10 @@ class ImportImageSegmentation(Processor):
         typedict = {"TextRegion": TextTypeSimpleType,
                     "GraphicRegion": GraphicsTypeSimpleType,
                     "ChartType": ChartTypeSimpleType}
-        ifgs = self.input_file_grp.split(",") # input file groups
         # collect input file tuples
-        ifts = self.zip_input_files(ifgs) # input file tuples
+        ifts = self.zip_input_files() # input file tuples
         # process input file tuples
-        for n, ift in enumerate(ifts):
+        for ift in ifts:
             input_file, segmentation_file = ift
             LOG.info("processing page %s", input_file.pageId)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -184,42 +183,3 @@ class ImportImageSegmentation(Processor):
                 local_filename=os.path.join(self.output_file_grp,
                                             file_id + '.xml'),
                 content=to_xml(pcgts))
-            
-    def zip_input_files(self, ifgs):
-        """Get a list (for each physical page) of tuples (for each input file group) of METS files."""
-        LOG = getLogger('processor.ImportImageSegmentation')
-        ifts = list() # file tuples
-        if self.page_id:
-            pages = [self.page_id]
-        else:
-            pages = self.workspace.mets.physical_pages
-        for page_id in pages:
-            ifiles = list()
-            for ifg in ifgs:
-                LOG.debug("adding input file group %s to page %s", ifg, page_id)
-                files = self.workspace.mets.find_files(pageId=page_id, fileGrp=ifg)
-                # find_files cannot filter by MIME type yet
-                files = [file_ for file_ in files if (
-                    file_.mimetype.startswith('image/') or
-                    file_.mimetype == MIMETYPE_PAGE)]
-                if not files:
-                    # fall back for missing pageId via Page imageFilename:
-                    all_files = self.workspace.mets.find_files(fileGrp=ifg)
-                    for file_ in all_files:
-                        pcgts = page_from_file(self.workspace.download_file(file_))
-                        image_url = pcgts.get_Page().get_imageFilename()
-                        img_files = self.workspace.mets.find_files(url=image_url)
-                        if img_files and img_files[0].pageId == page_id:
-                            files = [file_]
-                            break
-                if not files:
-                    # other fallback options?
-                    LOG.error('found no page %s in file group %s',
-                              page_id, ifg)
-                    ifiles.append(None)
-                else:
-                    ifiles.append(files[0])
-            if ifiles[0]:
-                ifts.append(tuple(ifiles))
-        return ifts
-            

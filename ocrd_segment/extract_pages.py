@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
 import json
-import numpy as np
 from collections import namedtuple
 import os.path
+import numpy as np
 from PIL import Image, ImageDraw
 from shapely.geometry import Polygon
 from shapely.validation import explain_validity
@@ -387,6 +387,7 @@ def segment_poly(page_id, segment, coords):
     return poly
 
 def plot_segment(page_id, segment, poly, stype, classes, image, neighbors, alpha=False):
+    LOG = getLogger('processor.ExtractPages')
     if not poly:
         return
     if stype not in classes:
