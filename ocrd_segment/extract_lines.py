@@ -99,6 +99,8 @@ class ExtractLines(Processor):
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
             normal = workbook.add_format({'valign': 'top'})
+            editable = workbook.add_format({'valign': 'top'})
+            editable.set_locked(False)
             worksheet.set_default_row(height=40)
             worksheet.freeze_panes(1, 0)
             worksheet.write('A1', 'ID', bold)
@@ -106,6 +108,23 @@ class ExtractLines(Processor):
             worksheet.write('C1', 'Status', bold)
             worksheet.write('D1', 'Image', bold)
             worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
+            worksheet.protect('', {
+                'objects':               False,
+                'scenarios':             False,
+                'format_cells':          True,
+                'format_columns':        True,
+                'format_rows':           True,
+                'insert_columns':        True,
+                'insert_rows':           True,
+                'insert_hyperlinks':     True,
+                'delete_columns':        True,
+                'delete_rows':           True,
+                'select_locked_cells':   True,
+                'sort':                  False,
+                'autofilter':            False,
+                'pivot_tables':          False,
+                'select_unlocked_cells': True,
+            })
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
@@ -237,8 +256,9 @@ class ExtractLines(Processor):
                         if len(ltext) > max_text_length:
                             max_text_length = len(ltext)
                             worksheet.set_column('B:B', max_text_length)
-                        worksheet.write('B%d' % i, ltext, normal)
+                        worksheet.write('B%d' % i, ltext, editable)
                         worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                        worksheet.write('C%d' % i, 'ToDo', editable)
                         worksheet.insert_image('D%d' % i, file_path, {
                             'object_position': 1, 'url': url, 'y_scale': scale, 'x_scale': scale})
 
