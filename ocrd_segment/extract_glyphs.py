@@ -34,6 +34,9 @@ class ExtractGlyphs(Processor):
         Extract an image for each glyph (which depending on the workflow
         can already be deskewed, dewarped, binarized etc.), cropped to its
         minimal bounding box, and masked by the coordinate polygon outline.
+        Apply ``feature_filter`` (a comma-separated list of image features,
+        cf. :py:func:`ocrd.workspace.Workspace.image_from_page`) to skip
+        specific features when retrieving derived images.
         If ``transparency`` is true, then also add an alpha channel which is
         fully transparent outside of the mask.
         
@@ -75,6 +78,7 @@ class ExtractGlyphs(Processor):
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
+                feature_filter=self.parameter['feature_filter'],
                 transparency=self.parameter['transparency'])
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
@@ -92,6 +96,7 @@ class ExtractGlyphs(Processor):
             for region in regions:
                 region_image, region_coords = self.workspace.image_from_segment(
                     region, page_image, page_coords,
+                    feature_filter=self.parameter['feature_filter'],
                     transparency=self.parameter['transparency'])
                 rtype = region.get_type()
                 
@@ -101,6 +106,7 @@ class ExtractGlyphs(Processor):
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
+                        feature_filter=self.parameter['feature_filter'],
                         transparency=self.parameter['transparency'])
                     words = line.get_Word()
                     if not words:
@@ -108,6 +114,7 @@ class ExtractGlyphs(Processor):
                     for word in words:
                         word_image, word_coords = self.workspace.image_from_segment(
                             word, line_image, line_coords,
+                            feature_filter=self.parameter['feature_filter'],
                             transparency=self.parameter['transparency'])
                         glyphs = word.get_Glyph()
                         if not glyphs:
@@ -115,6 +122,7 @@ class ExtractGlyphs(Processor):
                         for glyph in glyphs:
                             glyph_image, glyph_coords = self.workspace.image_from_segment(
                                 glyph, word_image, word_coords,
+                                feature_filter=self.parameter['feature_filter'],
                                 transparency=self.parameter['transparency'])
                             lpolygon_rel = coordinates_of_segment(
                                 glyph, glyph_image, glyph_coords).tolist()

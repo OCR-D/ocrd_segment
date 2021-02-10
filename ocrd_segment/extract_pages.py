@@ -180,7 +180,11 @@ class ExtractPages(Processor):
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
-            num_page_id = int(page_id.strip(page_id.strip("0123456789")))
+            try:
+                # separate non-numeric part of page ID to retain the numeric part
+                num_page_id = int(page_id.strip(page_id.strip("0123456789")))
+            except Exception:
+                num_page_id = n
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             self.add_metadata(pcgts)

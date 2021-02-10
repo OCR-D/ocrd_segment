@@ -1,5 +1,5 @@
 {
-  "version": "0.1.8",
+  "version": "0.1.9",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-repair": {
@@ -131,7 +131,7 @@
         "OCR-D-GT-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-PAGE"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
@@ -231,10 +231,15 @@
         "OCR-D-GT-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-REGION"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -257,10 +262,15 @@
         "OCR-D-GT-SEG-LINE"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-LINE"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -283,10 +293,15 @@
         "OCR-D-GT-SEG-WORD"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-WORD"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -309,10 +324,15 @@
         "OCR-D-GT-SEG-GLYPH"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-GLYPH"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -336,20 +356,19 @@
         "OCR-D-OCR"
       ],
       "output_file_grp": [
-        "OCR-D-SEG-CROP",
-        "OCR-D-IMG-CROP"
+        "OCR-D-SEG-CROP"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
           "feature_selector": {
               "type": "string",
               "default": "",
-              "description": "comma-separated list of required image features (e.g. binarized,despeckled)"
+              "description": "Comma-separated list of required image features (e.g. `binarized,despeckled`)"
           },
           "feature_filter": {
               "type": "string",
               "default": "",
-              "description": "comma-separated list of forbidden image features (e.g. binarized,despeckled)"
+              "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)"
           },
           "transform_coordinates": {
               "type": "boolean",
@@ -368,8 +387,8 @@
         "OCR-D-OCR"
       ],
       "output_file_grp": [
-        "OCR-D-SEG-CROP",
-        "OCR-D-IMG-CROP"
+        "OCR-D-SEG-LINE",
+        "OCR-D-OCR"
       ],
       "steps": ["layout/analysis"],
       "parameters": {

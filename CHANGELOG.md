@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.9]
+
+Changed:
+
+ * extract-regions/lines/words/glyphs: add `feature_filter` param
+
 ## [0.1.8]
 
 Fixed:
@@ -89,6 +95,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.9]: ../../compare/v0.1.8...v0.1.9
 [0.1.8]: ../../compare/v0.1.7...v0.1.8
 [0.1.7]: ../../compare/v0.1.6...v0.1.7
 [0.1.6]: ../../compare/v0.1.5...v0.1.6
