@@ -93,7 +93,9 @@ class ExtractLines(Processor):
             url = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
             if not os.path.isdir(self.output_file_grp):
                 os.mkdir(self.output_file_grp)
-            workbook = xlsxwriter.Workbook(url)
+            workbook = xlsxwriter.Workbook(url, {'strings_to_numbers':  False,
+                                                 'strings_to_formulas': False,
+                                                 'strings_to_urls':     False})
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
             normal = workbook.add_format({'valign': 'top'})
@@ -103,7 +105,7 @@ class ExtractLines(Processor):
             worksheet.write('B1', 'Text', bold)
             worksheet.write('C1', 'Status', bold)
             worksheet.write('D1', 'Image', bold)
-            worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ 	ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
+            worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
