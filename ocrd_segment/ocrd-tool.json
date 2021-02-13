@@ -181,6 +181,12 @@
           "description": "path of h5py weight file for model trained with formdata.py",
           "cacheable": true
         },
+        "images_per_gpu": {
+          "type": "number",
+          "format": "integer",
+          "default": 1,
+          "description": "number of images fed in parallel"
+        },
         "min_confidence": {
           "type": "number",
           "format": "float",

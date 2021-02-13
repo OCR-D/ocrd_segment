@@ -88,6 +88,7 @@ class ClassifyFormDataLayout(Processor):
         LOG.info("Loading model '%s'", model_path)
         config = FormDataConfig()
         config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
+        config.IMAGES_PER_GPU = self.parameter['images_per_gpu']
         assert config.NUM_CLASSES == len(self.categories)
         #config.display()
         self.model = model.MaskRCNN(
