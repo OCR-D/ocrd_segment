@@ -53,7 +53,10 @@
       "parameters": {
         "categories": {
           "type": "array",
-          "default": [{"id": 1,
+          "default": [{"id": 0,
+                       "name": "BG",
+                       "source": ""},
+                      {"id": 1,
                        "name": "address-rcpt",
                        "source": "IAO",
                        "type": "paragraph"},
