@@ -360,7 +360,7 @@ class CocoDataset(utils.Dataset):
         class_ids: If provided, only loads images that have the given classes.
         class_map: TODO: Not implemented yet. Supports maping classes from
             different datasets to the same class ID.
-        return_coco: If True, returns the COCO object.
+        return_coco: If True, returns the COCO object, and retains all its IDs.
         """
         if not class_ids:
             class_ids = []
@@ -644,7 +644,7 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
                         pathlib.Path(image_path).with_suffix('.' + plot + '.png'))
 
     print("Prediction time: {}. Average {}/image".format(
-        t_prediction, t_prediction / len(image_ids)))
+        t_prediction, t_prediction / len(image_ids) if image_ids else 0))
     print("Total time: ", time.time() - t_start)
 
     for i, ann in enumerate(results):
@@ -1123,8 +1123,8 @@ def main():
         if image_ids:
             evaluate_coco(coco_gt, coco, image_ids=image_ids)
         else:
-            raise SystemExit("Datasets have no common image file names. "
-                             "(consider running `merge --sort`)")
+            raise SystemExit("Datasets '{}' and '{}' have no common image file names. "
+                             "(consider running `merge --sort`)".format(args.dataset, args.dataset_pred))
 
 if __name__ == '__main__':
     main()

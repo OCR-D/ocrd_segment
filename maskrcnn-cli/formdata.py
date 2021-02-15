@@ -1124,8 +1124,8 @@ def main():
                 pathmap = json.load(replace_names)
                 for img in coco.imgs.values():
                     if img['file_name'] in pathmap:
-                        print('replacing file_name "%s" by "%s"' % (
-                            img['file_name'], pathmap[img['file_name']]))
+                        # print('replacing file_name "%s" by "%s"' % (
+                        #     img['file_name'], pathmap[img['file_name']]))
                         img['file_name'] = pathmap[img['file_name']]
         if args.rle:
             for ann in coco.anns.values():
@@ -1155,8 +1155,8 @@ def main():
         if image_ids:
             evaluate_coco(coco_gt, coco, image_ids=image_ids)
         else:
-            raise SystemExit("Datasets have no common image file names. "
-                             "(consider running `merge --sort`)")
+            raise SystemExit("Datasets '{}' and '{}' have no common image file names. "
+                             "(consider running `merge --sort`)".format(args.dataset, args.dataset_pred))
 
 if __name__ == '__main__':
     main()
