@@ -836,7 +836,16 @@ def json_safe(obj):
     else:
         return obj.__str__()
 
-def store_coco(coco, filename):        
+def store_coco(coco, filename, dataset_dir='.'):
+    dataset_dir = os.path.normpath(dataset_dir)
+    if dataset_dir != '.':
+        for img in coco.dataset['images']:
+            file_name = os.path.normpath(img['file_name'])
+            prefix = os.path.commonprefix(dataset_dir, file_name)
+            if prefix:
+                img['file_name'] = file_name[len(prefix):]
+            else:
+                img['file_name'] = os.path.join(dataset_dir, file_name)
     with open(filename, 'w') as outp:
         json.dump(coco.dataset, outp, default=json_safe, indent=2)
 
@@ -1111,7 +1120,9 @@ def main():
                 # compare
                 evaluate_coco(coco, coco_results)
             else:
-                store_coco(coco_results, args.dataset_pred)
+                store_coco(coco_results, args.dataset_pred,
+                           dataset_dir='.' if args.cwd
+                           else os.path.dirname(args.dataset_pred))
     
     elif args.command == "test":
         # Test dataset (read images from args.files)
@@ -1125,7 +1136,9 @@ def main():
         coco.createIndex()
         if results:
             coco = coco.loadRes(results)
-        store_coco(coco, args.dataset_pred)
+        store_coco(coco, args.dataset_pred,
+                   dataset_dir='.' if args.cwd
+                   else os.path.dirname(args.dataset_pred))
     
     elif args.command == "merge":
         dataset_merged = CocoDataset()
@@ -1155,7 +1168,9 @@ def main():
             coco = sort_coco(coco, combine=args.combine)
         if args.anns_only:
             coco.dataset = coco.dataset['annotations']
-        store_coco(coco, args.dataset_merged)
+        store_coco(coco, args.dataset_merged,
+                   dataset_dir='.' if args.cwd
+                   else os.path.dirname(args.dataset_merged))
     
     elif args.command == "compare":
         coco = COCO(args.dataset_pred)
