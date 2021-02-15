@@ -49,6 +49,7 @@ import time
 import pathlib
 import json
 import argparse
+from itertools import groupby
 
 from tqdm import tqdm
 import numpy as np
@@ -686,14 +687,24 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=Fa
         ann['id'] = i
     return results, cocoids
 
-def sort_coco(coco, image_ids=None):
+def sort_coco(coco, image_ids=None, combine=False):
     """Sort images in COCO dataset by their file_name alphabetically, reassigning image_ids"""
     images = coco.dataset['images']
     if image_ids is not None:
         images = [img for img in images if img['id'] in image_ids]
-    images2 = sorted(images, key=lambda img: img['file_name'])
-    coco.dataset['images'] = images2
+    def fname(img):
+        return img['file_name']
+    images2 = sorted(images, key=fname)
     mapping = dict((id_, i) for i, id_ in enumerate(img['id'] for img in images2))
+    if combine:
+        images3 = list()
+        for _, imggrp in groupby(images2, key=fname):
+            img0 = next(imggrp)
+            images3.append(img0)
+            for img in imggrp:
+                mapping[img['id']] = mapping[img0['id']]
+        images2 = images3
+    coco.dataset['images'] = images2
     for img in images:
         img['id'] = mapping[img['id']]
     for ann in coco.dataset['annotations']:
@@ -898,7 +909,9 @@ def main():
     merge_parser.add_argument('--replace-names', required=False, metavar="PATH/TO/PATHMAP.json",
                               help='File path of a JSON object mapping existing file_name paths to new ones')
     merge_parser.add_argument('--sort', action='store_true',
-                              help='Sort images of result dataset by image path names')
+                              help='Sort images in result dataset by image path names')
+    merge_parser.add_argument('--combine', action='store_true',
+                              help='Combine images in result dataset if they share image path names after (--replace-names and) --sort')
     merge_parser.add_argument('--rle', action='store_true',
                               help='Convert segmentations of result dataset to RLE format (suitable for COCO explorer etc)')
     merge_parser.add_argument('--anns-only', action='store_true',
@@ -1131,7 +1144,7 @@ def main():
             for ann in coco.anns.values():
                 ann['segmentation'] = coco.annToRLE(ann)
         if args.sort:
-            coco = sort_coco(coco)
+            coco = sort_coco(coco, combine=args.combine)
         if args.anns_only:
             coco.dataset = coco.dataset['annotations']
         store_coco(coco, args.dataset_merged)
