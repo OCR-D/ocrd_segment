@@ -679,7 +679,7 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=Fa
                         pathlib.Path(image_path).with_suffix('.' + plot + '.png'))
 
     print("Prediction time: {}. Average {}/image".format(
-        t_prediction, t_prediction / len(image_ids)))
+        t_prediction, t_prediction / len(image_ids) if len(image_ids) else 0))
     print("Total time: ", time.time() - t_start)
 
     for i, ann in enumerate(results):
