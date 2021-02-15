@@ -856,6 +856,8 @@ def main():
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
                         help='Maximum number of images to use (default=all)')
+    parser.add_argument('--cwd', action='store_true',
+                        help='Interpret all "file_name" paths in COCO relative to the current working directory (instead of the directory of the COCO file). Use with care (and consider chdir), or image paths may not resolve now or next time.')
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
@@ -1009,9 +1011,13 @@ def main():
             trainset = indexes[:int(args.split*limit)]
             valset = indexes[int(args.split*limit):]
             if args.command == "train":
-                dataset_train.load_coco(coco, #os.path.dirname(args.dataset),
+                dataset_train.load_coco(coco,
+                                        dataset_dir='.' if args.cwd
+                                        else os.path.dirname(dataset),
                                         limit=trainset)
-            dataset_val.load_coco(coco, #os.path.dirname(args.dataset),
+            dataset_val.load_coco(coco,
+                                  dataset_dir='.' if args.cwd
+                                  else os.path.dirname(dataset),
                                   limit=valset,
                                   return_coco=args.command == 'predict')
             del coco
@@ -1125,7 +1131,9 @@ def main():
         dataset_merged = CocoDataset()
         for dataset in args.dataset:
             coco = COCO(dataset)
-            dataset_merged.load_coco(coco, #os.path.dirname(dataset),
+            dataset_merged.load_coco(coco,
+                                     dataset_dir='.' if args.cwd
+                                     else os.path.dirname(dataset),
                                      limit=args.limit or None)
             del coco
         dataset_merged.prepare()
