@@ -99,10 +99,14 @@ class ExtractLines(Processor):
             excel_path = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
             if not os.path.isdir(self.output_file_grp):
                 os.mkdir(self.output_file_grp)
-            workbook = xlsxwriter.Workbook(excel_path)
+            workbook = xlsxwriter.Workbook(excel_path, {'strings_to_numbers':  False,
+                                                 'strings_to_formulas': False,
+                                                 'strings_to_urls':     False})
             worksheet = workbook.add_worksheet()
             bold = workbook.add_format({'bold': True})
             normal = workbook.add_format({'valign': 'top'})
+            editable = workbook.add_format({'valign': 'top'})
+            editable.set_locked(False)
             worksheet.set_default_row(height=40)
             worksheet.freeze_panes(1, 0)
             worksheet.write('A1', 'ID', bold)
@@ -115,6 +119,23 @@ class ExtractLines(Processor):
                 col_idx = 3 + i
                 worksheet.write_string(0, col_idx, s)
                 worksheet.set_column(col_idx, col_idx, 2)
+            worksheet.protect('', {
+                'objects':               False,
+                'scenarios':             False,
+                'format_cells':          True,
+                'format_columns':        True,
+                'format_rows':           True,
+                'insert_columns':        True,
+                'insert_rows':           True,
+                'insert_hyperlinks':     True,
+                'delete_columns':        True,
+                'delete_rows':           True,
+                'select_locked_cells':   True,
+                'sort':                  False,
+                'autofilter':            False,
+                'pivot_tables':          False,
+                'select_unlocked_cells': True,
+            })
             self.workspace.add_file(
                 ID=file_id,
                 mimetype='application/vnd.ms-excel',
@@ -224,8 +245,9 @@ class ExtractLines(Processor):
                         if len(ltext) > max_text_length:
                             max_text_length = len(ltext)
                             worksheet.set_column('B:B', max_text_length)
-                        worksheet.write('B%d' % i, ltext, normal)
+                        worksheet.write('B%d' % i, ltext, editable)
                         worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                        worksheet.write('C%d' % i, 'ToDo', editable)
                         worksheet.insert_image('D%d' % i, file_path, {
                             'object_position': 1, 'url': url, 'y_scale': scale, 'x_scale': scale})
 
