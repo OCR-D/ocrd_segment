@@ -135,6 +135,11 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],

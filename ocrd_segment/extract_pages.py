@@ -105,8 +105,14 @@ class ExtractPages(Processor):
         and coordinates relative to the page (which depending on the workflow could
         already be cropped, deskewed, dewarped, binarized etc). Extract the image of
         the (cropped, deskewed, dewarped) page, both in binarized form (if available)
-        and non-binarized form. In addition, create a new image with masks for each
-        segment type in ``plot_segmasks``, color-coded by class according to ``colordict``.
+        and raw form. For the latter, apply ``feature_filter`` (a comma-separated list
+        of image features, cf. :py:func:`ocrd.workspace.Workspace.image_from_page`)
+        to skip specific features when retrieving derived images. If ``transparency``
+        is true, then also add an alpha channel which is fully transparent outside of
+        the mask.
+        
+        In addition, create a new (third) image with masks for each segment type in
+        ``plot_segmasks``, color-coded by class according to ``colordict``.
         
         Create two JSON files with region types and coordinates: one (page-wise) in
         our custom format and one (global) in MS-COCO.
@@ -115,7 +121,7 @@ class ExtractPages(Processor):
         these 3 kinds of images. If fewer than 3 fileGrps are specified, they will
         share the same fileGrp (and directory). In particular, write files as follows:
         * in the first (or only) output file group (directory):
-          - ID + '.png': raw image of the (preprocessed) page
+          - ID + '.png': raw image of the page (preprocessed, but with ``feature_filter``)
           - ID + '.json': region coordinates/classes (custom format)
         * in the second (or only) output file group (directory):
           - ID + '.bin.png': binarized image of the (preprocessed) page, if available
@@ -129,7 +135,7 @@ class ExtractPages(Processor):
             where each follow-up layer and segment draws over the previous state, starting
             with a blank (white) image - unless ``plot_overlay`` is true, in which case
             each layer and segment is superimposed (alpha blended) onto the previous one,
-            starting with the raw image.
+            starting with the above raw image.
         
         In addition, write a file for all pages at once:
         * in the third (or first) output file group (directory):
@@ -192,7 +198,7 @@ class ExtractPages(Processor):
             ptype = page.get_type()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
-                feature_filter='binarized',
+                feature_filter=self.parameter['feature_filter'],
                 transparency=self.parameter['transparency'])
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
