@@ -160,15 +160,18 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["page", "region", "line", "word", "glyph"]
+            "enum": ["order", "page", "region", "line", "word", "glyph"]
           },
           "default": ["region"],
-          "description": "Generate mask images of the page segmentation in the last output fileGrp. Draw a separate file foreach specified PAGE hierarchy level in the list (in that order), where 'page' denotes the Border polygon, 'region' denotes Region types, 'line' denotes TextLine, 'word' denotes Word and 'glyph' denotes Glyph. Each type must be mapped in `colordict`. Where neighbors of the same type intersect, show a warning (unless `plot_overlay` is true)."
+          "description": "Generate mask images of the page segmentation in the last output fileGrp. Draw filled polygons for each specified PAGE hierarchy level in the list (in that order), where 'page' denotes the Border polygon, 'region' denotes Region types, 'line' denotes TextLine, 'word' denotes Word and 'glyph' denotes Glyph. Each type must be mapped in `colordict`. Where neighbors of the same type intersect, show a warning (unless `plot_overlay` is true). If 'order' is present, then draw arrows for reading order, too."
         },
         "colordict": {
           "type": "object",
           "default": {
             "":                                     "FFFFFF00",
+            "ReadingOrderLevel0":                   "DC143CFF",
+            "ReadingOrderLevel1":                   "9400D3FF",
+            "ReadingOrderLevelN":                   "8B0000FF",
             "Border":                               "FFFFFFFF",
             "TableRegion":                          "8B4513FF",
             "AdvertRegion":                         "4682B4FF",

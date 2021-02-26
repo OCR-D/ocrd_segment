@@ -4,6 +4,7 @@ import json
 from collections import namedtuple
 import os.path
 import numpy as np
+import cv2
 from PIL import Image, ImageDraw
 from shapely.geometry import Polygon
 from shapely.validation import explain_validity
@@ -19,6 +20,10 @@ from ocrd_utils import (
     MIME_TO_EXT
 )
 from ocrd_modelfactory import page_from_file
+from ocrd_models.ocrd_page import (
+    OrderedGroupType, OrderedGroupIndexedType,
+    RegionRefType, RegionRefIndexedType,
+)
 from ocrd import Processor
 
 from .config import OCRD_TOOL
@@ -85,7 +90,11 @@ CLASSES = {
     'NoiseRegion':                          'FF0000FF',
     'SeparatorRegion':                      'FF00FFFF',
     'UnknownRegion':                        '646464FF',
-    'CustomRegion':                         '637C81FF'}
+    'CustomRegion':                         '637C81FF',
+    'ReadingOrderLevel0':                   'DC143CFF',
+    'ReadingOrderLevel1':                   '9400D3FF',
+    'ReadingOrderLevelN':                   '8B0000FF',
+}
 # pragma pylint: enable=bad-whitespace
 
 class ExtractPages(Processor):
@@ -323,11 +332,15 @@ class ExtractPages(Processor):
                          'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
                          'iscrowd': 0})
 
-            self.workspace.save_image_file(page_image_segmask,
-                                           file_id + '.pseg',
-                                           mask_image_grp,
-                                           page_id=page_id,
-                                           mimetype=self.parameter['mimetype'])
+            if 'order' in self.parameter['plot_segmasks']:
+                plot_order(page.get_ReadingOrder(), classes, page_image_segmask,
+                           neighbors['region'], self.parameter['plot_overlay'])
+            if self.parameter['plot_segmasks']:
+                self.workspace.save_image_file(page_image_segmask,
+                                               file_id + '.pseg',
+                                               mask_image_grp,
+                                               page_id=page_id,
+                                               mimetype=self.parameter['mimetype'])
             self.workspace.add_file(
                 ID=file_id + '.json',
                 file_grp=mask_image_grp,
@@ -396,6 +409,46 @@ def segment_poly(page_id, segment, coords):
         return None
     return poly
 
+def plot_order(readingorder, classes, image, regions, alpha=False):
+    LOG = getLogger('processor.ExtractPages')
+    regiondict = dict((region.id, region.poly) for region in regions)
+    def get_points(rogroup, level):
+        points = list()
+        if isinstance(rogroup, (OrderedGroupType, OrderedGroupIndexedType)):
+            # FIXME: @index is broken in prima-core-libs+prima-page-viewer and producers
+            # (so we have to do ignore index here too to stay compatible)
+            regionrefs = rogroup.get_AllIndexed(index_sort=False)
+        else:
+            # FIXME: PageViewer does not render these in-order via arrows,
+            #        but creates a "star" plus circle for unordered groups
+            regionrefs = rogroup.get_UnorderedGroupChildren()
+        for regionref in regionrefs:
+            morepoints = list()
+            poly = regiondict.get(regionref.get_regionRef(), None)
+            if poly:
+                # we have seen this region
+                morepoints.append((level, tuple(np.array(poly.centroid, np.int))))
+            if not isinstance(regionref, (RegionRefType, RegionRefIndexedType)):
+                # try to get subgroup regions instead
+                morepoints = get_points(regionref, level + 1) or morepoints
+            points.extend(morepoints)
+        return points
+    newimg = 255 * np.ones((image.height, image.width, 3), np.uint8)
+    points = [(0, (0, 0))] + get_points(readingorder.get_OrderedGroup() or readingorder.get_UnorderedGroup(), 0)
+    for p1, p2 in zip(points[:-1], points[1:]):
+        color = 'ReadingOrderLevel%s' % (str(p1[0]) if p1[0] < 2 else 'N')
+        if color not in classes:
+            LOG.error('mask plots requested, but "colordict" does not contain a "%s" mapping', color)
+            return
+        color = classes[color]
+        color = (int(color[0:2], 16),
+                 int(color[2:4], 16),
+                 int(color[4:6], 16))
+        cv2.arrowedLine(newimg, p1[1], p2[1], color, thickness=2, tipLength=0.01)
+    layer = Image.fromarray(newimg)
+    layer.putalpha(Image.fromarray(255 * np.any(newimg < 255, axis=2).astype(np.uint8), mode='L'))
+    image.alpha_composite(layer)
+
 def plot_segment(page_id, segment, poly, stype, classes, image, neighbors, alpha=False):
     LOG = getLogger('processor.ExtractPages')
     if not poly:
@@ -423,7 +476,7 @@ def plot_segment(page_id, segment, poly, stype, classes, image, neighbors, alpha
                 LOG.warning('Page "%s" segment "%s" within neighbour "%s" (IoU: %.3f)',
                             page_id, segment.id, neighbor.id,
                             poly.area / neighbor.poly.area)
-        neighbors.append(Neighbor(segment.id, poly, stype))
+    neighbors.append(Neighbor(segment.id, poly, stype))
     # draw segment
     if alpha:
         layer = Image.new(mode='RGBA', size=image.size, color='#FFFFFF00')
