@@ -4,6 +4,17 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.10]
+
+Fixed:
+
+ * extract-regions: apply `feature_filter` param
+
+Changed:
+
+ * extract-pages: add `feature_filter` param
+ * extract-pages: add `order` choice for `plot_segmasks`
+
 ## [0.1.9]
 
 Changed:
@@ -95,6 +106,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.10]: ../../compare/v0.1.9...v0.1.10
 [0.1.9]: ../../compare/v0.1.8...v0.1.9
 [0.1.8]: ../../compare/v0.1.7...v0.1.8
 [0.1.7]: ../../compare/v0.1.6...v0.1.7
