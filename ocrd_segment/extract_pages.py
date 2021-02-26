@@ -434,7 +434,15 @@ def plot_order(readingorder, classes, image, regions, alpha=False):
             points.extend(morepoints)
         return points
     newimg = 255 * np.ones((image.height, image.width, 3), np.uint8)
-    points = [(0, (0, 0))] + get_points(readingorder.get_OrderedGroup() or readingorder.get_UnorderedGroup(), 0)
+    points = [(0, (0, 0))]
+    if readingorder:
+        readingorder = readingorder.get_OrderedGroup() or readingorder.get_UnorderedGroup()
+    if readingorder:
+        # use recursive group ordering
+        points.extend(get_points(readingorder, 0))
+    else:
+        # use XML ordering
+        points.extend([(0, tuple(np.array(region.poly.centroid, np.int))) for region in regions])
     for p1, p2 in zip(points[:-1], points[1:]):
         color = 'ReadingOrderLevel%s' % (str(p1[0]) if p1[0] < 2 else 'N')
         if color not in classes:
