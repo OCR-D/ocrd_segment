@@ -28,11 +28,11 @@ Usage: import the module, or run from the command line as such:
     maskrcnn-formdata --model=last --limit 100 --plot pred evaluate --dataset=/path/to/coco*.json
 
     # Run COCO prediction on the last model you trained (creating new COCO along existing COCO for comparison)
-    maskrcnn-formdata --model=last --split 0 predict --dataset=/path/to/coco.json --dataset-pred=/path/to/coco-pred.json
+    maskrcnn-formdata --model=last predict --dataset=/path/to/coco.json --dataset-pred=/path/to/coco-pred.json
 
     # Merge and sort multiple COCO datasets (for comparison)
-    maskrcnn-formdata merge --dataset=/path/to/coco*.json --dataset-merged=/path/to/coco-merged.json --sort --rle --replace-names pathmap.json
-    maskrcnn-formdata merge --dataset=/path/to/coco-pred*.json --dataset-merged=/path/to/coco-pred-merged.json --sort --rle --replace-names pathmap.json
+    maskrcnn-formdata merge --dataset=/path/to/coco*.json --split 0 --dataset-merged=/path/to/coco-merged.json --sort --rle --replace-names pathmap.json
+    maskrcnn-formdata merge --dataset=/path/to/coco-pred*.json --split 0 --dataset-merged=/path/to/coco-pred-merged.json --sort --rle --replace-names pathmap.json
 
     # Run COCO evaluation between original and predicted dataset
     maskrcnn-formdata compare --dataset=/path/to/coco-merged.json --dataset-pred=/path/to/coco-pred-merged.json
@@ -894,11 +894,7 @@ def main():
                                  help='Create plot files from prediction under *.SUFFIX.png')
     predict_parser = subparsers.add_parser('predict', help="Apply a model on images with COCO annotations, creating new annotations")
     predict_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
-                                help='File path of the formdata annotations ground truth dataset to be read (randomly split into skip and evaluation)')
-    predict_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
-                                help='ratio of (ignored) train-set in random train/test split (default=0.7 equals 70%%)')
-    predict_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
-                                help='seed value for random train/test split')
+                                help='File path of the formdata annotations ground truth dataset to be read')
     predict_parser.add_argument('--dataset-pred', required=True, metavar="PATH/TO/COCO.json",
                                 help='File path of the formdata annotations prediction dataset to be written')
     predict_parser.add_argument('--plot', required=False, default=None, metavar="SUFFIX",
@@ -914,7 +910,11 @@ def main():
                              help='File path(s) of the image files to be read and annotated')
     merge_parser = subparsers.add_parser('merge', help="Join and sort COCO annotations from multiple files")
     merge_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
-                             help='File path of the formdata dataset annotations (to be filled)')
+                             help='File path(s) of the formdata annotations dataset(s) to be read (randomly split into skip and evaluation)')
+    merge_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
+                              help='ratio of (ignored) train-set in random train/test split (default=0.7 equals 70%%)')
+    merge_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
+                              help='seed value for random train/test split')
     merge_parser.add_argument('--dataset-merged', required=True, metavar="PATH/TO/COCO.json",
                               help='File path of the formdata annotations dataset to be written')
     merge_parser.add_argument('--replace-names', required=False, metavar="PATH/TO/PATHMAP.json",
@@ -950,7 +950,7 @@ def main():
         print("Files: ", len(args.files))
     else:
         print("Dataset: ", args.dataset)
-    if args.command in ['evaluate', 'train', 'predict']:
+    if args.command in ['evaluate', 'train', 'merge']:
         print("Split: ", args.split)
     if args.command in ['predict', 'test', 'compare']:
         print("Prediction dataset: ", args.dataset_pred)
@@ -1005,11 +1005,9 @@ def main():
         model.load_weights(model_path, by_name=True, exclude=exclude)
 
     # Train or evaluate
-    if args.command in ['train', 'evaluate', 'predict']:
+    if args.command in ['train', 'evaluate']:
         dataset_train = CocoDataset()
         dataset_val = CocoDataset()
-        if args.command == 'predict':
-            args.dataset = [args.dataset]
         for dataset in args.dataset:
             coco = COCO(dataset)
             np.random.seed(args.seed)
@@ -1027,8 +1025,7 @@ def main():
             dataset_val.load_coco(coco,
                                   dataset_dir='.' if args.cwd
                                   else os.path.dirname(dataset),
-                                  limit=valset,
-                                  return_coco=args.command == 'predict')
+                                  limit=valset)
             del coco
         
         if args.command == "train":
@@ -1116,13 +1113,30 @@ def main():
                 coco_results.dataset = coco.dataset.copy()
                 coco_results.dataset['annotations'] = []
                 coco_results.createIndex()
-            if args.command == "evaluate":
-                # compare
-                evaluate_coco(coco, coco_results)
-            else:
-                store_coco(coco_results, args.dataset_pred,
-                           dataset_dir='.' if args.cwd
-                           else os.path.dirname(args.dataset_pred))
+            # compare
+            evaluate_coco(coco, coco_results)
+    
+    elif args.command == "predict":
+        dataset = CocoDataset()
+        coco = COCO(args.dataset)
+        dataset.load_coco(coco,
+                          dataset_dir='.' if args.cwd
+                          else os.path.dirname(args.dataset),
+                          limit=args.limit or None,
+                          return_coco=True)
+        dataset.prepare()
+        print("Running COCO prediction on {} images.".format(dataset.num_images))
+        results, _ = test_coco(model, dataset, plot=args.plot)
+        # Load results. This modifies results with additional attributes.
+        if results:
+            coco_results = coco.loadRes(results)
+        else:
+            coco_results = coco
+            coco_results.dataset['annotations'] = []
+            coco_results.createIndex()
+        store_coco(coco_results, args.dataset_pred,
+                   dataset_dir='.' if args.cwd
+                   else os.path.dirname(args.dataset_pred))
     
     elif args.command == "test":
         # Test dataset (read images from args.files)
@@ -1144,10 +1158,17 @@ def main():
         dataset_merged = CocoDataset()
         for dataset in args.dataset:
             coco = COCO(dataset)
+            np.random.seed(args.seed)
+            limit = args.limit
+            if not limit or limit > len(coco.imgs):
+                limit = len(coco.imgs)
+            indexes = np.random.permutation(limit)
+            trainset = indexes[:int(args.split*limit)]
+            valset = indexes[int(args.split*limit):]
             dataset_merged.load_coco(coco,
                                      dataset_dir='.' if args.cwd
                                      else os.path.dirname(dataset),
-                                     limit=args.limit or None)
+                                     limit=valset)
             del coco
         dataset_merged.prepare()
         coco = COCO()
