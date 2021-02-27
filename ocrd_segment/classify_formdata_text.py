@@ -400,10 +400,7 @@ KEYS = {"energietraeger": {"Gas": "erdgas",
                                    "m3": "cbm",
                                    "Kubikmeter": "cbm",
                                    "kWh": "kwh",
-                                   "MWh": "mwh",
-                                   "m²": "qm",
-                                   "m2": "qm",
-                                   "qm": "qm"}
+                                   "MWh": "mwh"}
         # "gebaeude_warmwasser_verbrauch_einheit"
         # "wohnung_warmwasser_verbrauch_einheit"
 }

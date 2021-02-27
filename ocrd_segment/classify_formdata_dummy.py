@@ -94,26 +94,17 @@ class ClassifyFormDataDummy(Processor):
                         oregion.parent_object_ = page
                         page.add_TextRegion(oregion)
                         LOG.info("Adding new region '%s'", oregion.id)
-                    oline = oregion.get_TextLine() 
-                    if not oline:
-                        oline = TextLineType(id=oregion.id + '_line',
-                                             Coords=oregion.get_Coords())
-                        oregion.add_TextLine(oline)
-                    else:
-                        oline = oline[0]
                     itype = iregion.get_type()
                     if itype not in [context_type, target_type]:
                         continue # no mark (just another text line)
+                    custom = 'subtype:%s=%s' % ({context_type: "context",
+                                                 target_type: "target"}[itype],
+                                                category)
+                    oline = TextLineType(id=oregion.id + '_line',
+                                         Coords=oregion.get_Coords(),
+                                         custom=custom)
+                    oregion.set_TextLine([oline])
                     oregion.set_type('other')
-                    custom = oline.get_custom()
-                    if not custom:
-                        custom = ''
-                    else:
-                        custom += ','
-                    custom += 'subtype:%s=%s' % ({context_type: "context",
-                                                  target_type: "target"}[itype],
-                                                 category)
-                    oline.set_custom(custom)
                     LOG.info("Marked region/line by '%s'", custom)
             
             # write regions to custom JSON for this page
