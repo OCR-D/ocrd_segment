@@ -175,7 +175,7 @@ class ExtractAddress(Processor):
                 pageId=input_file.pageId,
                 local_filename=file_path.replace('.png', '.json'),
                 mimetype='application/json',
-                content=json.dumps(description))
+                content=json.dumps(description, indent=2))
 
             # add regions to COCO JSON for all pages
             images.append({
@@ -201,4 +201,5 @@ class ExtractAddress(Processor):
             content=json.dumps(
                 {'categories': categories,
                  'images': images,
-                 'annotations': annotations}))
+                 'annotations': annotations},
+                indent=2))
