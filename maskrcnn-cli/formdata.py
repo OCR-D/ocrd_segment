@@ -429,7 +429,7 @@ class CocoDataset(utils.Dataset):
             image_ids = np.array(image_ids).take(limit)
 
         # use first annotated class as source
-        source = coco.loadCats(coco.getCatIds())[0]['name']
+        source = coco.loadCats(coco.getCatIds())[-1]['name']
         print('using class "%s" as source for all images' % source)
         # Add images
         # we cannot keep the image_id refs, because Dataset can load multiple COCO files

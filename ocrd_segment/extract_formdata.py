@@ -136,7 +136,7 @@ class ExtractFormData(Processor):
                 i += 1
                 annotations.append(
                     {'id': i, 'image_id': num_page_id,
-                     'category_id': categories[0]['id'],
+                     'category_id': categories[-1]['id'],
                      'segmentation': polygon2,
                      'area': area,
                      'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
