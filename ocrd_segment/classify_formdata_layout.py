@@ -389,6 +389,7 @@ class ClassifyFormDataLayout(Processor):
                                 custom='subtype:target=' + category)
             region.add_TextLine(line)
             page.add_TextRegion(region)
+            page.set_custom('coords=%s' % page_coords['transform'])
             LOG.info("Detected %s region '%s' on page '%s'",
                      category, region_id, page_id)
 
