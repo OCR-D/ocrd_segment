@@ -276,7 +276,7 @@ class ClassifyFormDataLayout(Processor):
         LOG.debug("Decoding %d ROIs for %d distinct classes (avg. score: %.2f)",
                   len(preds["class_ids"]),
                   len(np.unique(preds["class_ids"])),
-                  np.mean(preds["scores"]))
+                  np.mean(preds["scores"]) if all(preds["scores"].shape) else 0)
         # apply IoU-based non-maximum suppression across classes
         worse = []
         for i in range(len(preds["class_ids"])):
