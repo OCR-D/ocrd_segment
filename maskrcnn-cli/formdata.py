@@ -107,22 +107,21 @@ FIELDS = [None,
           "wohnung_warmwasser_verbrauch_einheit",
           "gebaeude_grundkost_heizen", # "gebaeude_grundkosten_raumwaerme",
           "gebaeude_grundkost_warmwasser", # "gebaeude_grundkosten_warmwasser",
-          # "gebaeude_heizkosten_gesamt",
-          # "anteil_verbrauchskosten_heizen", # "prozent_verbrauchskosten_raumwaerme"
-          # "anteil_verbrauchskosten_warmwasser", # "prozent_verbrauchskosten_warmwasser"
-          # "gebaeude_verbrauchskosten_raumwaerme",
-          # "gebaeude_verbrauchskosten_warmwasser",
-          # "wohnung_heizkosten_gesamt",
-          # "wohnung_grundkosten_raumwaerme",
-          # "wohnung_verbrauchskosten_raumwaerme",
-          # "wohnung_grundkosten_warmwasser",
-          # "wohnung_verbrauchskosten_warmwasser",
-          # "warmwasser_temperatur",
-          #
-          ## "nebenkosten_betriebsstrom",
-          ## "nebenkosten_wartung_heizung",
-          ## "nebenkosten_messgeraet_miete",
-          ## "nebenkosten_messung_abrechnung",
+          "gebaeude_heizkosten_gesamt",
+          "anteil_verbrauchskosten_heizen", # "prozent_verbrauchskosten_raumwaerme"
+          "anteil_verbrauchskosten_warmwasser", # "prozent_verbrauchskosten_warmwasser"
+          "gebaeude_verbrauchskosten_raumwaerme",
+          "gebaeude_verbrauchskosten_warmwasser",
+          "wohnung_heizkosten_gesamt",
+          "wohnung_grundkosten_raumwaerme",
+          "wohnung_verbrauchskosten_raumwaerme",
+          "wohnung_grundkosten_warmwasser",
+          "wohnung_verbrauchskosten_warmwasser",
+          "warmwasser_temperatur",
+          "nebenkosten_betriebsstrom",
+          "nebenkosten_wartung_heizung",
+          "nebenkosten_messgeraet_miete",
+          "nebenkosten_messung_abrechnung",
 ]
 
 class CocoConfig(Config):
@@ -143,7 +142,7 @@ class CocoConfig(Config):
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 21 + 1  # formdata has 21 classes
+    NUM_CLASSES = 36 + 1  # formdata has 36 classes
 
     # ...settings to reduce GPU memory requirements...
     
