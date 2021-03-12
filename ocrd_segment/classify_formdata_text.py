@@ -713,7 +713,6 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Brennerwartung",
         "Brennerwartung + Kessel",
         "Energiekosten Heizung",
-        "Gerätemiete Heizung",
         "Gerätewartung",
         "Gerätewartung Heizung",
         "Heiznebenkosten",
