@@ -49,7 +49,7 @@ class FormDataConfig(Config):
     GPU_COUNT = 1
     BACKBONE = "resnet50"
     # Number of classes (including background)
-    NUM_CLASSES = 21 + 1  # SmartHEC has bg + 21 classes
+    NUM_CLASSES = 36 + 1  # SmartHEC has bg + 36 classes
     DETECTION_MAX_INSTANCES = 4 # will be reduced to 1 after cross-class NMS
     DETECTION_MIN_CONFIDENCE = 0.5
     PRE_NMS_LIMIT = 200
