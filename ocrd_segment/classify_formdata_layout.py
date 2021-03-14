@@ -175,9 +175,8 @@ class ClassifyFormDataLayout(Processor):
                     page_array_bin = page_array_bin[:,:,0]
             threshold = 0.5 * (page_array_bin.min() + page_array_bin.max())
             page_array_bin = np.array(page_array_bin <= threshold, np.bool)
-            _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
-
-            self._process_page(page, page_image, page_coords, page_id, page_array, components)
+            
+            self._process_page(page, page_image, page_coords, page_id, page_array, page_array_bin)
             
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
@@ -192,7 +191,7 @@ class ClassifyFormDataLayout(Processor):
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
     
-    def _process_page(self, page, page_image, page_coords, page_id, page_array, components):
+    def _process_page(self, page, page_image, page_coords, page_id, page_array, page_array_bin):
         # iterate through all regions that have lines,
         # look for @custom annotated context of any class,
         # derive active classes for this page, and for each class
@@ -303,6 +302,8 @@ class ClassifyFormDataLayout(Processor):
         if not np.any(best):
             LOG.warning("Detected no form fields on page '%s'", page_id)
             return
+        # get connected components
+        _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
         # post-process detections morphologically and decode to regions
         for i in range(len(preds['class_ids'])):
             if i in worse:
@@ -338,6 +339,8 @@ class ClassifyFormDataLayout(Processor):
                     if not label:
                         continue # bg/white
                     leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
+                    if wc > 2 * w or hc > 2 * h:
+                        continue # huge (non-text?) component
                     rightc = leftc + wc
                     bottomc = topc + hc
                     left = min(left, leftc)
@@ -351,10 +354,13 @@ class ClassifyFormDataLayout(Processor):
                 mask[top:bottom, left:right] = mask.max()
             else:
                 # fill pixel mask from (padded) inner bboxes
+                left0, top0, w0, h0 = cv2.boundingRect(mask.astype(np.uint8))
                 for label in complabels:
                     if not label:
                         continue # bg/white
                     left, top, w, h = cv2.boundingRect((components==label).astype(np.uint8))
+                    if w > 2 * w0 or h > 2 * h0:
+                        continue # huge (non-text?) component
                     right = left + w
                     bottom = top + h
                     left = max(0, left - 4)
