@@ -835,7 +835,7 @@ def json_safe(obj):
     else:
         return obj.__str__()
 
-def store_coco(coco, filename, dataset_dir='.'):
+def store_coco(coco, filename, dataset_dir='.', anns_only=False):
     dataset_dir = os.path.normpath(dataset_dir)
     if dataset_dir != '.':
         for img in coco.dataset['images']:
@@ -846,7 +846,8 @@ def store_coco(coco, filename, dataset_dir='.'):
             else:
                 img['file_name'] = os.path.join(dataset_dir, file_name)
     with open(filename, 'w') as outp:
-        json.dump(coco.dataset, outp, default=json_safe, indent=2)
+        json.dump(coco.dataset['annotations'] if anns_only else coco.dataset,
+                  outp, default=json_safe, indent=2)
 
 ############################################################
 #  main
@@ -1186,11 +1187,10 @@ def main():
                 ann['segmentation'] = coco.annToRLE(ann)
         if args.sort:
             coco = sort_coco(coco, combine=args.combine)
-        if args.anns_only:
-            coco.dataset = coco.dataset['annotations']
         store_coco(coco, args.dataset_merged,
                    dataset_dir='.' if args.cwd
-                   else os.path.dirname(args.dataset_merged))
+                   else os.path.dirname(args.dataset_merged),
+                   anns_only=args.anns_only)
     
     elif args.command == "compare":
         coco = COCO(args.dataset_pred)
