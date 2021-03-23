@@ -484,7 +484,8 @@ def plot_segment(page_id, segment, poly, stype, classes, image, neighbors, alpha
                 LOG.warning('Page "%s" segment "%s" within neighbour "%s" (IoU: %.3f)',
                             page_id, segment.id, neighbor.id,
                             poly.area / neighbor.poly.area)
-    neighbors.append(Neighbor(segment.id, poly, stype))
+    if segment and hasattr(segment, 'id'):
+        neighbors.append(Neighbor(segment.id, poly, stype))
     # draw segment
     if alpha:
         layer = Image.new(mode='RGBA', size=image.size, color='#FFFFFF00')
