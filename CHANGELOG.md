@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.11]
+
+Fixed:
+
+ * extract-pages: `Border` has no `id`
+
 ## [0.1.10]
 
 Fixed:
@@ -106,6 +112,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.11]: ../../compare/v0.1.10...v0.1.11
 [0.1.10]: ../../compare/v0.1.9...v0.1.10
 [0.1.9]: ../../compare/v0.1.8...v0.1.9
 [0.1.8]: ../../compare/v0.1.7...v0.1.8
