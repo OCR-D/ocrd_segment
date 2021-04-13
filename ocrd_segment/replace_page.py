@@ -71,40 +71,41 @@ class ReplacePage(Processor):
             page2 = pcgts2.get_Page()
             # adjust all coordinates (recursively)
             if adapt_coords:
-                try:
-                    _, page_coords, _ = self.workspace.image_from_page(page, page_id)
-                    # adapt top-level (Border/width/height) so that ensure_consistent works top-to-bottom:
-                    page2.set_Border(page.get_Border())
-                    page2.set_imageWidth(page.get_imageWidth())
-                    page2.set_imageHeight(page.get_imageHeight())
-                    for region in page2.get_AllRegions():
-                        region_coords = region.get_Coords()
-                        region_polygon = polygon_from_points(region_coords.points)
-                        region_polygon = coordinates_for_segment(region_polygon, None, page_coords)
-                        region_coords.set_points(points_from_polygon(region_polygon))
-                        ensure_consistent(region)
-                        if isinstance(region, TextRegionType):
-                            for line in region.get_TextLine():
-                                line_coords = line.get_Coords()
-                                line_polygon = polygon_from_points(line_coords.points)
-                                line_polygon = coordinates_for_segment(line_polygon, None, page_coords)
-                                line_coords.set_points(points_from_polygon(line_polygon))
-                                ensure_consistent(line)
-                                for word in line.get_Word():
-                                    word_coords = word.get_Coords()
-                                    word_polygon = polygon_from_points(word_coords.points)
-                                    word_polygon = coordinates_for_segment(word_polygon, None, page_coords)
-                                    word_coords.set_points(points_from_polygon(word_polygon))
-                                    ensure_consistent(word)
-                                    for glyph in word.get_Glyph():
-                                        glyph_coords = glyph.get_Coords()
-                                        glyph_polygon = polygon_from_points(glyph_coords.points)
-                                        glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
-                                        glyph_coords.set_points(points_from_polygon(glyph_polygon))
-                                        ensure_consistent(glyph)
-                except Exception:
-                    LOG.error('invalid coordinates on page %s', page_id)
-                    continue
+                def ensure_consistent_ignore(segment):
+                    try:
+                        ensure_consistent(segment)
+                    except Exception as err:
+                        LOG.error('invalid coordinates on page "%s" segment "%s": %s', page_id, segment.id, err)
+                _, page_coords, _ = self.workspace.image_from_page(page, page_id)
+                # adapt top-level (Border/width/height) so that ensure_consistent works top-to-bottom:
+                page2.set_Border(page.get_Border())
+                page2.set_imageWidth(page.get_imageWidth())
+                page2.set_imageHeight(page.get_imageHeight())
+                for region in page2.get_AllRegions():
+                    region_coords = region.get_Coords()
+                    region_polygon = polygon_from_points(region_coords.points)
+                    region_polygon = coordinates_for_segment(region_polygon, None, page_coords)
+                    region_coords.set_points(points_from_polygon(region_polygon))
+                    ensure_consistent_ignore(region)
+                    if isinstance(region, TextRegionType):
+                        for line in region.get_TextLine():
+                            line_coords = line.get_Coords()
+                            line_polygon = polygon_from_points(line_coords.points)
+                            line_polygon = coordinates_for_segment(line_polygon, None, page_coords)
+                            line_coords.set_points(points_from_polygon(line_polygon))
+                            ensure_consistent_ignore(line)
+                            for word in line.get_Word():
+                                word_coords = word.get_Coords()
+                                word_polygon = polygon_from_points(word_coords.points)
+                                word_polygon = coordinates_for_segment(word_polygon, None, page_coords)
+                                word_coords.set_points(points_from_polygon(word_polygon))
+                                ensure_consistent_ignore(word)
+                                for glyph in word.get_Glyph():
+                                    glyph_coords = glyph.get_Coords()
+                                    glyph_polygon = polygon_from_points(glyph_coords.points)
+                                    glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
+                                    glyph_coords.set_points(points_from_polygon(glyph_polygon))
+                                    ensure_consistent_ignore(glyph)
             # replace all regions
             page.set_ReadingOrder(page2.get_ReadingOrder())
             page.set_TextRegion(page2.get_TextRegion())
