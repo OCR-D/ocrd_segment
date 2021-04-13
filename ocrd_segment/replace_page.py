@@ -73,6 +73,10 @@ class ReplacePage(Processor):
             if adapt_coords:
                 try:
                     _, page_coords, _ = self.workspace.image_from_page(page, page_id)
+                    # adapt top-level (Border/width/height) so that ensure_consistent works top-to-bottom:
+                    page2.set_Border(page.get_Border())
+                    page2.set_imageWidth(page.get_imageWidth())
+                    page2.set_imageHeight(page.get_imageHeight())
                     for region in page2.get_AllRegions():
                         region_coords = region.get_Coords()
                         region_polygon = polygon_from_points(region_coords.points)
@@ -98,7 +102,7 @@ class ReplacePage(Processor):
                                         glyph_polygon = coordinates_for_segment(glyph_polygon, None, page_coords)
                                         glyph_coords.set_points(points_from_polygon(glyph_polygon))
                                         ensure_consistent(glyph)
-                except:
+                except Exception:
                     LOG.error('invalid coordinates on page %s', page_id)
                     continue
             # replace all regions
