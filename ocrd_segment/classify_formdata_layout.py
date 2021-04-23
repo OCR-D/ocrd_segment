@@ -13,6 +13,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn import model
 from mrcnn.config import Config
 import tensorflow as tf
+import keras.backend as K
 tf.get_logger().setLevel('ERROR')
 
 from ocrd_utils import (
@@ -38,27 +39,9 @@ from ocrd import Processor
 
 from .config import OCRD_TOOL
 
-from maskrcnn_cli.formdata import FIELDS
+from maskrcnn_cli.formdata import FIELDS, InferenceConfig
 
 TOOL = 'ocrd-segment-classify-formdata-layout'
-
-class FormDataConfig(Config):
-    """Configuration for detection on formdata segmentation"""
-    NAME = "formdata"
-    IMAGES_PER_GPU = 1
-    GPU_COUNT = 1
-    BACKBONE = "resnet50"
-    # Number of classes (including background)
-    NUM_CLASSES = 36 + 1  # SmartHEC has bg + 36 classes
-    DETECTION_MAX_INSTANCES = 4 # will be reduced to 1 after cross-class NMS
-    DETECTION_MIN_CONFIDENCE = 0.5
-    PRE_NMS_LIMIT = 200
-    POST_NMS_ROIS_INFERENCE = 50
-    IMAGE_RESIZE_MODE = "square"
-    IMAGE_MIN_DIM = 600
-    IMAGE_MAX_DIM = 768
-    IMAGE_CHANNEL_COUNT = 5
-    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0, 0])
 
 class ClassifyFormDataLayout(Processor):
 
@@ -86,9 +69,13 @@ class ClassifyFormDataLayout(Processor):
         if not model_path:
             raise Exception("model file '%s' not found" % self.parameter['model'])
         LOG.info("Loading model '%s'", model_path)
-        FormDataConfig.IMAGES_PER_GPU = self.parameter['images_per_gpu']
-        FormDataConfig.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
-        config = FormDataConfig()
+        config = InferenceConfig()
+        config.IMAGES_PER_GPU = self.parameter['images_per_gpu']
+        config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
+        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
+        config.DETECTION_MAX_INSTANCES = 4 # will be reduced to 1 after cross-class NMS
+        config.PRE_NMS_LIMIT = 200
+        config.POST_NMS_ROIS_INFERENCE = 50
         assert config.NUM_CLASSES == len(self.categories)
         #config.display()
         self.model = model.MaskRCNN(
@@ -249,6 +236,15 @@ class ClassifyFormDataLayout(Processor):
                         array[polygon_ahull] = 255
         # predict page image per-class as batch
         predictions = []
+        # FIXME: instead of doing batching here, we should ensure that model.detect
+        #        passes batch_size=model.config.BATCH_SIZE to keras_model.predict
+        #        (which makes the assertion unnecessary and already ensures all samples
+        #         get split into batches including a final partially filled batch);
+        #        this is related to Mask_RCNN#2367 (except that we do not want to
+        #        process all images in one batch but use the preconfigured batch size).
+        #        Perhaps that function could even be made to use predict_generator instead,
+        #        so we can do CPU-side pre- and postprocessing in parallel to GPU-side
+        #        inference.
         batch_no = 0
         batch_size = self.model.config.BATCH_SIZE
         while len(predictions) < len(active_arrays):
