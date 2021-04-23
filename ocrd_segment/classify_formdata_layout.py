@@ -77,6 +77,13 @@ class ClassifyFormDataLayout(Processor):
         config.PRE_NMS_LIMIT = 200
         config.POST_NMS_ROIS_INFERENCE = 50
         assert config.NUM_CLASSES == len(self.categories)
+        # FIXME: find a way to fall back to CPU in case of OOM
+        proto = tf.ConfigProto()
+        proto.gpu_options.allow_growth = True  # dynamically alloc GPU memory as needed
+        sess = tf.Session(config=proto)
+        #sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(
+        #    gpu_options=tf.compat.v1.GPUOptions(allow_growth=True)))
+        K.tensorflow_backend.set_session(sess) # set this as default session for Keras / Mask-RCNN
         #config.display()
         self.model = model.MaskRCNN(
             mode="inference", config=config,
