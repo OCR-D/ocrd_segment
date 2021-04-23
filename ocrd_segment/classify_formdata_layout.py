@@ -309,19 +309,17 @@ class ClassifyFormDataLayout(Processor):
         _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
         # post-process detections morphologically and decode to regions
         for i in range(len(preds['class_ids'])):
-            if i in worse:
-                LOG.debug("Ignoring instance for class %d overlapping better neighbour",
-                          preds['class_ids'][i])
-                continue
             class_id = preds['class_ids'][i]
-            score = preds['scores'][i]
             if not class_id:
                 raise Exception('detected region for background class')
-            if score < best[class_id]:
-                LOG.debug("Ignoring instance for class %d with non-maximum score",
-                          preds['class_ids'][i])
-                continue
+            score = preds['scores'][i]
             category = self.categories[class_id]
+            if i in worse:
+                LOG.debug("Ignoring instance for '%s' overlapping better neighbour", category)
+                continue
+            if score < best[class_id]:
+                LOG.debug("Ignoring instance for '%s' with non-maximum score", category)
+                continue
             mask = preds['masks'][:,:,i]
             # estimate glyph scale (roughly)
             bbox = np.around(preds['rois'][i])
@@ -388,7 +386,7 @@ class ClassifyFormDataLayout(Processor):
                                                      page_image, page_coords)
             region_polygon = polygon_for_parent(region_polygon, page)
             if region_polygon is None:
-                LOG.warning('Ignoring extant region for class %s', category)
+                LOG.warning("Ignoring extant region for '%s'", category)
                 continue
             # annotate new region/line
             region_coords = CoordsType(points_from_polygon(region_polygon), conf=score)

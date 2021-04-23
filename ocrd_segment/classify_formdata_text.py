@@ -817,6 +817,8 @@ KEYS = {"energietraeger": {"Gas": "erdgas",
                            "Wärmelieferung": "fernwaerme",
                            "Heizöl": "heizoel",
                            "Öl": "heizoel",
+                           # Pellets?
+                           # Kohle?
                            "Strom": "strom"},
         "energietraeger_einheit": {"Ltr.": "liter",
                                    "Liter": "liter",
