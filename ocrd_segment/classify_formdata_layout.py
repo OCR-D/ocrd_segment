@@ -241,34 +241,12 @@ class ClassifyFormDataLayout(Processor):
                         array = active_arrays[active_categories.index(category)]
                         array[polygon_amask] = 255
                         array[polygon_ahull] = 255
+        # convert to incidence matrix
+        class_ids = np.eye(len(self.categories), dtype=np.int32)[np.array(
+            [self.categories.index(category) if category in self.categories else 0
+             for category in active_categories])]
         # predict page image per-class as batch
-        predictions = []
-        # FIXME: instead of doing batching here, we should ensure that model.detect
-        #        passes batch_size=model.config.BATCH_SIZE to keras_model.predict
-        #        (which makes the assertion unnecessary and already ensures all samples
-        #         get split into batches including a final partially filled batch);
-        #        this is related to Mask_RCNN#2367 (except that we do not want to
-        #        process all images in one batch but use the preconfigured batch size).
-        #        Perhaps that function could even be made to use predict_generator instead,
-        #        so we can do CPU-side pre- and postprocessing in parallel to GPU-side
-        #        inference.
-        batch_no = 0
-        batch_size = self.model.config.BATCH_SIZE
-        while len(predictions) < len(active_arrays):
-            left = batch_no * batch_size
-            right = (batch_no + 1) * batch_size
-            arrays = active_arrays[left:right]
-            categories = active_categories[left:right]
-            while len(arrays) < batch_size:
-                # last batch: pad with zeros
-                arrays.append(np.zeros(arrays[0].shape, dtype=arrays[0].dtype))
-                categories.append('')
-            # convert to incidence matrix
-            class_ids = np.eye(len(self.categories), dtype=np.int32)[np.array(
-                [self.categories.index(category) if category in self.categories else 0
-                 for category in categories])]
-            predictions.extend(self.model.detect(arrays, active_class_ids=class_ids))
-            batch_no += 1
+        predictions = self.model.detect(active_arrays, active_class_ids=class_ids)
         # concatenate instances for all classes of this page image
         preds = dict()
         preds["rois"] = np.concatenate([pred["rois"] for pred in predictions])
