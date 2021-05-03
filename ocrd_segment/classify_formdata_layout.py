@@ -22,6 +22,7 @@ from ocrd_utils import (
     assert_file_grp_cardinality,
     coordinates_of_segment,
     coordinates_for_segment,
+    crop_image,
     polygon_from_bbox,
     points_from_polygon,
     polygon_from_points,
@@ -145,6 +146,35 @@ class ClassifyFormDataLayout(Processor):
             page_image_binarized, _, _ = self.workspace.image_from_page(
                 page, page_id,
                 feature_selector='binarized')
+            # workaround for OCR-D/core#687:
+            if 0 < abs(page_image.width - page_image_binarized.width) <= 2:
+                diff = page_image.width - page_image_binarized.width
+                if diff > 0:
+                    page_image = crop_image(
+                        page_image,
+                        (int(np.floor(diff / 2)), 0,
+                         page_image.width - int(np.ceil(diff / 2)),
+                         page_image.height))
+                else:
+                    page_image_binarized = crop_image(
+                        page_image_binarized,
+                        (int(np.floor(-diff / 2)), 0,
+                         page_image_binarized.width - int(np.ceil(-diff / 2)),
+                         page_image_binarized.height))
+            if 0 < abs(page_image.height - page_image_binarized.height) <= 2:
+                diff = page_image.height - page_image_binarized.height
+                if diff > 0:
+                    page_image = crop_image(
+                        page_image,
+                        (0, int(np.floor(diff / 2)),
+                         page_image.width,
+                         page_image.height - int(np.ceil(diff / 2))))
+                else:
+                    page_image_binarized = crop_image(
+                        page_image_binarized,
+                        (0, int(np.floor(-diff / 2)),
+                         page_image_binarized.width,
+                         page_image_binarized.height - int(np.ceil(-diff / 2))))
             
             # ensure RGB (if raw was merely grayscale)
             page_image = page_image.convert(mode='RGB')
