@@ -251,7 +251,7 @@ class ClassifyFormDataLayout(Processor):
         preds["rois"] = np.concatenate([pred["rois"] for pred in predictions])
         preds["class_ids"] = np.concatenate([pred["class_ids"] for pred in predictions])
         preds["scores"] = np.concatenate([pred["scores"] for pred in predictions])
-        preds["masks"] = np.dstack([pred["masks"] for pred in predictions])
+        preds["masks"] = np.dstack([pred["masks"] for pred in predictions if pred["masks"].ndim > 2])
         LOG.debug("Decoding %d ROIs for %d distinct classes (avg. score: %.2f)",
                   len(preds["class_ids"]),
                   len(np.unique(preds["class_ids"])),
@@ -259,8 +259,8 @@ class ClassifyFormDataLayout(Processor):
         # apply IoU-based non-maximum suppression across classes
         worse = []
         for i in range(len(preds["class_ids"])):
+            imask = preds['masks'][:,:,i]
             for j in range(i + 1, len(preds['class_ids'])):
-                imask = preds['masks'][:,:,i]
                 jmask = preds['masks'][:,:,j]
                 if np.count_nonzero(imask * jmask) / np.count_nonzero(imask + jmask) > 0.5:
                     # LOG.debug("pred %d[%s] overlaps pred %d[%s]",
