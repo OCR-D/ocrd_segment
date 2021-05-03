@@ -134,8 +134,7 @@ class ClassifyFormDataLayout(Processor):
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
-                #feature_filter='binarized', # models will be trained on RGB soon
-                feature_selector='binarized', # models are trained on binary now
+                feature_filter='binarized',
                 transparency=False)
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
