@@ -28,7 +28,7 @@ class ExtractFormData(Processor):
         super(ExtractFormData, self).__init__(*args, **kwargs)
 
     def process(self):
-        """Extract alpha-masked page images and region descriptions (type and coordinates) from the workspace.
+        """Extract alpha-masked page images and region descriptions (type and coordinates) for a single class from the workspace.
         
         Open and deserialize PAGE input files and their respective images,
         then iterate over the element hierarchy down to the region level.
@@ -38,13 +38,21 @@ class ExtractFormData(Processor):
         sub-types (@type) and coordinates relative to the page (which could
         already be cropped, deskewed, dewarped, binarized etc, depending on
         the workflow).
-        Create a mask for all text lines and another mask for all text lines
-        which belong to a context region, marked by ``TextRegion/@type`` as
-        given by ``context-type``. Combine both masks into one alpha channel,
-        using 200 for text and 255 for context. Blend that into the page image.
-        Also, for all target regions, marked by ``target-type``, aggregate
-        annotations (including type and coordinates) into two distinct JSON
-        containers: one (page-wise) in our custom format and one (global) in COCO.
+        
+        Retrieve all input (i.e. context) and output (i.e. target) markers
+        for the class given by ``categories``. For that:
+        1. Create a mask for all text lines and another mask for all text lines
+           or words which belong to a context region, marked by either
+           ``TextRegion/@type`` (as given by ``context-type``) or marked by
+           ``@custom="subtype:context=..."`` (for the given class).
+        2. Combine both masks into one alpha channel, using 200 for text
+           and 255 for context. Blend that channel into the page image.
+        3. Create list of annotations for all target regions, marked by either
+           ``TextRegion/@type`` (as given by ``target-type``) or marked by
+           ``@custom="subtype:target=..."`` (for the given class).
+        4. Aggregate annotations (including type and coordinates) into
+           two distinct JSON containers: one (page-wise) in our custom format
+           and one (global) in COCO.
         
         The output file group must be given as a comma-separated list, in order
         to write output files:
@@ -91,10 +99,26 @@ class ExtractFormData(Processor):
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
             # prepare region JSON (output segmentation)
             description = {'angle': page.get_orientation()}
+            def get_context(segment):
+                custom = segment.get_custom()
+                if not custom:
+                    return []
+                return [cat.replace('subtype:context=', '')
+                        for cat in custom.split(',')
+                        if cat.startswith('subtype:context=')]
+            def get_target(segment):
+                custom = segment.get_custom()
+                if not custom:
+                    return []
+                return [cat.replace('subtype:target=', '')
+                        for cat in custom.split(',')
+                        if cat.startswith('subtype:target=')]
             # iterate through all regions that could have lines
             for region in page.get_AllRegions(classes=['Text']):
                 if region.get_type() == context_type:
-                    fill = 255
+                    fill = 255 # LAREX formatting (@type=page-number)
+                elif region.get_type() == 'other' and categories[-1]['name'] in get_context(region):
+                    fill = 255 # OCRD formatting (@custom=subtype:context=...)
                 else:
                     fill = 200
                 if not region.get_TextLine():
@@ -105,12 +129,25 @@ class ExtractFormData(Processor):
                                                      Coords=region.get_Coords()))
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
+                    if categories[-1]['name'] in get_context(line):
+                        lfill = 255 # OCRD formatting (@custom=subtype:context=...)
+                    else:
+                        lfill = fill
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
-                        list(map(tuple, polygon.tolist())),
-                        fill=fill)
-                if not region.get_type() == target_type:
+                        list(map(tuple, polygon.tolist())), fill=lfill)
+                    if lfill == 255:
+                        continue
+                    for word in line.get_Word():
+                        if categories[-1]['name'] in get_context(word):
+                            # OCRD formatting (@custom=subtype:context=...)
+                            polygon = coordinates_of_segment(word, page_image, page_coords)
+                            # draw word mask:
+                            ImageDraw.Draw(page_image_mask).polygon(
+                                list(map(tuple, polygon.tolist())), fill=255)
+                if region.get_type() != target_type and not (
+                        region.get_type() == 'other' and categories[-1]['name'] in get_target(region)):
                     continue
                 # add to region JSON (output segmentation)
                 polygon = coordinates_of_segment(
