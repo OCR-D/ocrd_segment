@@ -51,7 +51,6 @@ import json
 import argparse
 from itertools import groupby
 
-from tqdm import tqdm
 import numpy as np
 import skimage.io
 import skimage.color
@@ -124,6 +123,11 @@ FIELDS = [None,
           "nebenkosten_messgeraet_miete",
           "nebenkosten_messung_abrechnung",
 ]
+
+# if not overriden by --depth, use multi-staged training (n-th epoch, layers):
+STAGES = [(40, 'heads'),
+          (120, '4+'),
+          (160, 'all')]
 
 class CocoConfig(Config):
     """Configuration for training on MS COCO.
@@ -659,6 +663,7 @@ def detect_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=
     t_start = time.time()
     class TimingCallback(Callback):
         def __init__(self):
+            super(TimingCallback, self).__init__()
             self.time = 0
         def on_predict_batch_begin(self, batch, logs=None):
             self.time = time.time()
@@ -837,7 +842,7 @@ def plot_result(image, anns, width, height, filename):
     ax.set_frame_on(0)
     ax.set_position([0,0,1,1])
     #ax.title(image_cocoid)
-    showAnns(anns, width, height)
+    showAnns(anns, height, width)
     # make an extra effort to arrive at the same image size
     # (no frames, axes, margins):
     fig.set_size_inches((width/300, height/300))
@@ -863,7 +868,7 @@ def store_coco(coco, filename, dataset_dir='.', anns_only=False):
     if dataset_dir != '.':
         for img in coco.dataset['images']:
             file_name = os.path.normpath(img['file_name'])
-            prefix = os.path.commonprefix(dataset_dir, file_name)
+            prefix = os.path.commonprefix([dataset_dir, file_name])
             if prefix:
                 img['file_name'] = file_name[len(prefix):]
             else:
@@ -884,6 +889,8 @@ def main():
         description='Run Mask R-CNN for formdata region segmentation.')
     parser.add_argument('--model', required=False, default='last', metavar="PATH/TO/WEIGHTS.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
+    parser.add_argument('--imgs-per-gpu', type=int, default=0, metavar="NUM",
+                        help="Number of images to fit into one batch (depends on GPU memory size; 0 means %d|%d during training|inference)" % (CocoConfig.IMAGES_PER_GPU, InferenceConfig.IMAGES_PER_GPU))
     parser.add_argument('--logs', required=False, default=DEFAULT_LOGS_DIR, metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
@@ -892,6 +899,10 @@ def main():
                         help='Interpret all "file_name" paths in COCO relative to the current working directory (instead of the directory of the COCO file). Use with care (and consider chdir), or image paths may not resolve now or next time.')
     subparsers = parser.add_subparsers(dest='command')
     train_parser = subparsers.add_parser('train', help="Train a model from images with COCO annotations")
+    train_parser.add_argument('--symlink', required=False, metavar="PATH/TO/WEIGHTS.h5",
+                              help="Path to weights .h5 file to store via symlink to checkpoint (default: CWD + PID.h5)")
+    train_parser.add_argument('--increment', type=int, default=0, metavar="NUM",
+                              help="Number of iterations to train at once (multi-staged or not)")
     train_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json", nargs='+',
                               help='File path(s) of the formdata annotations ground truth dataset(s) to be read (randomly split into training and validation)')
     train_parser.add_argument('--split', required=False, type=float, default=0.7, metavar="NUM",
@@ -965,7 +976,11 @@ def main():
         print("Depth: ", args.depth)
         if args.depth == 'all':
             print("Epochs: ", args.epochs)
+        else:
+            print("Stages: ", STAGES)
         print("Rate: ", args.rate)
+        if args.increment:
+            print("Increment: ", args.increment)
     if args.command in ['evaluate', 'predict', 'test']:
         print("Plot: ", args.plot)
     if args.command == 'test':
@@ -988,11 +1003,17 @@ def main():
     elif args.command == "train":
         config = CocoConfig()
         config.LEARNING_RATE = args.rate
+        if args.imgs_per_gpu:
+            config.IMAGES_PER_GPU = args.imgs_per_gpu
+            config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
         config.display()
         model = modellib.MaskRCNN(mode="training", config=config,
                                   model_dir=args.logs)
     else:
         config = InferenceConfig()
+        if args.imgs_per_gpu:
+            config.IMAGES_PER_GPU = args.imgs_per_gpu
+            config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
         config.display()
         model = modellib.MaskRCNN(mode="inference", config=config,
                                   model_dir=args.logs)
@@ -1084,43 +1105,61 @@ def main():
                 if add:
                     depth += '|' + add
                 return depth
+            kwargs = {'augmentation': augmentation}
+            if args.increment:
+                args.increment = args.increment + model.epoch
+                class StopAfterCallback(Callback):
+                    def __init__(self, stop=1):
+                        super(StopAfterCallback, self).__init__()
+                        self.stop = stop
+                    def on_epoch_end(self, epoch, logs=None):
+                        if epoch + 1 >= self.stop:
+                            self.model.stop_training = True
+                kwargs['custom_callbacks'] = [StopAfterCallback(args.increment)]
             if args.depth:
                 print("Training %s" % args.depth)
                 model.train(dataset_train, dataset_val,
-                            learning_rate=config.LEARNING_RATE,
-                            epochs=args.epochs,
-                            layers=layers(args.depth),
-                            augmentation=augmentation)
+                            config.LEARNING_RATE,
+                            args.epochs,
+                            layers(args.depth),
+                            **kwargs)
             else:
-                # Training - Stage 1
-                print("Training network heads")
-                model.train(dataset_train, dataset_val,
-                            learning_rate=config.LEARNING_RATE,
-                            epochs=40,
-                            layers=layers('heads'),
-                            augmentation=augmentation)
-
-                # Training - Stage 2
-                # Finetune layers from ResNet stage 4 and up
-                print("Fine tune Resnet stage 4 and up")
-                model.train(dataset_train, dataset_val,
-                            learning_rate=config.LEARNING_RATE,
-                            epochs=120,
-                            layers=layers('4+'),
-                            augmentation=augmentation)
-
-                # Training - Stage 3
-                # Fine tune all layers
-                print("Fine tune all layers")
-                model.train(dataset_train, dataset_val,
-                            learning_rate=config.LEARNING_RATE / 10,
-                            epochs=160,
-                            layers='all',
-                            augmentation=augmentation)
-
+                while model.epoch < STAGES[-1][0]:
+                    if 0 <= model.epoch < STAGES[0][0]:
+                        # Training - Stage 1
+                        epochs, depth = STAGES[0]
+                        rate = config.LEARNING_RATE
+                        print("Training network heads")
+                    elif STAGES[0][0] <= model.epoch < STAGES[1][0]:
+                        # Training - Stage 2
+                        epochs, depth = STAGES[1]
+                        rate = config.LEARNING_RATE
+                        print("Fine tune Resnet stage 4 and up")
+                    elif STAGES[1][0] <= model.epoch < STAGES[2][0]:
+                        # Training - Stage 3
+                        epochs, depth = STAGES[2]
+                        rate = config.LEARNING_RATE / 10
+                        print("Fine tune all layers")
+                    else:
+                        raise Exception("Unknown stage for current epoch %d" % model.epoch)
+                    model.train(dataset_train, dataset_val, rate, epochs, layers(depth),
+                                **kwargs)
+                    if args.increment and model.epoch > args.increment:
+                        break # increment actually ended within curent stage
+            if args.symlink:
+                model_path = args.symlink
+                print("Symlinking checkpoint ", model_path)
+                if os.path.islink(model_path):
+                    os.remove(model_path)
+                checkpoint = model.find_last()
+                # avoid abs path
+                checkpoint = os.path.relpath(checkpoint, os.path.dirname(model_path))
+                os.symlink(checkpoint, model_path)
+            else:
                 model_path = os.path.basename(os.getcwd()) + str(os.getpid()) + '.h5'
                 print("Saving weights ", model_path)
                 model.keras_model.save_weights(model_path, overwrite=True)
+            time.sleep(0.9) # avoid multithreading deadlocks (https://github.com/keras-team/keras/issues/11288)
         else:
             dataset_val.prepare()
             print("Running COCO prediction on {} images.".format(dataset_val.num_images))
