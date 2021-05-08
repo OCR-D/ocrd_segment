@@ -658,6 +658,9 @@ def detect_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=
         image_ids = image_ids[:limit]
     elif isinstance(limit, (list, np.ndarray)):
         image_ids = np.array(image_ids).take(limit)
+    if not len(image_ids):
+        print("Ignoring empty dataset")
+        return [], []
 
     t_prediction = 0
     t_start = time.time()
