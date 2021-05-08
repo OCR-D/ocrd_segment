@@ -1,17 +1,15 @@
 from __future__ import absolute_import
 
-import os.path
 import os
+import time
 import numpy as np
 from shapely.geometry import Polygon, asPolygon
-from shapely.prepared import prep
 from shapely.ops import unary_union
 from skimage import draw
 import cv2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn import model
-from mrcnn.config import Config
 import tensorflow as tf
 import keras.backend as K
 tf.get_logger().setLevel('ERROR')
@@ -43,6 +41,24 @@ from .config import OCRD_TOOL
 from maskrcnn_cli.formdata import FIELDS, InferenceConfig
 
 TOOL = 'ocrd-segment-classify-formdata-layout'
+# prefer Tensorflow (GPU/CPU) over Numpy (CPU)
+# for morphological post-processing of NN predictions
+TF_POSTPROCESSING = True
+# when doing Numpy postprocessing, enlarge masks via
+# outer (convex) instead of inner (concave) hull of
+# corresponding connected components
+NP_POSTPROCESSING_OUTER = False
+# when pruning overlapping detections (in either mode),
+# disregard up to this intersection over union
+IOU_THRESHOLD = 0.2
+# when finalizing contours of detections (in either mode),
+# snap to connected components overlapping by this share
+# (of component area), i.e. include if larger and exclude
+# if smaller than this much
+IOCC_THRESHOLD = 0.4
+# when finalizing contours of detections (in either mode),
+# add this many pixels in each direction
+FINAL_DILATION = 4
 
 class ClassifyFormDataLayout(Processor):
 
@@ -73,15 +89,15 @@ class ClassifyFormDataLayout(Processor):
         config = InferenceConfig()
         config.IMAGES_PER_GPU = self.parameter['images_per_gpu']
         config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
-        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
+        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence'] / 2 # will be raised after NMS
         config.DETECTION_MAX_INSTANCES = 4 # will be reduced to 1 after cross-class NMS
         config.PRE_NMS_LIMIT = 200
-        config.POST_NMS_ROIS_INFERENCE = 50
+        config.POST_NMS_ROIS_INFERENCE = 100
         assert config.NUM_CLASSES == len(self.categories)
         # FIXME: find a way to fall back to CPU in case of OOM
         proto = tf.ConfigProto()
         proto.gpu_options.allow_growth = True  # dynamically alloc GPU memory as needed
-        sess = tf.Session(config=proto)
+        sess = tf.compat.v1.Session(config=proto)
         #sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(
         #    gpu_options=tf.compat.v1.GPUOptions(allow_growth=True)))
         K.tensorflow_backend.set_session(sess) # set this as default session for Keras / Mask-RCNN
@@ -229,6 +245,7 @@ class ClassifyFormDataLayout(Processor):
             return [cat.replace('subtype:context=', '')
                     for cat in custom.split(',')
                     if cat.startswith('subtype:context=')]
+        time1 = time.time()
         allregions = page.get_AllRegions(classes=['Text'], depth=2)
         active_categories = []
         for region in allregions:
@@ -244,6 +261,7 @@ class ClassifyFormDataLayout(Processor):
         # remove existing segmentation (have only detected targets survive)
         page.set_ReadingOrder(None)
         page.set_TextRegion([])
+        page.set_custom('coords=%s' % page_coords['transform'])
         if active_categories:
             LOG.info("Page '%s' has context for: %s", page_id, str(active_categories))
         else:
@@ -274,8 +292,10 @@ class ClassifyFormDataLayout(Processor):
         class_ids = np.eye(len(self.categories), dtype=np.int32)[np.array(
             [self.categories.index(category) if category in self.categories else 0
              for category in active_categories])]
+        time2 = time.time()
         # predict page image per-class as batch
         predictions = self.model.detect(active_arrays, active_class_ids=class_ids)
+        time3 = time.time()
         # concatenate instances for all classes of this page image
         preds = dict()
         preds["rois"] = np.concatenate([pred["rois"] for pred in predictions])
@@ -286,108 +306,47 @@ class ClassifyFormDataLayout(Processor):
                   len(preds["class_ids"]),
                   len(np.unique(preds["class_ids"])),
                   np.mean(preds["scores"]) if all(preds["scores"].shape) else 0)
-        # apply IoU-based non-maximum suppression across classes
-        worse = []
-        for i in range(len(preds["class_ids"])):
-            imask = preds['masks'][:,:,i]
-            for j in range(i + 1, len(preds['class_ids'])):
-                jmask = preds['masks'][:,:,j]
-                if np.count_nonzero(imask * jmask) / np.count_nonzero(imask + jmask) > 0.5:
-                    # LOG.debug("pred %d[%s] overlaps pred %d[%s]",
-                    #           i, self.categories[preds["class_ids"][i]],
-                    #           j, self.categories[preds["class_ids"][j]])
-                    worse.append(i if preds['scores'][i] < preds['scores'][j] else j)
-        # find best-scoring instance per class
-        best = np.zeros(len(self.categories))
-        for i in range(len(preds['class_ids'])):
-            if i in worse:
-                continue
-            class_id = preds['class_ids'][i]
-            score = preds['scores'][i]
-            if class_id in [0, 7]:
-                # only 1-best instance for most classes (7 can be multiple)
-                continue
-            if score > best[class_id]:
-                best[class_id] = score
-        if not np.any(best):
+        # apply post-processing to detections:
+        # - geometrically: remove overlapping candidates via non-maximum suppression across classes
+        # - morphologically: extend masks/bboxes to avoid chopping off fg connected components
+        if TF_POSTPROCESSING:
+            postprocess = postprocess_graph
+        else:
+            postprocess = postprocess_numpy
+        scale, boxes, scores, classes, masks = postprocess(
+            preds['rois'], preds['scores'], preds['class_ids'],
+            preds["masks"], page_array_bin, self.categories,
+            min_confidence=self.parameter['min_confidence'])
+        if len(boxes) == 0:
             LOG.warning("Detected no form fields on page '%s'", page_id)
             return
-        # get connected components
-        _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
-        # post-process detections morphologically and decode to regions
-        for i in range(len(preds['class_ids'])):
-            class_id = preds['class_ids'][i]
-            if not class_id:
-                raise Exception('detected region for background class')
-            score = preds['scores'][i]
+        scale = scale + (scale+1)%2 # odd
+        LOG.debug("Estimated scale: %d", scale)
+        for i, (bbox, score, class_id, mask) in enumerate(zip(boxes, scores, classes, masks.T)):
             category = self.categories[class_id]
-            if i in worse:
-                LOG.debug("Ignoring instance for '%s' overlapping better neighbour", category)
+            mask = mask.T
+            count = np.count_nonzero(mask)
+            if count < 10:
+                LOG.warning("Ignoring too small (%dpx) region for '%s'", count, category)
                 continue
-            if score < best[class_id]:
-                LOG.debug("Ignoring instance for '%s' with non-maximum score", category)
-                continue
-            mask = preds['masks'][:,:,i]
-            # estimate glyph scale (roughly)
-            bbox = np.around(preds['rois'][i])
-            area = np.count_nonzero(mask)
-            scale = int(np.sqrt(area)//10)
-            scale = scale + (scale+1)%2 # odd
-            LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
-                      category, str(bbox), area, score)
-            assert mask.shape[:2] == components.shape[:2]
-            # find closure in connected components
-            complabels = np.unique(mask * components)
-            if False:
-                # overwrite pixel mask from (padded) outer bbox
-                left, top, w, h = cv2.boundingRect(mask.astype(np.uint8))
-                right = left + w
-                bottom = top + h
-                for label in complabels:
-                    if not label:
-                        continue # bg/white
-                    leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
-                    if wc > 2 * w or hc > 2 * h:
-                        continue # huge (non-text?) component
-                    rightc = leftc + wc
-                    bottomc = topc + hc
-                    left = min(left, leftc)
-                    top = min(top, topc)
-                    right = max(right, rightc)
-                    bottom = max(bottom, bottomc)
-                left = max(0, left - 4)
-                top = max(0, top - 4)
-                right = min(page_image.width, right + 4)
-                bottom = min(page_image.height, bottom + 4)
-                mask[top:bottom, left:right] = mask.max()
+            if TF_POSTPROCESSING:
+                region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
             else:
-                # fill pixel mask from (padded) inner bboxes
-                left0, top0, w0, h0 = cv2.boundingRect(mask.astype(np.uint8))
-                for label in complabels:
-                    if not label:
-                        continue # bg/white
-                    left, top, w, h = cv2.boundingRect((components==label).astype(np.uint8))
-                    if w > 2 * w0 or h > 2 * h0:
-                        continue # huge (non-text?) component
-                    right = left + w
-                    bottom = top + h
-                    left = max(0, left - 4)
-                    top = max(0, top - 4)
-                    right = min(page_image.width, right + 4)
-                    bottom = min(page_image.height, bottom + 4)
-                    mask[top:bottom, left:right] = mask.max()
-            # dilate until we have a single outer contour
-            contours = [None, None]
-            for _ in range(10):
-                if len(contours) == 1:
-                    break
-                mask = cv2.dilate(mask.astype(np.uint8),
-                                  np.ones((scale,scale), np.uint8)) > 0
-                contours, _ = cv2.findContours(mask.astype(np.uint8),
-                                               cv2.RETR_EXTERNAL,
-                                               cv2.CHAIN_APPROX_SIMPLE)
-            region_polygon = contours[0][:,0,:] # already in x,y order
-            #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
+                # dilate until we have a single outer contour
+                invalid = True
+                for _ in range(10):
+                    contours, _ = cv2.findContours(mask.astype(np.uint8),
+                                                   cv2.RETR_EXTERNAL,
+                                                   cv2.CHAIN_APPROX_SIMPLE)
+                    if len(contours) == 1:
+                        invalid = False
+                        break
+                    mask = cv2.dilate(mask.astype(np.uint8),
+                                      np.ones((scale,scale), np.uint8)) > 0
+                if invalid:
+                    LOG.warning("Ignoring non-contiguous (%d) region for '%s'", len(contours), category)
+                    continue
+                region_polygon = contours[0][:,0,:] # already in x,y order
             # ensure consistent and valid polygon outline
             region_polygon = coordinates_for_segment(region_polygon,
                                                      page_image, page_coords)
@@ -403,9 +362,282 @@ class ClassifyFormDataLayout(Processor):
                                 custom='subtype:target=' + category)
             region.add_TextLine(line)
             page.add_TextRegion(region)
-            page.set_custom('coords=%s' % page_coords['transform'])
             LOG.info("Detected %s region '%s' on page '%s'",
                      category, region_id, page_id)
+        time4 = time.time()
+        LOG.debug("pre-processing time: %d", time2 - time1)
+        LOG.debug("GPU detection time: %d", time3 - time2)
+        LOG.debug("post-processing time: %d", time4 - time3)
+
+def postprocess_graph(boxes, scores, classes, masks, image, categories, min_confidence=0.5):
+    # prepare NMS input
+    boxesA = np.zeros((1, boxes.shape[0], len(categories), boxes.shape[1]), np.float32)
+    boxesA[0, np.arange(len(boxes)), classes] = boxes
+    scoresA = np.zeros(boxesA.shape[:2] + (len(categories),), np.float)
+    scoresA[0, np.arange(len(boxes)), classes] = scores
+    imageA = image
+    # TF2 idiom:
+    ## components = tfa.images.connected_components(imageA.astype(np.uint8))
+    ## boxes, scores, classes, valid = tf.image.combined_non_max_suppression(boxesA, scoresA, ...)
+    ## ...
+    ## boxes = boxes[0, 0:valid[0]].numpy()
+    ## scores = scores[0, 0:valid[0]].numpy()
+    ## classes = classes[0, 0:valid[0]].numpy()
+    # TF1 version:
+    boxesV = tf.placeholder(tf.float32, name='boxes')
+    scoresV = tf.placeholder(tf.float32, name='scores')
+    imageV = tf.placeholder(tf.bool, name='image', shape=imageA.shape)
+    feed_list = [boxesV, scoresV, imageV]
+    # apply IoU-based NMS across classes (adding batch dimension)
+    # (we cannot apply NMS result to masks, because there is no TF predicate
+    #  which runs category-wise _and_ yields indices)
+    boxes, scores, classes, valid = tf.image.combined_non_max_suppression(
+        boxesV, # (batch_size=1, num_boxes, num_classes, 4)
+        scoresV, # (batch_size=1, num_boxes, num_classes)
+        1, # max_output_size_per_class
+        len(categories), # max_total_size,
+        iou_threshold=IOU_THRESHOLD, # (only bbox IoU, not mask IoU)
+        score_threshold=min_confidence,
+        pad_per_class=False,
+        clip_boxes=False,
+        name='cross-class-nms')
+    # remove batch dimension and padded results
+    boxes = tf.cast(boxes[0, 0:valid[0]], tf.int64)
+    scores = scores[0, 0:valid[0]]
+    classes = classes[0, 0:valid[0]]
+    # get connected components of binarized image
+    components = tf.contrib.image.connected_components(imageV)
+    complabels, _, compcounts = tf.unique_with_counts(tf.reshape(components, (-1,)))
+    # estimate glyph scale (roughly)
+    compcounts = tf.sqrt(3 * tf.cast(compcounts, tf.float32))
+    compcounts = tf.gather(compcounts, tf.where((3 < compcounts) & (compcounts < 100))[:,0])
+    def median(x):
+        half = tf.shape(x)[0] // 2
+        topk = tf.nn.top_k(x, half, sorted=False)
+        return tf.reduce_min(topk.values)
+    mediancount = median(compcounts)
+    scale = tf.cond(tf.shape(compcounts)[0] > 1, lambda: mediancount, lambda: tf.cast(43, tf.float32))
+    # get bboxes for each connected component
+    def add_bbox(bboxes, idx):
+        labelidx = tf.where(tf.equal(components, idx))
+        bbox = tf.concat([tf.reduce_min(labelidx, axis=0),  # minx, miny
+                          tf.reduce_max(labelidx, axis=0)], # maxx, maxy
+                         0)
+        # cannot use scatter_update on tensors in TF1
+        return tf.tensor_scatter_update(bboxes, [[idx]], [bbox])
+    compboxes = tf.zeros([tf.shape(complabels)[0], 4], dtype=tf.int64)
+    compboxes = tf.foldl(add_bbox, complabels, initializer=compboxes)
+    # get overlaps between component and ROI bboxes
+    def get_overlaps(boxes1, boxes2, first=True):
+        """Computes share ratios between two sets of boxes.
+        For each, pair compute the intersection over:
+        - the full area of the first box if `first`,
+        - the full area of the second box otherwise.
+        boxes1, boxes2: [N, (y1, x1, y2, x2)].
+        """
+        # 1. Tile boxes2 and repeat boxes1. This allows us to compare
+        # every boxes1 against every boxes2 without loops.
+        # TF doesn't have an equivalent to np.repeat() so simulate it
+        # using tf.tile() and tf.reshape.
+        b1 = tf.reshape(tf.tile(tf.expand_dims(boxes1, 1),
+                                [1, 1, tf.shape(boxes2)[0]]), [-1, 4])
+        b2 = tf.tile(boxes2, [tf.shape(boxes1)[0], 1])
+        # 2. Compute intersections
+        b1_y1, b1_x1, b1_y2, b1_x2 = tf.split(b1, 4, axis=1)
+        b2_y1, b2_x1, b2_y2, b2_x2 = tf.split(b2, 4, axis=1)
+        y1 = tf.maximum(b1_y1, b2_y1)
+        x1 = tf.maximum(b1_x1, b2_x1)
+        y2 = tf.minimum(b1_y2, b2_y2)
+        x2 = tf.minimum(b1_x2, b2_x2)
+        intersection = tf.maximum(x2 - x1, 0) * tf.maximum(y2 - y1, 0)
+        # 3. Compute unions
+        b1_area = (b1_y2 - b1_y1) * (b1_x2 - b1_x1)
+        b2_area = (b2_y2 - b2_y1) * (b2_x2 - b2_x1)
+        reference = b1_area if first else b2_area
+        # 4. Compute IoU and reshape to [boxes1, boxes2]
+        share = intersection / reference
+        overlaps = tf.reshape(share, [tf.shape(boxes1)[0], tf.shape(boxes2)[0]])
+        return overlaps
+    overlaps = tf.where(get_overlaps(compboxes, boxes) > IOCC_THRESHOLD)
+    # enlarge each ROI by all its overlapping component bboxes
+    def extend_bbox(bboxes, match):
+        compidx, roiidx = match[0], match[1]
+        newboxes = bboxes
+        roimin = tf.gather_nd(newboxes, [[roiidx, 0], [roiidx, 1]])
+        roimax = tf.gather_nd(newboxes, [[roiidx, 2], [roiidx, 3]])
+        compmin = tf.gather_nd(compboxes, [[compidx, 0], [compidx, 1]])
+        compmax = tf.gather_nd(compboxes, [[compidx, 2], [compidx, 3]])
+        newmin = tf.minimum(roimin, compmin)
+        newmax = tf.maximum(roimax, compmax)
+        newboxes = tf.tensor_scatter_update(newboxes, [[roiidx, 0], [roiidx, 1]],
+                                            newmin) # min (x1, y1)
+        newboxes = tf.tensor_scatter_update(newboxes, [[roiidx, 2], [roiidx, 3]],
+                                            newmax) # max (x2, y2)
+        # ignore background (matches everywhere):
+        background = tf.gather(complabels, compidx) == 0
+        # skip if wc > 2 * w or hc > 2 * h:
+        toolarge = tf.reduce_any(compmax - compmin > 2 * (roimax - roimin))
+        # skip if neww > 2 * w or newh > 1.5 * h:
+        roimin = tf.cast(roimin, tf.float32)
+        roimax = tf.cast(roimax, tf.float32)
+        newmin = tf.cast(newmin, tf.float32)
+        newmax = tf.cast(newmax, tf.float32)
+        thresh = tf.constant([2, 1.5])
+        excentric = tf.reduce_any(newmax - newmin > thresh * (roimax - roimin))
+        return tf.cond(background | toolarge | excentric, lambda: bboxes, lambda: newboxes)
+    boxes = tf.cond(tf.shape(overlaps)[0] > 0,
+                    lambda: tf.foldl(extend_bbox, overlaps, initializer=boxes),
+                    lambda: boxes) # (unlikely) case of no overlaps
+    # add some padding
+    # tf.nn.dilation2d() ?
+    boxesmin, boxesmax = tf.split(boxes, 2, axis=1)
+    boxes = tf.concat([tf.maximum(boxesmin - FINAL_DILATION, tf.cast(0, tf.int64)),
+                       tf.minimum(boxesmax + FINAL_DILATION, tf.cast(tf.shape(components), tf.int64))],
+                      1)
+    # run kernel and return
+    postprocess = K.get_session().make_callable([scale, boxes, scores, classes], feed_list=feed_list)
+    scale, boxes, scores, classes = postprocess(boxesA, scoresA, imageA)
+    return int(scale), boxes, scores, classes.astype(np.int32), masks # masks unusable
+
+def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories, min_confidence=0.5):
+    LOG = getLogger('processor.ClassifyFormDataLayout')
+    # apply IoU-based NMS across classes
+    worse = []
+    assert masks[:,:,0].dtype == np.bool
+    for i in range(len(classes)):
+        imask = masks[:,:,i]
+        for j in range(i + 1, len(classes)):
+            jmask = masks[:,:,j]
+            intersection = np.count_nonzero(imask * jmask)
+            if not intersection:
+                continue
+            union = np.count_nonzero(imask + jmask)
+            if intersection / union > IOU_THRESHOLD:
+                # LOG.debug("pred %d[%s] overlaps pred %d[%s]",
+                #           i, categories[classes[i]],
+                #           j, categories[classes[j]])
+                worse.append(i if scores[i] < scores[j] else j)
+    # find best-scoring instance per class
+    best = np.zeros(len(categories))
+    for i in range(len(classes)):
+        if i in worse:
+            continue
+        class_id = classes[i]
+        score = scores[i]
+        if class_id in [0, 7]:
+            # only 1-best instance for most classes (7 can be multiple)
+            continue
+        if score > best[class_id]:
+            best[class_id] = score
+    if not np.any(best):
+        return 0, [], [], [], []
+    # get connected components
+    _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
+    # estimate glyph scale (roughly)
+    _, counts = np.unique(components, return_counts=True)
+    if counts.shape[0] > 1:
+        counts = np.sqrt(3 * counts)
+        counts = counts[(5 < counts) & (counts < 100)]
+        scale = int(np.median(counts))
+    else:
+        scale = 43
+    # post-process detections morphologically and decode to region polygons
+    keep = []
+    for i, (bbox, score, class_id, mask) in enumerate(zip(boxes, scores, classes, masks.T)):
+        if not class_id:
+            raise Exception('detected region for background class')
+        category = categories[class_id]
+        if i in worse:
+            LOG.debug("Ignoring instance for '%s' with %.2f overlapping better neighbour", category, score)
+            continue
+        if score < best[class_id]:
+            LOG.debug("Ignoring instance for '%s' with non-maximum score %.2f", category, score)
+            continue
+        if score < min_confidence:
+            LOG.debug("Ignoring instance for '%s' with too low score %.2f", category, score)
+            continue
+        keep.append(i)
+        mask = mask.T
+        LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
+                  category, str(bbox), np.count_nonzero(mask), score)
+        assert mask.shape[:2] == components.shape[:2]
+        # find closure in connected components
+        complabels = np.unique(mask * components)
+        left, top, w, h = cv2.boundingRect(mask.astype(np.uint8))
+        right = left + w
+        bottom = top + h
+        if NP_POSTPROCESSING_OUTER:
+            # overwrite pixel mask from (padded) outer bbox
+            for label in complabels:
+                if not label:
+                    continue # bg/white
+                leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
+                rightc = leftc + wc
+                bottomc = topc + hc
+                if wc > 2 * w or hc > 2 * h:
+                    continue # huge (non-text?) component
+                # intersection over component too small?
+                if (min(right, rightc) - max(left, leftc)) * \
+                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                    continue # too little overlap
+                newleft = min(left, leftc)
+                newtop = min(top, topc)
+                newright = max(right, rightc)
+                newbottom = max(bottom, bottomc)
+                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                    continue # 
+                left = newleft
+                top = newtop
+                right = newright
+                bottom = newbottom
+                w = right - left
+                h = bottom - top
+            left = max(0, left - FINAL_DILATION)
+            top = max(0, top - FINAL_DILATION)
+            right = min(mask.shape[1], right + FINAL_DILATION)
+            bottom = min(mask.shape[0], bottom + FINAL_DILATION)
+            mask[top:bottom, left:right] = mask.max()
+        else:
+            # fill pixel mask from (padded) inner bboxes
+            for label in complabels:
+                if not label:
+                    continue # bg/white
+                suppress = False
+                leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
+                rightc = leftc + wc
+                bottomc = topc + hc
+                if wc > 2 * w or hc > 2 * h:
+                    suppress = True # huge (non-text?) component
+                # intersection over component too small?
+                if (min(right, rightc) - max(left, leftc)) * \
+                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                    suppress = True
+                newleft = min(left, leftc)
+                newtop = min(top, topc)
+                newright = max(right, rightc)
+                newbottom = max(bottom, bottomc)
+                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                    suppress = True
+                if suppress:
+                    leftc = min(mask.shape[1], leftc + FINAL_DILATION)
+                    topc = min(mask.shape[0], topc + FINAL_DILATION)
+                    rightc = max(0, rightc - FINAL_DILATION)
+                    bottomc = max(0, bottomc - FINAL_DILATION)
+                    mask[topc:bottomc, leftc:rightc] = mask.min()
+                else:
+                    leftc = max(0, leftc - FINAL_DILATION)
+                    topc = max(0, topc - FINAL_DILATION)
+                    rightc = min(mask.shape[1], rightc + FINAL_DILATION)
+                    bottomc = min(mask.shape[0], bottomc + FINAL_DILATION)
+                    mask[topc:bottomc, leftc:rightc] = mask.max()
+                    left = newleft
+                    top = newtop
+                    right = newright
+                    bottom = newbottom
+                    w = right - left
+                    h = bottom - top
+    keep = sorted(keep, key=lambda i: scores[i], reverse=True)
+    return scale, boxes[keep], scores[keep], classes[keep], masks[:,:,keep]
 
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
