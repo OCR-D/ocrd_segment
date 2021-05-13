@@ -9,7 +9,7 @@ from skimage import draw
 import cv2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
-from mrcnn import model
+from mrcnn import model, utils
 import tensorflow as tf
 import keras.backend as K
 tf.get_logger().setLevel('ERROR')
@@ -288,13 +288,28 @@ class ClassifyFormDataLayout(Processor):
                         array = active_arrays[active_categories.index(category)]
                         array[polygon_amask] = 255
                         array[polygon_ahull] = 255
-        # convert to incidence matrix
-        class_ids = np.eye(len(self.categories), dtype=np.int32)[np.array(
-            [self.categories.index(category) if category in self.categories else 0
-             for category in active_categories])]
+        # prepare data generator
+        class ArrayDataset(utils.Dataset):
+            def __init__(self, arrays, categories):
+                super().__init__()
+                # Add classes
+                for i, name in enumerate(FIELDS):
+                    if name:
+                        # use class name as source so we can train on each class dataset
+                        # after another while only one class is active at a time
+                        self.add_class(name, i, name)
+                self.arrays = arrays
+                for i, array in enumerate(arrays):
+                    self.add_image(categories[i], i, "")
+            def load_image(self, image_id):
+                return self.arrays[image_id]
+        dataset = ArrayDataset(active_arrays, active_categories)
+        dataset.prepare()
+        generator = model.InferenceDataGenerator(dataset, self.model.config)
         time2 = time.time()
         # predict page image per-class as batch
-        predictions = self.model.detect(active_arrays, active_class_ids=class_ids)
+        predictions = self.model.detect_generator(generator, verbose=0,
+                                                  workers=max(3, self.model.config.BATCH_SIZE))
         time3 = time.time()
         # concatenate instances for all classes of this page image
         preds = dict()
@@ -579,6 +594,8 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     bad = np.zeros_like(instances, np.bool)
     for i in np.argsort(-scores):
         class_id = classes[i]
+        if not class_id:
+            raise Exception('detected region for background class')
         category = categories[class_id]
         score = scores[i]
         if scores[i] < min_confidence:
@@ -609,14 +626,9 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     else:
         scale = 43
     # post-process detections morphologically and decode to region polygons
-    keep = []
-    for i, (bbox, score, class_id, mask) in enumerate(zip(boxes, scores, classes, masks)):
-        if not class_id:
-            raise Exception('detected region for background class')
+    keep = np.where(~bad)[0]
+    for i, (bbox, score, class_id, mask) in enumerate(zip(boxes[keep], scores[keep], classes[keep], masks[keep])):
         category = categories[class_id]
-        if bad[i]:
-            continue
-        keep.append(i)
         LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
                   category, str(bbox), np.count_nonzero(mask), score)
         assert mask.shape[:2] == components.shape[:2]
