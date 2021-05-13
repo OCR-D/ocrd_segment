@@ -724,16 +724,23 @@ def sort_coco(coco, image_ids=None, combine=False):
         images = [img for img in images if img['id'] in image_ids]
     def fname(img):
         return img['file_name']
+    # redefine image ids by file_name sort order
     images2 = sorted(images, key=fname)
-    mapping = dict((id_, i) for i, id_ in enumerate(img['id'] for img in images2))
     if combine:
+        # group by file_name and merge
+        mapping = dict()
         images3 = list()
         for _, imggrp in groupby(images2, key=fname):
             img0 = next(imggrp)
+            i = len(images3)
             images3.append(img0)
+            mapping[img0['id']] = i
             for img in imggrp:
-                mapping[img['id']] = mapping[img0['id']]
+                mapping[img['id']] = i
         images2 = images3
+    else:
+        mapping = dict((id_, i) for i, id_ in enumerate(img['id'] for img in images))
+    # apply to COCO
     coco.dataset['images'] = images2
     for img in images:
         img['id'] = mapping[img['id']]
