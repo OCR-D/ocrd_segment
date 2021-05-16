@@ -50,7 +50,6 @@ import pathlib
 import json
 import argparse
 
-from tqdm import tqdm
 import numpy as np
 import skimage.io
 import skimage.color
@@ -71,6 +70,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
 import tensorflow as tf
+from keras.callbacks import Callback
 tf.get_logger().setLevel('ERROR')
 
 ALPHA_TEXT_CHANNEL = 200
@@ -89,18 +89,30 @@ class CocoConfig(Config):
     # Give the configuration a recognizable name
     NAME = "address"
 
-    # We use a GPU with 12GB memory, which can fit two images.
-    # Adjust down if you use a smaller GPU.
+    # We use a GPU with 4GB memory, which can fit one images
+    # (when training all layers).
+    # Adjust up if you use a larger GPU.
     IMAGES_PER_GPU = 1
 
     # Uncomment to train on 8 GPUs (default is 1)
     # GPU_COUNT = 8
 
+    # Number of training steps (batches) per epoch
+    # This doesn't need to match the size of the training set. Tensorboard
+    # updates are saved at the end of each epoch, so setting this to a
+    # smaller number means getting more frequent TensorBoard updates.
+    # Validation stats are also calculated at each epoch end and they
+    # might take a while, so don't set this too small to avoid spending
+    # a lot of time on validation stats.
+    # Mind that the number of samples presented during a single epoch
+    # during training equals STEPS_PER_EPOCH * IMAGES_PER_GPU * GPU_COUNT.
+    STEPS_PER_EPOCH = 1000
+
     # Number of classes (including background)
     NUM_CLASSES = 3 + 1  # address has 3 classes (rcpt/sndr/contact)
 
     # ...settings to reduce GPU memory requirements...
-    
+
     # Use a smaller backbone network. The default is resnet101,
     # but you can use resnet50 to reduce memory load significantly
     # and it's sufficient for most applications. It also trains faster.
@@ -138,12 +150,14 @@ class CocoConfig(Config):
     MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0, 0])
 
 class InferenceConfig(CocoConfig):
-    # Set batch size to 1 since we'll be running inference on
-    # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
-    # (Increasing this for full utilization of the GPU memory
-    #  would require changes to the prediction loop.)
+    # Batch size = GPU_COUNT * IMAGES_PER_GPU
+    # We use a GPU with 4GB memory, which can fit 6 images
+    # (during prediction), but yields highest throughput at 4.
+    # (Full utilization of the GPU is only possible when
+    #  using the detect_generator loop, which runs image
+    #  pre-/postprocessing and GPU prediction in parallel.)
     GPU_COUNT = 1
-    IMAGES_PER_GPU = 1
+    IMAGES_PER_GPU = 4
 
 ############################################################
 #  Image/Segmentation Augmentation
@@ -576,14 +590,13 @@ def build_coco_results(dataset, image_id, rois, class_ids, scores, masks):
         results.append(result)
     return results
 
-def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=None, active_classes=None):
+def detect_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=None):
     """Predict images
     dataset: A Dataset object with test data
     verbose: If not False, print summary of detection for each image
     limit: if not 0, it's the number of images to use for test
     image_ids: if not None, list or array of image IDs to use for test
     plot: if not None, write an image file showing the predictions color-coded.
-    active_classes: if not None, list of class names allowed during detection
     """
     # Pick COCO images from the dataset
     image_ids = image_ids or dataset.image_ids
@@ -593,32 +606,38 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
         image_ids = image_ids[:limit]
     elif isinstance(limit, (list, np.ndarray)):
         image_ids = np.array(image_ids).take(limit)
-    # Limit to a subset of classes
-    if active_classes:
-        active_class_ids = []
-        for name in active_classes:
-            if not name in dataset.class_names:
-                print('ignoring active class name {} not in dataset'.format(name))
-                continue
-            active_class_ids.append(dataset.class_names.index(name))
-    else:
-        active_class_ids = None
+    if not len(image_ids):
+        print("Ignoring empty dataset")
+        return [], []
 
     t_prediction = 0
     t_start = time.time()
+    class TimingCallback(Callback):
+        def __init__(self):
+            super(TimingCallback, self).__init__()
+            self.time = 0
+        def on_predict_batch_begin(self, batch, logs=None):
+            self.time = time.time()
+        def on_predict_batch_end(self, batch, logs=None):
+            nonlocal t_prediction
+            t_prediction += (time.time() - self.time)
 
     results = []
     cocoids = []
-    for image_id in tqdm(image_ids):
+    generator = modellib.InferenceDataGenerator(dataset, model.config,
+                                                image_ids=image_ids)
+    # Run detection
+    preds = model.detect_generator(generator, workers=3,
+                                   verbose=1, callbacks=[TimingCallback()])
+    for i, image_id in enumerate(image_ids):
         # Load image
-        image = dataset.load_image(image_id)
         image_path = dataset.image_info[image_id]['path']
         image_cocoid = dataset.image_info[image_id]['id']
+        image_source = dataset.image_info[image_id]['source']
 
         # Run detection
-        t = time.time()
-        r = model.detect([image], verbose=0, active_class_ids=active_class_ids)[0]
-        t_prediction += (time.time() - t)
+        r = preds[i]
+        assert image_cocoid == r['image_id'], "Generator queue failed to preserve image order"
         if verbose:
             print("image {} {} has {} rois with {} distinct classes".format(
                 image_cocoid, image_path,
@@ -634,7 +653,7 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
         results.extend(image_results)
         cocoids.append(image_cocoid)
         if plot:
-            plot_result(image, image_results,
+            plot_result(dataset.load_image(image_id), image_results,
                         dataset.image_info[image_id]['width'],
                         dataset.image_info[image_id]['height'],
                         pathlib.Path(image_path).with_suffix('.' + plot + '.png'))
@@ -642,6 +661,7 @@ def test_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=No
     print("Prediction time: {}. Average {}/image".format(
         t_prediction, t_prediction / len(image_ids) if len(image_ids) else 0))
     print("Total time: ", time.time() - t_start)
+    time.sleep(0.1) # avoid multithreading deadlocks (https://github.com/keras-team/keras/issues/11288)
 
     for i, ann in enumerate(results):
         ann['id'] = i
@@ -771,7 +791,7 @@ def plot_result(image, anns, width, height, filename):
     ax.set_frame_on(0)
     ax.set_position([0,0,1,1])
     #ax.title(image_cocoid)
-    showAnns(anns, width, height)
+    showAnns(anns, height, width)
     # make an extra effort to arrive at the same image size
     # (no frames, axes, margins):
     fig.set_size_inches((width/300, height/300))
@@ -817,6 +837,8 @@ def main():
         description='Run Mask R-CNN for address region segmentation.')
     parser.add_argument('--model', required=False, default='last', metavar="PATH/TO/WEIGHTS.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
+    parser.add_argument('--imgs-per-gpu', type=int, default=0, metavar="NUM",
+                        help="Number of images to fit into one batch (depends on GPU memory size; 0 means %d|%d during training|inference)" % (CocoConfig.IMAGES_PER_GPU, InferenceConfig.IMAGES_PER_GPU))
     parser.add_argument('--logs', required=False, default="logs", metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
@@ -917,11 +939,17 @@ def main():
     elif args.command == "train":
         config = CocoConfig()
         config.LEARNING_RATE = args.rate
+        if args.imgs_per_gpu:
+            config.IMAGES_PER_GPU = args.imgs_per_gpu
+            config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
         config.display()
         model = modellib.MaskRCNN(mode="training", config=config,
                                   model_dir=args.logs)
     else:
         config = InferenceConfig()
+        if args.imgs_per_gpu:
+            config.IMAGES_PER_GPU = args.imgs_per_gpu
+            config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
         config.display()
         model = modellib.MaskRCNN(mode="inference", config=config,
                                   model_dir=args.logs)
@@ -1057,7 +1085,7 @@ def main():
             coco = COCO()
             coco.dataset = dataset_val.dump_coco()
             coco.createIndex()
-            results, _ = test_coco(model, dataset_val, limit=limit, plot=args.plot)
+            results, _ = detect_coco(model, dataset_val, limit=limit, plot=args.plot)
             # Load results. This modifies results with additional attributes.
             if results:
                 coco_results = coco.loadRes(results)
@@ -1079,7 +1107,7 @@ def main():
                           return_coco=True)
         dataset.prepare()
         print("Running COCO prediction on {} images.".format(dataset.num_images))
-        results, _ = test_coco(model, dataset, plot=args.plot)
+        results, _ = detect_coco(model, dataset, plot=args.plot)
         # Load results. This modifies results with additional attributes.
         if results:
             coco_results = coco.loadRes(results)
@@ -1097,7 +1125,7 @@ def main():
         dataset.load_files(args.files, limit=args.limit or None)
         dataset.prepare()
         print("Running COCO prediction on {} images.".format(dataset.num_images))
-        results, _ = test_coco(model, dataset, verbose=True, plot=args.plot)
+        results, _ = detect_coco(model, dataset, verbose=True, plot=args.plot)
         coco = COCO()
         coco.dataset = dataset.dump_coco(os.path.dirname(args.dataset))
         coco.createIndex()
