@@ -1119,8 +1119,9 @@ def main():
             if not limit or limit > len(coco.imgs):
                 limit = len(coco.imgs)
             indexes = np.random.permutation(limit)
-            trainset = indexes[:int(args.split*limit)]
             valset = indexes[int(args.split*limit):]
+            # keep original order
+            valset = np.sort(valset)
             dataset_merged.load_coco(coco,
                                      dataset_dir='.' if args.cwd
                                      else os.path.dirname(dataset),
