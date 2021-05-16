@@ -73,10 +73,6 @@ from mrcnn import model as modellib, utils
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
-# Directory to save logs and model checkpoints, if not provided
-# through the command line argument --logs
-DEFAULT_LOGS_DIR = os.path.abspath("logs")
-
 ALPHA_TEXT_CHANNEL = 200
 ALPHA_ADDR_CHANNEL = 255
 
@@ -821,7 +817,7 @@ def main():
         description='Run Mask R-CNN for address region segmentation.')
     parser.add_argument('--model', required=False, default='last', metavar="PATH/TO/WEIGHTS.h5",
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
-    parser.add_argument('--logs', required=False, default=DEFAULT_LOGS_DIR, metavar="PATH/TO/LOGS/",
+    parser.add_argument('--logs', required=False, default="logs", metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
                         help='Maximum number of images to use (default=all)')
@@ -889,6 +885,7 @@ def main():
     compare_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                                 help='File path of the address annotations ground truth dataset to be read')
     args = parser.parse_args()
+    args.logs = os.path.abspath(args.logs)
     print("Command: ", args.command)
     if args.command not in ['merge', 'compare']:
         print("Model: ", args.model)

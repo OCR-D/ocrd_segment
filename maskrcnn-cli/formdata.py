@@ -74,10 +74,6 @@ import tensorflow as tf
 from keras.callbacks import Callback
 tf.get_logger().setLevel('ERROR')
 
-# Directory to save logs and model checkpoints, if not provided
-# through the command line argument --logs
-DEFAULT_LOGS_DIR = os.path.abspath("logs")
-
 ALPHA_TEXT_CHANNEL = 200
 ALPHA_CTXT_CHANNEL = 255
 
@@ -901,7 +897,7 @@ def main():
                         help="Path to weights .h5 file or 'imagenet'/'last' to load")
     parser.add_argument('--imgs-per-gpu', type=int, default=0, metavar="NUM",
                         help="Number of images to fit into one batch (depends on GPU memory size; 0 means %d|%d during training|inference)" % (CocoConfig.IMAGES_PER_GPU, InferenceConfig.IMAGES_PER_GPU))
-    parser.add_argument('--logs', required=False, default=DEFAULT_LOGS_DIR, metavar="PATH/TO/LOGS/",
+    parser.add_argument('--logs', required=False, default="logs", metavar="PATH/TO/LOGS/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False, type=int, default=0, metavar="NUM",
                         help='Maximum number of images to use (default=all)')
@@ -977,6 +973,7 @@ def main():
     compare_parser.add_argument('--dataset', required=True, metavar="PATH/TO/COCO.json",
                                 help='File path of the formdata annotations ground truth dataset to be read')
     args = parser.parse_args()
+    args.logs = os.path.abspath(args.logs)
     print("Command: ", args.command)
     if args.command not in ['merge', 'compare']:
         print("Model: ", args.model)
