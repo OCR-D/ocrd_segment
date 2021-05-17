@@ -1177,7 +1177,7 @@ def main():
             coco = COCO()
             coco.dataset = dataset_val.dump_coco()
             coco.createIndex()
-            results, _ = detect_coco(model, dataset_val, limit=limit, plot=args.plot)
+            results, _ = detect_coco(model, dataset_val, plot=args.plot)
             # Load results. This modifies results with additional attributes.
             if results:
                 coco_results = coco.loadRes(results)
