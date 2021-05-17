@@ -360,7 +360,7 @@ class CocoDataset(utils.Dataset):
                                   "address-contact"]):
             if name:
                 self.add_class("IAO", i, name)
-    
+
     def load_coco(self, dataset_json, dataset_dir='.',
                   limit=None, class_ids=None,
                   class_map=None, return_coco=False):
@@ -414,7 +414,7 @@ class CocoDataset(utils.Dataset):
         if return_coco:
             return coco
         return None
-        
+
     def load_files(self, filenames, dataset_dir='.', limit=None):
         if isinstance(limit, int):
             filenames = filenames[:limit]
@@ -431,6 +431,9 @@ class CocoDataset(utils.Dataset):
             self.add_image(
                 "IAO", image_id=i, path=filename,
                 width=width, height=height)
+
+    def image_reference(self, image_id):
+        return self.image_info[image_id]['path']
 
     def dump_coco(self, dataset_dir='.'):
         """Dump dataset into an COCO JSON file."""
@@ -1024,6 +1027,7 @@ def main():
             #     SegmapDropoutLines(0.3),
             #     SegmapBlackoutLines(0.1),
             #     SaveDebugImage('after-augmentation')])
+            print("Augmenting with: {}".format(augmentation))
 
             # from MaskRCNN.train:
             def layers(depth, add='conv1'):
