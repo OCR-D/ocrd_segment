@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os
 import time
 import numpy as np
+import numba as nb
 from shapely.geometry import Polygon, asPolygon
 from shapely.ops import unary_union
 from skimage import draw
@@ -341,10 +342,6 @@ class ClassifyFormDataLayout(Processor):
         time4 = time.time()
         for i, (bbox, score, class_id, mask) in enumerate(zip(boxes, scores, classes, masks)):
             category = self.categories[class_id]
-            count = np.count_nonzero(mask)
-            if count < 10:
-                LOG.warning("Ignoring too small (%dpx) region for '%s'", count, category)
-                continue
             #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
             # dilate until we have a single outer contour
             invalid = True
@@ -598,8 +595,16 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
             raise Exception('detected region for background class')
         category = categories[class_id]
         score = scores[i]
+        bbox = boxes[i]
+        mask = masks[i]
+        assert mask.shape[:2] == page_array_bin.shape[:2]
         if scores[i] < min_confidence:
             LOG.debug("Ignoring instance for '%s' with too low score %.2f", category, score)
+            bad[i] = True
+            continue
+        count = np.count_nonzero(mask)
+        if count < 10:
+            LOG.warning("Ignoring too small (%dpx) region for '%s'", count, category)
             bad[i] = True
             continue
         worse = score < scores
@@ -615,6 +620,9 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
             LOG.debug("Ignoring instance for '%s' with non-maximum score %.2f",
                       category, score)
             bad[i] = True
+        else:
+            LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
+                      category, str(bbox), count, score)
     # get connected components
     _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
     # estimate glyph scale (roughly)
@@ -626,89 +634,19 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     else:
         scale = 43
     # post-process detections morphologically and decode to region polygons
+    # does not compile (no OpenCV support):
     keep = np.where(~bad)[0]
-    for i, (bbox, score, class_id, mask) in enumerate(zip(boxes[keep], scores[keep], classes[keep], masks[keep])):
-        category = categories[class_id]
-        LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
-                  category, str(bbox), np.count_nonzero(mask), score)
-        assert mask.shape[:2] == components.shape[:2]
-        # find closure in connected components
-        complabels = np.unique(mask * components)
-        left, top, w, h = cv2.boundingRect(mask.astype(np.uint8))
-        right = left + w
-        bottom = top + h
-        if NP_POSTPROCESSING_OUTER:
-            # overwrite pixel mask from (padded) outer bbox
-            for label in complabels:
-                if not label:
-                    continue # bg/white
-                leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
-                rightc = leftc + wc
-                bottomc = topc + hc
-                if wc > 2 * w or hc > 2 * h:
-                    continue # huge (non-text?) component
-                # intersection over component too small?
-                if (min(right, rightc) - max(left, leftc)) * \
-                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
-                    continue # too little overlap
-                newleft = min(left, leftc)
-                newtop = min(top, topc)
-                newright = max(right, rightc)
-                newbottom = max(bottom, bottomc)
-                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
-                    continue # 
-                left = newleft
-                top = newtop
-                right = newright
-                bottom = newbottom
-                w = right - left
-                h = bottom - top
-            left = max(0, left - FINAL_DILATION)
-            top = max(0, top - FINAL_DILATION)
-            right = min(mask.shape[1], right + FINAL_DILATION)
-            bottom = min(mask.shape[0], bottom + FINAL_DILATION)
-            mask[top:bottom, left:right] = mask.max()
-        else:
-            # fill pixel mask from (padded) inner bboxes
-            for label in complabels:
-                if not label:
-                    continue # bg/white
-                suppress = False
-                leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
-                rightc = leftc + wc
-                bottomc = topc + hc
-                if wc > 2 * w or hc > 2 * h:
-                    suppress = True # huge (non-text?) component
-                # intersection over component too small?
-                if (min(right, rightc) - max(left, leftc)) * \
-                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
-                    suppress = True
-                newleft = min(left, leftc)
-                newtop = min(top, topc)
-                newright = max(right, rightc)
-                newbottom = max(bottom, bottomc)
-                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
-                    suppress = True
-                if suppress:
-                    leftc = min(mask.shape[1], leftc + FINAL_DILATION)
-                    topc = min(mask.shape[0], topc + FINAL_DILATION)
-                    rightc = max(0, rightc - FINAL_DILATION)
-                    bottomc = max(0, bottomc - FINAL_DILATION)
-                    mask[topc:bottomc, leftc:rightc] = mask.min()
-                else:
-                    leftc = max(0, leftc - FINAL_DILATION)
-                    topc = max(0, topc - FINAL_DILATION)
-                    rightc = min(mask.shape[1], rightc + FINAL_DILATION)
-                    bottomc = min(mask.shape[0], bottomc + FINAL_DILATION)
-                    mask[topc:bottomc, leftc:rightc] = mask.max()
-                    left = newleft
-                    top = newtop
-                    right = newright
-                    bottom = newbottom
-                    w = right - left
-                    h = bottom - top
     keep = sorted(keep, key=lambda i: scores[i], reverse=True)
-    return scale, boxes[keep], scores[keep], classes[keep], masks[keep]
+    boxes = boxes[keep]
+    scores = scores[keep]
+    classes = classes[keep]
+    masks = masks[keep]
+    cats = [categories[class_id] for class_id in classes]
+    instances = nb.typed.List()
+    for instance in zip(boxes, scores, classes, masks, cats):
+        instances.append(instance)
+    morphmasks(instances, components)
+    return scale, boxes, scores, classes, masks
 
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
@@ -764,3 +702,100 @@ def make_valid(polygon):
         # simplification may require a larger tolerance
         polygon = polygon.simplify(tolerance)
     return polygon
+
+#@nb.jit(nb.types.UniTuple(nb.int32,4)(nb.boolean[:]))
+#def boundingbox(mask):
+#    return cv2.boundingRect(mask.astype(np.uint8))
+@nb.njit(cache=True)
+def boundingbox(mask):
+    # does not compile (no support for Numpy kwargs):
+    # rows = np.any(mask, axis=1)
+    # cols = np.any(mask, axis=0)
+    # rmin, rmax = np.where(rows)[0][[0, -1]]
+    # cmin, cmax = np.where(cols)[0][[0, -1]]
+    indcs = np.where(mask)
+    rmin = np.min(indcs[0])
+    rmax = np.max(indcs[0])
+    cmin = np.min(indcs[1])
+    cmax = np.max(indcs[1])
+    return cmin, rmin, cmax - cmin, rmax - rmin
+
+@nb.njit(parallel=True, cache=True, nogil=True)
+def morphmasks(instances, components):
+    for i in nb.prange(len(instances)):
+        bbox, score, class_id, mask, category = instances[i]
+        # find closure in connected components
+        complabels = np.unique(mask * components)
+        left, top, w, h = boundingbox(mask)
+        right = left + w
+        bottom = top + h
+        if NP_POSTPROCESSING_OUTER:
+            # overwrite pixel mask from (padded) outer bbox
+            for label in complabels:
+                if not label:
+                    continue # bg/white
+                leftc, topc, wc, hc = boundingbox(components==label)
+                rightc = leftc + wc
+                bottomc = topc + hc
+                if wc > 2 * w or hc > 2 * h:
+                    continue # huge (non-text?) component
+                # intersection over component too small?
+                if (min(right, rightc) - max(left, leftc)) * \
+                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                    continue # too little overlap
+                newleft = min(left, leftc)
+                newtop = min(top, topc)
+                newright = max(right, rightc)
+                newbottom = max(bottom, bottomc)
+                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                    continue # 
+                left = newleft
+                top = newtop
+                right = newright
+                bottom = newbottom
+                w = right - left
+                h = bottom - top
+            left = max(0, left - FINAL_DILATION)
+            top = max(0, top - FINAL_DILATION)
+            right = min(mask.shape[1], right + FINAL_DILATION)
+            bottom = min(mask.shape[0], bottom + FINAL_DILATION)
+            mask[top:bottom, left:right] = True
+        else:
+            # fill pixel mask from (padded) inner bboxes
+            for label in complabels:
+                if not label:
+                    continue # bg/white
+                suppress = False
+                leftc, topc, wc, hc = boundingbox(components==label)
+                rightc = leftc + wc
+                bottomc = topc + hc
+                if wc > 2 * w or hc > 2 * h:
+                    suppress = True # huge (non-text?) component
+                # intersection over component too small?
+                if (min(right, rightc) - max(left, leftc)) * \
+                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                    suppress = True
+                newleft = min(left, leftc)
+                newtop = min(top, topc)
+                newright = max(right, rightc)
+                newbottom = max(bottom, bottomc)
+                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                    suppress = True
+                if suppress:
+                    leftc = min(mask.shape[1], leftc + FINAL_DILATION)
+                    topc = min(mask.shape[0], topc + FINAL_DILATION)
+                    rightc = max(0, rightc - FINAL_DILATION)
+                    bottomc = max(0, bottomc - FINAL_DILATION)
+                    mask[topc:bottomc, leftc:rightc] = False
+                else:
+                    leftc = max(0, leftc - FINAL_DILATION)
+                    topc = max(0, topc - FINAL_DILATION)
+                    rightc = min(mask.shape[1], rightc + FINAL_DILATION)
+                    bottomc = min(mask.shape[0], bottomc + FINAL_DILATION)
+                    mask[topc:bottomc, leftc:rightc] = True
+                    left = newleft
+                    top = newtop
+                    right = newright
+                    bottom = newbottom
+                    w = right - left
+                    h = bottom - top

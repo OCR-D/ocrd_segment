@@ -9,3 +9,7 @@ opencv-python-headless
 # imgaug --no-binary imgaug # workaround imgaug#473 (opencv-python/headless)
 pycocotools >= 2.0.2
 mask-rcnn@git+https://github.com/bertsky/Mask_RCNN#egg=mask-rcnn-2.1
+# for jit compilation and auto-parallel post-processing with numba
+#icc_rt
+#tbb
+numba
