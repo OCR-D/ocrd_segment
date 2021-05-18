@@ -60,6 +60,8 @@ IOCC_THRESHOLD = 0.4
 # when finalizing contours of detections (in either mode),
 # add this many pixels in each direction
 FINAL_DILATION = 4
+# faster
+nb.config.THREADING_LAYER = 'omp'
 
 class ClassifyFormDataLayout(Processor):
 
@@ -770,17 +772,21 @@ def morphmasks(instances, components):
                 rightc = leftc + wc
                 bottomc = topc + hc
                 if wc > 2 * w or hc > 2 * h:
-                    suppress = True # huge (non-text?) component
-                # intersection over component too small?
+                    # huge (non-text?) component
+                    suppress = True
                 if (min(right, rightc) - max(left, leftc)) * \
                    (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                    # intersection over component too small
                     suppress = True
                 newleft = min(left, leftc)
                 newtop = min(top, topc)
                 newright = max(right, rightc)
                 newbottom = max(bottom, bottomc)
                 if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                    # huge (non-text?) component
                     suppress = True
+                elif (newright - newleft) < 1.1 * w and (newbottom - newtop) < 1.1 * h:
+                    suppress = False
                 if suppress:
                     leftc = min(mask.shape[1], leftc + FINAL_DILATION)
                     topc = min(mask.shape[0], topc + FINAL_DILATION)
