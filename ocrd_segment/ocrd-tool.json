@@ -262,6 +262,11 @@
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
+        "categories": {
+          "type": "object",
+          "default": {},
+          "description": "Mapping from COCO categories (or supercategories) to PAGE element identifiers (or subtypes) to apply before trying source mapping. (Example: {'image': 'ImageRegion', 'text': 'TextRegion'}.)"
+        }
       }
     },
     "ocrd-segment-extract-pages": {

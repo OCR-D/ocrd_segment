@@ -70,8 +70,9 @@ class ImportCOCOSegmentation(Processor):
         
         Then create and add a region for each ``segmentation``, converting its polygon
         to coordinate points and its COCO category to a region type (and subtype),
-        either for a PubLayNet classification or PAGE classification (as produced by
-        ocrd-segment-extract-pages), as indicated by ``source``.
+        either for a `PubLayNet` classification or `PAGE` classification (as produced by
+        ocrd-segment-extract-pages), as indicated by ``source``. Apply any category
+        mappings in ``categories`` before PAGE conversion.
         
         Produce a new output file by serialising the resulting hierarchy.
         
@@ -110,30 +111,32 @@ class ImportCOCOSegmentation(Processor):
         # classes:
         categories = dict()
         subcategories = dict()
+        def mapcat(name):
+            return (self.parameter['categories'] or dict()).get(name, name)
         for cat in coco['categories']:
-            if cat['source'] == 'PAGE':
-                coco_source = 'PAGE'
+            if cat['source']:
+                coco_source = cat['source']
             if 'supercategory' in cat and cat['supercategory']:
-                categories[cat['id']] = cat['supercategory']
-                subcategories[cat['id']] = cat['name']
+                categories[cat['id']] = mapcat(cat['supercategory'])
+                subcategories[cat['id']] = mapcat(cat['name'])
             else:
-                categories[cat['id']] = cat['name']
+                categories[cat['id']] = mapcat(cat['name'])
         # images and annotations:
         images_by_id = dict()
         images_by_filename = dict()
         for image in coco['images']:
             images_by_id[image['id']] = image
             images_by_filename[image['file_name']] = image
+            image['regions'] = list()
         for annotation in coco['annotations']:
             image = images_by_id[annotation['image_id']]
-            regions = image.setdefault('regions', list())
-            regions.append(annotation)
+            image['regions'].append(annotation)
         del coco
         
         LOG.info('Converting %s annotations into PAGE-XML', coco_source)
         for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
-            num_page_id = int(page_id.strip(page_id.strip("0123456789")))
+            num_page_id = n
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             self.add_metadata(pcgts)
@@ -208,7 +211,9 @@ class ImportCOCOSegmentation(Processor):
                         else:
                             args['custom'] = "subtype:%s" % subcategory
                     if category + 'Type' not in globals():
-                        raise Exception('unknown region category: %s' % category)
+                        #raise Exception('unknown region category: %s' % category)
+                        args['custom'] = "subtype:%s" % subcategory or category
+                        category = 'UnknownRegion'
                     region_type = globals()[category + 'Type']
                     if region_type is BorderType:
                         page.set_Border(BorderType(Coords=coords))
