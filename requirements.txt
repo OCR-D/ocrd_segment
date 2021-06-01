@@ -7,7 +7,7 @@ opencv-python-headless
 # We cannot use constructs like these when passing directly to setuptools.
 # So instead of explicating imgaug here, let's rely on mask-rcnn for it.
 # imgaug --no-binary imgaug # workaround imgaug#473 (opencv-python/headless)
-pycocotools >= 2.0.2
+pycocotools==2.0.0
 mask-rcnn@git+https://github.com/bertsky/Mask_RCNN#egg=mask-rcnn-2.1
 # for jit compilation and auto-parallel post-processing with numba
 #icc_rt
