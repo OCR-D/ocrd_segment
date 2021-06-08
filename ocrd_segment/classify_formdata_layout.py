@@ -3,7 +3,8 @@ from __future__ import absolute_import
 import os
 import time
 import numpy as np
-import numba as nb
+import multiprocessing as mp
+import ctypes
 from shapely.geometry import Polygon, asPolygon
 from shapely.ops import unary_union
 from skimage import draw
@@ -61,7 +62,6 @@ IOCC_THRESHOLD = 0.4
 # add this many pixels in each direction
 FINAL_DILATION = 4
 # faster
-nb.config.THREADING_LAYER = 'omp'
 
 class ClassifyFormDataLayout(Processor):
 
@@ -388,6 +388,23 @@ class ClassifyFormDataLayout(Processor):
         LOG.debug("post-processing time: %d", time4 - time3)
         LOG.debug("contour finding time: %d", time5 - time4)
 
+def tonumpyarray(mp_arr):
+    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr))
+
+def tonumpyarray_with_shape(mp_arr, shape):
+    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr)).reshape(shape)
+
+def morphmasks_init(masks_array, masks_shape, components_array, components_shape):
+    global shared_masks
+    global shared_masks_shape
+    global shared_components
+    global shared_components_shape
+    shared_masks = masks_array
+    shared_masks_shape = masks_shape
+    shared_components = components_array
+    shared_components_shape = components_shape
+
+
 def postprocess_graph(boxes, scores, classes, masks, image, categories, min_confidence=0.5):
     """Apply post-processing to raw detections. Implement as a Tensorflow graph.
         
@@ -651,10 +668,21 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     classes = classes[keep]
     masks = masks[keep]
     cats = [categories[class_id] for class_id in classes]
-    instances = nb.typed.List()
-    for instance in zip(boxes, scores, classes, masks, cats):
-        instances.append(instance)
-    morphmasks(instances, components)
+    shared_masks = mp.sharedctypes.RawArray(ctypes.c_bool, masks.size)
+    shared_components = mp.sharedctypes.RawArray(ctypes.c_int32, components.size)
+    shared_masks_np = tonumpyarray_with_shape(shared_masks, masks.shape)
+    shared_components_np = tonumpyarray_with_shape(shared_components, components.shape)
+    np.copyto(shared_components_np, components, casting='equiv')
+    np.copyto(shared_masks_np, masks)
+
+    pool = mp.Pool(processes=8, # to be refined via param
+                   initializer=morphmasks_init, 
+                   initargs=(shared_masks, masks.shape, shared_components, components.shape))
+    with pool as p:
+        # multiprocessing for different slices of array (in-place)
+        p.map(morphmasks, range(masks.shape[0]))
+
+    masks = tonumpyarray_with_shape(shared_masks,masks.shape)
     return scale, boxes, scores, classes, masks
 
 def polygon_for_parent(polygon, parent):
@@ -712,103 +740,88 @@ def make_valid(polygon):
         polygon = polygon.simplify(tolerance)
     return polygon
 
-#@nb.jit(nb.types.UniTuple(nb.int32,4)(nb.boolean[:]))
-#def boundingbox(mask):
-#    return cv2.boundingRect(mask.astype(np.uint8))
-@nb.njit(cache=True)
-def boundingbox(mask):
-    # does not compile (no support for Numpy kwargs):
-    # rows = np.any(mask, axis=1)
-    # cols = np.any(mask, axis=0)
-    # rmin, rmax = np.where(rows)[0][[0, -1]]
-    # cmin, cmax = np.where(cols)[0][[0, -1]]
-    indcs = np.where(mask)
-    rmin = np.min(indcs[0])
-    rmax = np.max(indcs[0])
-    cmin = np.min(indcs[1])
-    cmax = np.max(indcs[1])
-    return cmin, rmin, cmax - cmin, rmax - rmin
-
-@nb.njit(parallel=True, cache=True, nogil=True)
-def morphmasks(instances, components):
-    for i in nb.prange(len(instances)):
-        bbox, score, class_id, mask, category = instances[i]
-        # find closure in connected components
-        complabels = np.unique(mask * components)
-        left, top, w, h = boundingbox(mask)
-        right = left + w
-        bottom = top + h
-        if NP_POSTPROCESSING_OUTER:
-            # overwrite pixel mask from (padded) outer bbox
-            for label in complabels:
-                if not label:
-                    continue # bg/white
-                leftc, topc, wc, hc = boundingbox(components==label)
-                rightc = leftc + wc
-                bottomc = topc + hc
-                if wc > 2 * w or hc > 2 * h:
-                    continue # huge (non-text?) component
-                # intersection over component too small?
-                if (min(right, rightc) - max(left, leftc)) * \
-                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
-                    continue # too little overlap
-                newleft = min(left, leftc)
-                newtop = min(top, topc)
-                newright = max(right, rightc)
-                newbottom = max(bottom, bottomc)
-                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
-                    continue # 
+def morphmasks(instance):
+    masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
+    components = np.ctypeslib.as_array(shared_components).reshape(shared_components_shape)
+    mask = masks[instance]
+    # find closure in connected components
+    complabels = np.unique(mask * components)
+    left, top, w, h = cv2.boundingRect(mask.astype(np.uint8))
+    right = left + w
+    bottom = top + h
+    if NP_POSTPROCESSING_OUTER:
+        # overwrite pixel mask from (padded) outer bbox
+        for label in complabels:
+            if not label:
+                continue # bg/white
+            leftc, topc, wc, hc = cv2.boundingRect((components == label).astype(np.uint8))
+            rightc = leftc + wc
+            bottomc = topc + hc
+            if wc > 2 * w or hc > 2 * h:
+                continue # huge (non-text?) component
+            # intersection over component too small?
+            if (min(right, rightc) - max(left, leftc)) * \
+                (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                continue # too little overlap
+            newleft = min(left, leftc)
+            newtop = min(top, topc)
+            newright = max(right, rightc)
+            newbottom = max(bottom, bottomc)
+            if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                continue # 
+            left = newleft
+            top = newtop
+            right = newright
+            bottom = newbottom
+            w = right - left
+            h = bottom - top
+        left = max(0, left - FINAL_DILATION)
+        top = max(0, top - FINAL_DILATION)
+        right = min(mask.shape[1], right + FINAL_DILATION)
+        bottom = min(mask.shape[0], bottom + FINAL_DILATION)
+        mask[top:bottom, left:right] = True
+        
+    else:
+        # fill pixel mask from (padded) inner bboxes
+        for label in complabels:
+            if not label:
+                continue # bg/white
+            suppress = False
+            leftc, topc, wc, hc = cv2.boundingRect((components == label).astype(np.uint8))
+            rightc = leftc + wc
+            bottomc = topc + hc
+            if wc > 2 * w or hc > 2 * h:
+                # huge (non-text?) component
+                suppress = True
+            if (min(right, rightc) - max(left, leftc)) * \
+                (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
+                # intersection over component too small
+                suppress = True
+            newleft = min(left, leftc)
+            newtop = min(top, topc)
+            newright = max(right, rightc)
+            newbottom = max(bottom, bottomc)
+            if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                # huge (non-text?) component
+                suppress = True
+            elif (newright - newleft) < 1.1 * w and (newbottom - newtop) < 1.1 * h:
+                suppress = False
+            if suppress:
+                leftc = min(mask.shape[1], leftc + FINAL_DILATION)
+                topc = min(mask.shape[0], topc + FINAL_DILATION)
+                rightc = max(0, rightc - FINAL_DILATION)
+                bottomc = max(0, bottomc - FINAL_DILATION)
+                mask[topc:bottomc, leftc:rightc] = False
+            else:
+                leftc = max(0, leftc - FINAL_DILATION)
+                topc = max(0, topc - FINAL_DILATION)
+                rightc = min(mask.shape[1], rightc + FINAL_DILATION)
+                bottomc = min(mask.shape[0], bottomc + FINAL_DILATION)
+                mask[topc:bottomc, leftc:rightc] = True
                 left = newleft
                 top = newtop
                 right = newright
                 bottom = newbottom
                 w = right - left
                 h = bottom - top
-            left = max(0, left - FINAL_DILATION)
-            top = max(0, top - FINAL_DILATION)
-            right = min(mask.shape[1], right + FINAL_DILATION)
-            bottom = min(mask.shape[0], bottom + FINAL_DILATION)
-            mask[top:bottom, left:right] = True
-        else:
-            # fill pixel mask from (padded) inner bboxes
-            for label in complabels:
-                if not label:
-                    continue # bg/white
-                suppress = False
-                leftc, topc, wc, hc = boundingbox(components==label)
-                rightc = leftc + wc
-                bottomc = topc + hc
-                if wc > 2 * w or hc > 2 * h:
-                    # huge (non-text?) component
-                    suppress = True
-                if (min(right, rightc) - max(left, leftc)) * \
-                   (min(bottom, bottomc) - max(top, topc)) < IOCC_THRESHOLD * wc * hc:
-                    # intersection over component too small
-                    suppress = True
-                newleft = min(left, leftc)
-                newtop = min(top, topc)
-                newright = max(right, rightc)
-                newbottom = max(bottom, bottomc)
-                if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
-                    # huge (non-text?) component
-                    suppress = True
-                elif (newright - newleft) < 1.1 * w and (newbottom - newtop) < 1.1 * h:
-                    suppress = False
-                if suppress:
-                    leftc = min(mask.shape[1], leftc + FINAL_DILATION)
-                    topc = min(mask.shape[0], topc + FINAL_DILATION)
-                    rightc = max(0, rightc - FINAL_DILATION)
-                    bottomc = max(0, bottomc - FINAL_DILATION)
-                    mask[topc:bottomc, leftc:rightc] = False
-                else:
-                    leftc = max(0, leftc - FINAL_DILATION)
-                    topc = max(0, topc - FINAL_DILATION)
-                    rightc = min(mask.shape[1], rightc + FINAL_DILATION)
-                    bottomc = min(mask.shape[0], bottomc + FINAL_DILATION)
-                    mask[topc:bottomc, leftc:rightc] = True
-                    left = newleft
-                    top = newtop
-                    right = newright
-                    bottom = newbottom
-                    w = right - left
-                    h = bottom - top
+    
