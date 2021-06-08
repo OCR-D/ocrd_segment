@@ -750,14 +750,12 @@ def boundingbox(mask):
     cmax = np.max(indcs[1])
     return cmin, rmin, cmax - cmin, rmax - rmin
 
-#@nb.njit(parallel=True, cache=True, nogil=True)
-#@nb.njit(parallel=True)
-def morphmasks(args):
-    shared_masks_np = np.ctypeslib.as_array(shared_arr).reshape(shared_shape1)
-    shared_components_np = np.ctypeslib.as_array(second_shared_array).reshape(shared_shape2)
-    mask = shared_masks_np[args, : , :]
-    # find closure in connected shared_components_np
-    complabels = np.unique(mask * shared_components_np)
+def morphmasks(instance):
+    masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
+    components = np.ctypeslib.as_array(shared_components).reshape(shared_components_shape)
+    mask = masks[instance]
+    # find closure in connected components
+    complabels = np.unique(mask * components)
     left, top, w, h = cv2.boundingRect(mask.astype(np.uint8))
     right = left + w
     bottom = top + h
