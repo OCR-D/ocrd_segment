@@ -834,5 +834,4 @@ def morphmasks(instance):
                 bottom = newbottom
                 w = right - left
                 h = bottom - top
-            shared_masks_np[args, :,:] = mask
     
