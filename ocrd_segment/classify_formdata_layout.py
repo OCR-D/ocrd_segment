@@ -798,7 +798,7 @@ def morphmasks(instance):
             if not label:
                 continue # bg/white
             suppress = False
-            leftc, topc, wc, hc = cv2.boundingRect((shared_components_np==label).astype(np.uint8))
+            leftc, topc, wc, hc = cv2.boundingRect((components == label).astype(np.uint8))
             rightc = leftc + wc
             bottomc = topc + hc
             if wc > 2 * w or hc > 2 * h:
