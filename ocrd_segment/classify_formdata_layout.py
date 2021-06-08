@@ -535,6 +535,9 @@ def postprocess_graph(boxes, scores, classes, masks, image, categories, min_conf
         newmax = tf.maximum(roimax, compmax)
         # ignore background (matches everywhere):
         background = tf.identity(complabels[compidx] == 0)
+        # skip if wc > 2 * w or hc > 2 * h:
+        toolarge = tf.reduce_any(compmax - compmin > 2 * (roimax - roimin))
+        # skip if neww > 2 * w or newh > 1.5 * h:
         roimin = tf.cast(roimin, tf.float32)
         roimax = tf.cast(roimax, tf.float32)
         newmin = tf.cast(newmin, tf.float32)
