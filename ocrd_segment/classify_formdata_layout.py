@@ -316,11 +316,16 @@ class ClassifyFormDataLayout(Processor):
         time3 = time.time()
         # concatenate instances for all classes of this page image
         preds = dict()
-        preds["rois"] = np.concatenate([pred["rois"] for pred in predictions])
-        preds["class_ids"] = np.concatenate([pred["class_ids"] for pred in predictions])
-        preds["scores"] = np.concatenate([pred["scores"] for pred in predictions])
-        preds["masks"] = np.moveaxis(np.dstack([pred["masks"] for pred in predictions if pred["masks"].ndim > 2]),
-                                     2, 0)
+        predictions = [pred for pred in predictions if pred['masks'].ndim > 2]
+        if not predictions:
+            LOG.warning("Detected no form fields on page '%s'", page_id)
+            return
+        for key in ['rois', 'class_ids', 'scores', 'masks']:
+            vals = [pred[key] for pred in predictions]
+            if key == 'masks':
+                vals = [np.moveaxis(val, 2, 0) for val in vals]
+            preds[key] = np.concatenate(vals)
+        assert len(preds["rois"]) == len(preds["class_ids"]) == len(preds["scores"]) == len(preds["masks"])
         LOG.debug("Decoding %d ROIs for %d distinct classes (avg. score: %.2f)",
                   len(preds["class_ids"]),
                   len(np.unique(preds["class_ids"])),
@@ -638,6 +643,8 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     # post-process detections morphologically and decode to region polygons
     # does not compile (no OpenCV support):
     keep = np.where(~bad)[0]
+    if not np.any(keep):
+        return scale, [], [], [], []
     keep = sorted(keep, key=lambda i: scores[i], reverse=True)
     boxes = boxes[keep]
     scores = scores[keep]
