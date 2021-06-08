@@ -397,15 +397,15 @@ def tonumpyarray(mp_arr):
 def tonumpyarray_with_shape(mp_arr, shape):
     return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr)).reshape(shape)
 
-def init(shared_arr_, shape1, second_array, shape2):
-    global shared_arr
-    global shared_shape1 
-    global second_shared_array
-    global shared_shape2 
-    shared_arr = shared_arr_ # must be inherited, not passed as an argument
-    second_shared_array = second_array
-    shared_shape1 = shape1 
-    shared_shape2 = shape2
+def morphmasks_init(masks_array, masks_shape, components_array, components_shape):
+    global shared_masks
+    global shared_masks_shape
+    global shared_components
+    global shared_components_shape
+    shared_masks = masks_array
+    shared_masks_shape = masks_shape
+    shared_components = components_array
+    shared_components_shape = components_shape
 
 
 def postprocess_graph(boxes, scores, classes, masks, image, categories, min_confidence=0.5):
