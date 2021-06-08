@@ -64,10 +64,6 @@ IOCC_THRESHOLD = 0.4
 # add this many pixels in each direction
 FINAL_DILATION = 4
 # faster
-#nb.config.THREADING_LAYER = 'omp'
-# multiprocessing CPU's count
-CPU_COUNT = os.cpu_count()
-print(CPU_COUNT)
 
 class ClassifyFormDataLayout(Processor):
 
