@@ -3,9 +3,7 @@ from __future__ import absolute_import
 import os
 import time
 import numpy as np
-#import numba as nb
 import multiprocessing as mp
-from contextlib import closing
 import ctypes
 from shapely.geometry import Polygon, asPolygon
 from shapely.ops import unary_union
@@ -673,9 +671,9 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     pool = mp.Pool(processes=8, # to be refined via param
                    initializer=morphmasks_init, 
                    initargs=(shared_masks, masks.shape, shared_components, components.shape))
-    with closing(pool) as p:
-        # many process access different slices of array
-        p.map(morphmasks, (range(masks.shape[0])))
+    with pool as p:
+        # multiprocessing for different slices of array (in-place)
+        p.map(morphmasks, range(masks.shape[0]))
 
     masks = tonumpyarray_with_shape(shared_masks,masks.shape)
     return scale, boxes, scores, classes, masks
@@ -734,24 +732,6 @@ def make_valid(polygon):
         # simplification may require a larger tolerance
         polygon = polygon.simplify(tolerance)
     return polygon
-
-#@nb.jit(nb.types.UniTuple(nb.int32,4)(nb.boolean[:]))
-#def boundingbox(mask):
-#    return cv2.boundingRect(mask.astype(np.uint8))
-#@nb.njit(cache=True)
-#@nb.jit(nopython=True)
-def boundingbox(mask):
-    # does not compile (no support for Numpy kwargs):
-    # rows = np.any(mask, axis=1)
-    # cols = np.any(mask, axis=0)
-    # rmin, rmax = np.where(rows)[0][[0, -1]]
-    # cmin, cmax = np.where(cols)[0][[0, -1]]
-    indcs = np.where(mask)
-    rmin = np.min(indcs[0])
-    rmax = np.max(indcs[0])
-    cmin = np.min(indcs[1])
-    cmax = np.max(indcs[1])
-    return cmin, rmin, cmax - cmin, rmax - rmin
 
 def morphmasks(instance):
     masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
