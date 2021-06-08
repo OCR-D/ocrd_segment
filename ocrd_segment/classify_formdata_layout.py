@@ -672,8 +672,6 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
                    initargs=(shared_masks, masks.shape, shared_components, components.shape))
     with closing(pool) as p:
         # many process access different slices of array
-        #step = len(shared_masks) // masks.shape[0]
-        #res = p.map(morphmasks, ([slice(i, i+step) for i in range(0, len(shared_masks), step)],))
         p.map(morphmasks, (range(masks.shape[0])))
 
     masks = tonumpyarray_with_shape(shared_masks,masks.shape)
