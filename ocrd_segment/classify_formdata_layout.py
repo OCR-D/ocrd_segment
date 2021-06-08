@@ -666,8 +666,8 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     classes = classes[keep]
     masks = masks[keep]
     cats = [categories[class_id] for class_id in classes]
-    shared_masks = mp.sharedctypes.RawArray(ctypes.c_bool, masks.shape[0]* masks.shape[1]*masks.shape[2])
-    shared_components = mp.sharedctypes.RawArray(ctypes.c_int32, components.shape[0]*components.shape[1])
+    shared_masks = mp.sharedctypes.RawArray(ctypes.c_bool, masks.size)
+    shared_components = mp.sharedctypes.RawArray(ctypes.c_int32, components.size)
     shared_masks_np = tonumpyarray_with_shape(shared_masks, masks.shape)
     shared_components_np = tonumpyarray_with_shape(shared_components, components.shape)
     np.copyto(shared_components_np, components, casting='equiv')
