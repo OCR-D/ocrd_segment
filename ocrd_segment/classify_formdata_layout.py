@@ -61,7 +61,6 @@ IOCC_THRESHOLD = 0.4
 # when finalizing contours of detections (in either mode),
 # add this many pixels in each direction
 FINAL_DILATION = 4
-# faster
 
 class ClassifyFormDataLayout(Processor):
 
@@ -340,7 +339,8 @@ class ClassifyFormDataLayout(Processor):
         scale, boxes, scores, classes, masks = postprocess(
             preds['rois'], preds['scores'], preds['class_ids'],
             preds["masks"], page_array_bin, self.categories,
-            min_confidence=self.parameter['min_confidence'])
+            min_confidence=self.parameter['min_confidence'],
+            nproc=self.parameter['num_processes'])
         if len(boxes) == 0:
             LOG.warning("Detected no form fields on page '%s'", page_id)
             return
@@ -388,24 +388,7 @@ class ClassifyFormDataLayout(Processor):
         LOG.debug("post-processing time: %d", time4 - time3)
         LOG.debug("contour finding time: %d", time5 - time4)
 
-def tonumpyarray(mp_arr):
-    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr))
-
-def tonumpyarray_with_shape(mp_arr, shape):
-    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr)).reshape(shape)
-
-def morphmasks_init(masks_array, masks_shape, components_array, components_shape):
-    global shared_masks
-    global shared_masks_shape
-    global shared_components
-    global shared_components_shape
-    shared_masks = masks_array
-    shared_masks_shape = masks_shape
-    shared_components = components_array
-    shared_components_shape = components_shape
-
-
-def postprocess_graph(boxes, scores, classes, masks, image, categories, min_confidence=0.5):
+def postprocess_graph(boxes, scores, classes, masks, image, categories, min_confidence=0.5, nproc=1):
     """Apply post-processing to raw detections. Implement as a Tensorflow graph.
         
     - geometrically: remove overlapping candidates via non-maximum suppression across classes
@@ -585,7 +568,7 @@ def postprocess_graph(boxes, scores, classes, masks, image, categories, min_conf
     scale, boxes, scores, classes, masks = postprocess(boxesA, scoresA, classesA, masksA, imageA)
     return int(scale), boxes, scores, classes.astype(np.int32), masks.astype(np.bool)
 
-def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories, min_confidence=0.5):
+def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories, min_confidence=0.5, nproc=8):
     """Apply post-processing to raw detections. Implement via Numpy routines.
         
     - geometrically: remove overlapping candidates via non-maximum suppression across classes
@@ -594,20 +577,22 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     LOG = getLogger('processor.ClassifyFormDataLayout')
     # apply IoU-based NMS across classes
     assert masks.dtype == np.bool
-    time1 = time.time()
-    overlaps = np.zeros((len(masks), len(masks)), np.bool)
     instances = np.arange(len(masks))
     instances_i, instances_j = np.meshgrid(instances, instances, indexing='ij')
-    combinations = zip(*np.where(instances_i < instances_j))
+    combinations = list(zip(*np.where(instances_i < instances_j)))
     shared_masks = mp.sharedctypes.RawArray(ctypes.c_bool, masks.size)
     shared_masks_np = tonumpyarray_with_shape(shared_masks, masks.shape)
     np.copyto(shared_masks_np, masks)
-    with mp.Pool(processes=8, initializer=overlapmasks_init, initargs=(shared_masks, masks.shape)) as p:
-        overlapping_combinations = p.starmap(overlapmasks, combinations)
-    for combination, (i, j) in enumerate(combinations):
-        overlaps[i, j] = overlapping_combinations[combination]
-        overlaps[j, i] = overlapping_combinations[combination]
-    time2 = time.time()
+    with mp.Pool(processes=nproc, # to be refined via param
+                 initializer=overlapmasks_init,
+                 initargs=(shared_masks, masks.shape)) as pool:
+        # multiprocessing for different combinations of array slices (pure)
+        overlapping_combinations = pool.starmap(overlapmasks, combinations)
+    overlaps = np.zeros((len(masks), len(masks)), np.bool)
+    for (i, j), overlapping in zip(combinations, overlapping_combinations):
+        if overlapping:
+            overlaps[i, j] = True
+            overlaps[j, i] = True
     # find best-scoring instance per class
     bad = np.zeros_like(instances, np.bool)
     for i in np.argsort(-scores):
@@ -644,10 +629,8 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         else:
             LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
                       category, str(bbox), count, score)
-    time3 = time.time()
     # get connected components
     _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
-    time4 = time.time()
     # estimate glyph scale (roughly)
     _, counts = np.unique(components, return_counts=True)
     if counts.shape[0] > 1:
@@ -656,7 +639,6 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         scale = int(np.median(counts))
     else:
         scale = 43
-    time5 = time.time()
     # post-process detections morphologically and decode to region polygons
     # does not compile (no OpenCV support):
     keep = np.where(~bad)[0]
@@ -674,20 +656,13 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     shared_components_np = tonumpyarray_with_shape(shared_components, components.shape)
     np.copyto(shared_components_np, components, casting='equiv')
     np.copyto(shared_masks_np, masks)
-    pool = mp.Pool(processes=8, # to be refined via param
-                   initializer=morphmasks_init, 
-                   initargs=(shared_masks, masks.shape, shared_components, components.shape))
-    with pool as p:
+    with mp.Pool(processes=nproc, # to be refined via param
+                 initializer=morphmasks_init,
+                 initargs=(shared_masks, masks.shape,
+                           shared_components, components.shape)) as pool:
         # multiprocessing for different slices of array (in-place)
-        p.map(morphmasks, range(masks.shape[0]))
-
-    masks = tonumpyarray_with_shape(shared_masks,masks.shape)
-    time6 = time.time()
-    LOG.debug("pp: overlap time: %d", time2 - time1)
-    LOG.debug("pp: NMS time: %d", time3 - time2)
-    LOG.debug("pp: CC time: %d", time4 - time3)
-    LOG.debug("pp: scale time: %d", time5 - time4)
-    LOG.debug("pp: morphmasks time: %d", time6 - time5)
+        pool.map(morphmasks, range(masks.shape[0]))
+    masks = tonumpyarray_with_shape(shared_masks, masks.shape)
     return scale, boxes, scores, classes, masks
 
 def polygon_for_parent(polygon, parent):
@@ -745,6 +720,12 @@ def make_valid(polygon):
         polygon = polygon.simplify(tolerance)
     return polygon
 
+def tonumpyarray(mp_arr):
+    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr))
+
+def tonumpyarray_with_shape(mp_arr, shape):
+    return np.frombuffer(mp_arr, dtype=np.dtype(mp_arr)).reshape(shape)
+
 def overlapmasks_init(masks_array, masks_shape):
     global shared_masks
     global shared_masks_shape
@@ -752,15 +733,26 @@ def overlapmasks_init(masks_array, masks_shape):
     shared_masks_shape = masks_shape
     
 def overlapmasks(i, j):
-    shared_masks_np = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
-    imask = shared_masks_np[i]
-    jmask = shared_masks_np[j]
+    masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
+    imask = masks[i]
+    jmask = masks[j]
     intersection = np.count_nonzero(imask * jmask)
     if not intersection:
         return False
     union = np.count_nonzero(imask + jmask)
     if intersection / union > IOU_THRESHOLD:
         return True
+    return False
+
+def morphmasks_init(masks_array, masks_shape, components_array, components_shape):
+    global shared_masks
+    global shared_masks_shape
+    global shared_components
+    global shared_components_shape
+    shared_masks = masks_array
+    shared_masks_shape = masks_shape
+    shared_components = components_array
+    shared_components_shape = components_shape
 
 def morphmasks(instance):
     masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)

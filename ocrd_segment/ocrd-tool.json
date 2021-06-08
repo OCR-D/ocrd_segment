@@ -188,7 +188,13 @@
           "type": "number",
           "format": "integer",
           "default": 1,
-          "description": "number of images fed in parallel"
+          "description": "number of images fed in parallel (also equals number of CPU workers)"
+        },
+        "num_processes": {
+          "type": "number",
+          "format": "integer",
+          "default": 8,
+          "description": "number of parallel processes when post-processing"
         },
         "min_confidence": {
           "type": "number",
