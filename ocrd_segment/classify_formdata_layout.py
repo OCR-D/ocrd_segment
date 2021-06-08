@@ -790,7 +790,6 @@ def morphmasks(instance):
         right = min(mask.shape[1], right + FINAL_DILATION)
         bottom = min(mask.shape[0], bottom + FINAL_DILATION)
         mask[top:bottom, left:right] = True
-        shared_masks_np[args, :,:] = mask
         
     else:
         # fill pixel mask from (padded) inner bboxes
