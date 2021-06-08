@@ -849,6 +849,3 @@ def morphmasks(args):
                 h = bottom - top
             shared_masks_np[args, :,:] = mask
     
-    return shared_masks_np[args, :,:]
-
-    
