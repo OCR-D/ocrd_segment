@@ -594,23 +594,20 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     LOG = getLogger('processor.ClassifyFormDataLayout')
     # apply IoU-based NMS across classes
     assert masks.dtype == np.bool
+    time1 = time.time()
     overlaps = np.zeros((len(masks), len(masks)), np.bool)
     instances = np.arange(len(masks))
     instances_i, instances_j = np.meshgrid(instances, instances, indexing='ij')
     combinations = zip(*np.where(instances_i < instances_j))
-    for i, j in combinations:
-        imask = masks[i]
-        jmask = masks[j]
-        intersection = np.count_nonzero(imask * jmask)
-        if not intersection:
-            continue
-        union = np.count_nonzero(imask + jmask)
-        if intersection / union > IOU_THRESHOLD:
-            # LOG.debug("pred %d[%s] overlaps pred %d[%s]",
-            #           i, categories[classes[i]],
-            #           j, categories[classes[j]])
-            overlaps[i, j] = True
-            overlaps[j, i] = True
+    shared_masks = mp.sharedctypes.RawArray(ctypes.c_bool, masks.size)
+    shared_masks_np = tonumpyarray_with_shape(shared_masks, masks.shape)
+    np.copyto(shared_masks_np, masks)
+    with mp.Pool(processes=8, initializer=overlapmasks_init, initargs=(shared_masks, masks.shape)) as p:
+        overlapping_combinations = p.starmap(overlapmasks, combinations)
+    for combination, (i, j) in enumerate(combinations):
+        overlaps[i, j] = overlapping_combinations[combination]
+        overlaps[j, i] = overlapping_combinations[combination]
+    time2 = time.time()
     # find best-scoring instance per class
     bad = np.zeros_like(instances, np.bool)
     for i in np.argsort(-scores):
@@ -647,8 +644,10 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         else:
             LOG.debug("post-processing prediction for '%s' at %s area %d score %f",
                       category, str(bbox), count, score)
+    time3 = time.time()
     # get connected components
     _, components = cv2.connectedComponents(page_array_bin.astype(np.uint8))
+    time4 = time.time()
     # estimate glyph scale (roughly)
     _, counts = np.unique(components, return_counts=True)
     if counts.shape[0] > 1:
@@ -657,6 +656,7 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         scale = int(np.median(counts))
     else:
         scale = 43
+    time5 = time.time()
     # post-process detections morphologically and decode to region polygons
     # does not compile (no OpenCV support):
     keep = np.where(~bad)[0]
@@ -674,7 +674,6 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     shared_components_np = tonumpyarray_with_shape(shared_components, components.shape)
     np.copyto(shared_components_np, components, casting='equiv')
     np.copyto(shared_masks_np, masks)
-
     pool = mp.Pool(processes=8, # to be refined via param
                    initializer=morphmasks_init, 
                    initargs=(shared_masks, masks.shape, shared_components, components.shape))
@@ -683,6 +682,12 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         p.map(morphmasks, range(masks.shape[0]))
 
     masks = tonumpyarray_with_shape(shared_masks,masks.shape)
+    time6 = time.time()
+    LOG.debug("pp: overlap time: %d", time2 - time1)
+    LOG.debug("pp: NMS time: %d", time3 - time2)
+    LOG.debug("pp: CC time: %d", time4 - time3)
+    LOG.debug("pp: scale time: %d", time5 - time4)
+    LOG.debug("pp: morphmasks time: %d", time6 - time5)
     return scale, boxes, scores, classes, masks
 
 def polygon_for_parent(polygon, parent):
@@ -739,6 +744,23 @@ def make_valid(polygon):
         # simplification may require a larger tolerance
         polygon = polygon.simplify(tolerance)
     return polygon
+
+def overlapmasks_init(masks_array, masks_shape):
+    global shared_masks
+    global shared_masks_shape
+    shared_masks = masks_array
+    shared_masks_shape = masks_shape
+    
+def overlapmasks(i, j):
+    shared_masks_np = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
+    imask = shared_masks_np[i]
+    jmask = shared_masks_np[j]
+    intersection = np.count_nonzero(imask * jmask)
+    if not intersection:
+        return False
+    union = np.count_nonzero(imask + jmask)
+    if intersection / union > IOU_THRESHOLD:
+        return True
 
 def morphmasks(instance):
     masks = np.ctypeslib.as_array(shared_masks).reshape(shared_masks_shape)
@@ -824,4 +846,3 @@ def morphmasks(instance):
                 bottom = newbottom
                 w = right - left
                 h = bottom - top
-    
