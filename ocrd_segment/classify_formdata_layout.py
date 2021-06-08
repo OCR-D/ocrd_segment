@@ -673,7 +673,10 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
     np.copyto(shared_components_np, components, casting='equiv')
     np.copyto(shared_masks_np, masks)
 
-    with closing(mp.Pool(initializer=init, initargs=(shared_masks, masks.shape, shared_components, components.shape))) as p:
+    pool = mp.Pool(processes=8, # to be refined via param
+                   initializer=morphmasks_init, 
+                   initargs=(shared_masks, masks.shape, shared_components, components.shape))
+    with closing(pool) as p:
         # many process access different slices of array
         #step = len(shared_masks) // masks.shape[0]
         #res = p.map(morphmasks, ([slice(i, i+step) for i in range(0, len(shared_masks), step)],))
