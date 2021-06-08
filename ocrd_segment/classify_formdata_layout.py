@@ -44,8 +44,6 @@ from .config import OCRD_TOOL
 
 from maskrcnn_cli.formdata import FIELDS, InferenceConfig
 
-info = mp.get_logger().info
-
 TOOL = 'ocrd-segment-classify-formdata-layout'
 # prefer Tensorflow (GPU/CPU) over Numpy (CPU)
 # for morphological post-processing of NN predictions
