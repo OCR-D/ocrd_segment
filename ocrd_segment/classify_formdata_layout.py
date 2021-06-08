@@ -675,7 +675,6 @@ def postprocess_numpy(boxes, scores, classes, masks, page_array_bin, categories,
         #step = len(shared_masks) // masks.shape[0]
         #res = p.map(morphmasks, ([slice(i, i+step) for i in range(0, len(shared_masks), step)],))
         p.map(morphmasks, (range(masks.shape[0])))
-    p.join()
 
     masks = tonumpyarray_with_shape(shared_masks,masks.shape)
     return scale, boxes, scores, classes, masks
