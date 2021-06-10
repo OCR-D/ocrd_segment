@@ -96,13 +96,18 @@ class ClassifyFormDataLayout(Processor):
         config.PRE_NMS_LIMIT = 200
         config.POST_NMS_ROIS_INFERENCE = 100
         assert config.NUM_CLASSES == len(self.categories)
-        # FIXME: find a way to fall back to CPU in case of OOM
-        proto = tf.ConfigProto()
+        proto = tf.compat.v1.ConfigProto()
         proto.gpu_options.allow_growth = True  # dynamically alloc GPU memory as needed
-        sess = tf.compat.v1.Session(config=proto)
+        # avoid over-allocation / OOM
+        if 'MRCNNPROCS' in os.environ:
+            # share GPU with nprocs others
+            proto.gpu_options.per_process_gpu_memory_fraction = 1.0 / int(os.environ['MRCNNPROCS'])
+        # fall-back to CPU / swap-out
+        proto.gpu_options.experimental.use_unified_memory = True # allow swapping memory back to CPU instead of OOM
+        self.sess = tf.compat.v1.Session(config=proto)
         #sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(
         #    gpu_options=tf.compat.v1.GPUOptions(allow_growth=True)))
-        K.tensorflow_backend.set_session(sess) # set this as default session for Keras / Mask-RCNN
+        K.tensorflow_backend.set_session(self.sess) # set this as default session for Keras / Mask-RCNN
         #config.display()
         self.model = model.MaskRCNN(
             mode="inference", config=config,
@@ -310,6 +315,7 @@ class ClassifyFormDataLayout(Processor):
         generator = model.InferenceDataGenerator(dataset, self.model.config)
         time2 = time.time()
         # predict page image per-class as batch
+        K.tensorflow_backend.set_session(self.sess)
         predictions = self.model.detect_generator(generator, verbose=0,
                                                   workers=max(3, self.model.config.BATCH_SIZE))
         time3 = time.time()
