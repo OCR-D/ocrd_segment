@@ -834,6 +834,8 @@ KEYS = {"energietraeger": {"Gas": "erdgas",
 
 # normalize spelling
 def normalize(text):
+    if os.environ.get('FORMDATA_UMLAUTS', None) == '0':
+        text = text.translate(str.maketrans('äöüÄÖÜß€¹²³', 'aouAOUBC123'))
     # workaround for bad OCR:
     text = text.replace('ı', 'i')
     text = text.replace(']', 'I')
