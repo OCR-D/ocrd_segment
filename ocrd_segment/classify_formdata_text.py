@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os.path
 import os
 import math
+import itertools
 from fuzzywuzzy import fuzz, process as fuzz_process
 
 from ocrd_utils import (
@@ -854,56 +855,59 @@ def normalize(text):
                     for word in text.split())
     return text
 
-def classify(text, threshold=95, tag=''):
+def classify(texts, threshold=95, tag=''):
     LOG = getLogger('processor.ClassifyFormDataText')
+    LOG.debug("matching %s against %d candidate inputs", tag, len(texts))
     classes = []
-    if not text:
+    if not texts or not any(texts):
         return classes
     for class_id, category in enumerate(FIELDS):
         if category not in KEYWORDS:
             raise Exception("Unknown category '%s'" % category)
-        if (NUMBER in KEYWORDS[category] and
-            text.translate(str.maketrans('', '', ',. ')).isnumeric()):
-            classes.append(class_id)
-            LOG.debug("numeric %s match: %s in %s", tag, text, category)
-            continue
-        if text in KEYWORDS[category]:
-            classes.append(class_id)
-            LOG.debug("direct %s match: %s in %s", tag, text, category)
-            continue
-        # FIXME: Fuzzy string search is very different from robust OCR search:
-        #        We don't want to tolerate arbitrary differences, but only
-        #        graphemically likely ones; e.g.
-        #        - `Ihr Kosten-` vs `Ihre Kosten`
-        #        - `Verbrauchs-` vs `Verbrauch`
-        #        - `100` or `100€` vs `100%`
-        #        - `ab` vs `Ab-`
-        #        But OCR with alternative hypotheses is hard to get by...
-        #
-        if (text.startswith('m') and
-            ('m²' in KEYWORDS[category] or 'm³' in KEYWORDS[category]) and
-            len(text) <= 2):
-            classes.append(class_id)
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
-            continue
-        if ('C' in text and
-            '°C' in KEYWORDS[category] and
-            len(text) <= 2):
-            classes.append(class_id)
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
-            continue
-        # fuzz scores are relative to length, but we actually
-        # want to have a measure of the edit distance, or a
-        # mix of both; so here we just attenuate short strings
-        min_score = (1-math.exp(-len(text))) * threshold
-        result = fuzz_process.extractOne(text, KEYWORDS[category],
-                                         processor=normalize,
-                                         scorer=fuzz.UQRatio, #UWRatio
-                                         score_cutoff=min_score)
-        if result:
-            keyword, score = result
-            classes.append(class_id)
-            LOG.debug("fuzzy %s match: %s~%s in %s", tag, text, keyword, category)
+        match = None
+        score = 100
+        for text in texts:
+            if NUMBER in KEYWORDS[category]:
+                matches = text.translate(str.maketrans('', '', ',. ')).isnumeric()
+                matcher = 'numeric'
+            else:
+                matches = text in KEYWORDS[category]
+                matcher = 'direct'
+            if matches:
+                match = text
+                LOG.debug("%s %s match: %s in %s", matcher, tag, match, category)
+                break
+            # FIXME: Fuzzy string search is very different from robust OCR search:
+            #        We don't want to tolerate arbitrary differences, but only
+            #        graphemically likely ones; e.g.
+            #        - `Ihr Kosten-` vs `Ihre Kosten`
+            #        - `Verbrauchs-` vs `Verbrauch`
+            #        - `100` or `100€` vs `100%`
+            #        - `ab` vs `Ab-`
+            if text.startswith('m') and len(text) <= 2 and (
+                    'm²' in KEYWORDS[category] or 'm2' in KEYWORDS[category] or
+                    'm³' in KEYWORDS[category] or 'm3' in KEYWORDS[category]):
+                match = text
+                LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+                break
+            if 'C' in text and len(text) <= 2 and '°C' in KEYWORDS[category]:
+                match = text
+                LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+                break
+            # fuzz scores are relative to length, but we actually
+            # want to have a measure of the edit distance, or a
+            # mix of both; so here we just attenuate short strings
+            min_score = (1-math.exp(-len(text))) * threshold
+            result = fuzz_process.extractOne(text, KEYWORDS[category],
+                                             processor=normalize,
+                                             scorer=fuzz.UQRatio, #UWRatio
+                                             score_cutoff=min_score)
+            if result:
+                match, score = result
+                LOG.debug("fuzzy %s match: %s~%s in %s", tag, text, match, category)
+                break
+        if match:
+            classes.append((class_id, score, match))
     return classes
 
 class ClassifyFormDataText(Processor):
@@ -950,28 +954,53 @@ class ClassifyFormDataText(Processor):
             for region in allregions:
                 for line in region.get_TextLine():
                     for segment in [line] + line.get_Word() or []:
-                        # run text classification
+                        # get OCR results (best on line/word level, n-best concatenated from glyph level)
+                        texts = list()
+                        confs = list()
                         textequivs = segment.get_TextEquiv()
-                        if not textequivs:
+                        for textequiv in textequivs:
+                            texts.append(textequiv.Unicode)
+                            confs.append(textequiv.conf)
+                        # now go looking for OCR hypotheses at the glyph level
+                        def cutoff(textequiv):
+                            return (textequiv.conf or 0) > self.parameter['glyph_conf_cutoff']
+                        topn = self.parameter['glyph_topn_cutoff']
+                        if isinstance(segment, WordType):
+                            glyphs = [filter(cutoff, glyph.TextEquiv[:topn])
+                                      for glyph in segment.Glyph]
+                            topn = self.parameter['word_topn_cutoff']
+                        else:
+                            glyphs = [filter(cutoff, glyph.TextEquiv[:topn])
+                                      for word in segment.Word
+                                      for glyph in word.Glyph]
+                            topn = self.parameter['line_topn_cutoff']
+                        # get up to n best hyoptheses
+                        textequivs = list(itertools.islice(itertools.product(*glyphs), topn))
+                        if textequivs:
+                            def glyphword(textequiv):
+                                return textequiv.parent_object_.parent_object_
+                            texts.extend([' '.join(''.join(te.Unicode for te in word)
+                                                   for _, word in itertools.groupby(seq, glyphword))
+                                          for seq in textequivs])
+                            confs.extend([sum(te.conf for te in seq) / (len(seq) or 1) for seq in textequivs])
+                        if not texts:
                             LOG.error("Segment '%s' on page '%s' contains no text results",
                                   segment.id, page_id)
                             continue
                         numsegments += 1
-                        text = textequivs[0].Unicode
-                        for class_id in classify(text, self.parameter['threshold'],
-                                                 'word' if isinstance(segment, WordType) else 'line'):
+                        # run (fuzzy, deep) text classification
+                        # FIXME: pass confs as well, use to weight matches somehow
+                        for class_id, score, match in classify(texts, self.parameter['threshold'],
+                                                               'word' if isinstance(segment, WordType) else 'line'):
                             nummatches += 1
                             mark_segment(segment, FIELDS[class_id])
                             if FIELDS[class_id] in ['energietraeger']:
-                                # classified purely textually
+                                # classified purely textually (i.e. target segment = context segment)
                                 mark_segment(segment, FIELDS[class_id], subtype='target')
                                 # annotate nearest text value for target
-                                keyword, _ = fuzz_process.extractOne(text, KEYWORDS[FIELDS[class_id]],
-                                                                     processor=normalize,
-                                                                     scorer=fuzz.UQRatio) #UWRatio
                                 segment.insert_TextEquiv_at(0, TextEquivType(
-                                    Unicode=KEYS[FIELDS[class_id]].get(keyword),
-                                    conf=textequivs[0].conf))
+                                    Unicode=KEYS[FIELDS[class_id]].get(match),
+                                    conf=confs[0]))
             LOG.info("Found %d lines/words and %d matches across classes",
                      numsegments, nummatches)
 

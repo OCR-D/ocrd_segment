@@ -162,6 +162,30 @@
           "format": "integer",
           "default": 95,
           "description": "minimum percentage of character/word match against pre-defined keywords"
+        },
+        "glyph_conf_cutoff": {
+          "type": "number",
+          "format": "float",
+          "default": 0.01,
+          "description": "minimum probability of glyph OCR hypotheses to consider in string search"
+        },
+        "glyph_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 5,
+          "description": "maximum number of glyph OCR hypotheses to consider in string search"
+        },
+        "word_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 10,
+          "description": "maximum number of word OCR hypotheses to consider in string search"
+        },
+        "line_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 100,
+          "description": "maximum number of line OCR hypotheses to consider in string search"
         }
       }
     },
