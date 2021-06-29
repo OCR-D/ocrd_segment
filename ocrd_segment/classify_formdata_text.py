@@ -4,7 +4,8 @@ import os.path
 import os
 import math
 import itertools
-from fuzzywuzzy import fuzz, process as fuzz_process
+import multiprocessing as mp
+from rapidfuzz import fuzz, process as fuzz_process
 
 from ocrd_utils import (
     getLogger,
@@ -855,60 +856,62 @@ def normalize(text):
                     for word in text.split())
     return text
 
-def classify(texts, threshold=95, tag=''):
-    LOG = getLogger('processor.ClassifyFormDataText')
-    LOG.debug("matching %s against %d candidate inputs", tag, len(texts))
-    classes = []
-    if not texts or not any(texts):
-        return classes
-    for class_id, category in enumerate(FIELDS):
-        if category not in KEYWORDS:
-            raise Exception("Unknown category '%s'" % category)
-        match = None
-        score = 100
-        for text in texts:
-            if NUMBER in KEYWORDS[category]:
-                matches = text.translate(str.maketrans('', '', ',. ')).isnumeric()
-                matcher = 'numeric'
-            else:
-                matches = text in KEYWORDS[category]
-                matcher = 'direct'
-            if matches:
-                match = text
-                LOG.debug("%s %s match: %s in %s", matcher, tag, match, category)
-                break
-            # FIXME: Fuzzy string search is very different from robust OCR search:
-            #        We don't want to tolerate arbitrary differences, but only
-            #        graphemically likely ones; e.g.
-            #        - `Ihr Kosten-` vs `Ihre Kosten`
-            #        - `Verbrauchs-` vs `Verbrauch`
-            #        - `100` or `100€` vs `100%`
-            #        - `ab` vs `Ab-`
-            if text.startswith('m') and len(text) <= 2 and (
-                    'm²' in KEYWORDS[category] or 'm2' in KEYWORDS[category] or
-                    'm³' in KEYWORDS[category] or 'm3' in KEYWORDS[category]):
-                match = text
-                LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
-                break
-            if 'C' in text and len(text) <= 2 and '°C' in KEYWORDS[category]:
-                match = text
-                LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
-                break
-            # fuzz scores are relative to length, but we actually
-            # want to have a measure of the edit distance, or a
-            # mix of both; so here we just attenuate short strings
-            min_score = (1-math.exp(-len(text))) * threshold
-            result = fuzz_process.extractOne(text, KEYWORDS[category],
-                                             processor=normalize,
-                                             scorer=fuzz.UQRatio, #UWRatio
-                                             score_cutoff=min_score)
+def classify(inq, outq, threshold=95, slice=(0,None)):
+    for texts, tag in iter(inq.get, 'QUIT'):
+        LOG = getLogger('processor.ClassifyFormDataText')
+        LOG.debug("matching %s against %d candidate inputs, %s", tag, len(texts), str(slice))
+        if not texts or not any(texts):
+            outq.put([])
+            continue
+        classes = list()
+        for class_id, category in enumerate(FIELDS[slice], slice.start):
+            result = match(class_id, category, texts, tag=tag, threshold=threshold)
             if result:
-                match, score = result
-                LOG.debug("fuzzy %s match: %s~%s in %s", tag, text, match, category)
-                break
-        if match:
-            classes.append((class_id, score, match))
-    return classes
+                classes.append(result)
+        outq.put(classes)
+
+def match(class_id, category, texts, tag='line', threshold=95):
+    LOG = getLogger('processor.ClassifyFormDataText')
+    if category not in KEYWORDS:
+        raise Exception("Unknown category '%s'" % category)
+    for text in texts:
+        if NUMBER in KEYWORDS[category]:
+            matches = text.translate(str.maketrans('', '', ',. ')).isnumeric()
+            matcher = 'numeric'
+        else:
+            matches = text in KEYWORDS[category]
+            matcher = 'direct'
+        if matches:
+            LOG.debug("%s %s match: %s in %s", matcher, tag, text, category)
+            return class_id, 100, text
+        # FIXME: Fuzzy string search is very different from robust OCR search:
+        #        We don't want to tolerate arbitrary differences, but only
+        #        graphemically likely ones; e.g.
+        #        - `Ihr Kosten-` vs `Ihre Kosten`
+        #        - `Verbrauchs-` vs `Verbrauch`
+        #        - `100` or `100€` vs `100%`
+        #        - `ab` vs `Ab-`
+        if text.startswith('m') and len(text) <= 2 and (
+                'm²' in KEYWORDS[category] or 'm2' in KEYWORDS[category] or
+                'm³' in KEYWORDS[category] or 'm3' in KEYWORDS[category]):
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+            return class_id, 100, text
+        if 'C' in text and len(text) <= 2 and '°C' in KEYWORDS[category]:
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+            return class_id, 100, text
+        # fuzz scores are relative to length, but we actually
+        # want to have a measure of the edit distance, or a
+        # mix of both; so here we just attenuate short strings
+        min_score = (1-math.exp(-len(text))) * threshold
+        result = fuzz_process.extractOne(text, KEYWORDS[category],
+                                         processor=normalize,
+                                         scorer=fuzz.QRatio, #WRatio
+                                         score_cutoff=min_score)
+        if result:
+            key, score, _ = result
+            LOG.debug("fuzzy %s match: %s~%s in %s", tag, text, key, category)
+            return class_id, score, key
+    return None
 
 class ClassifyFormDataText(Processor):
 
@@ -916,6 +919,24 @@ class ClassifyFormDataText(Processor):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
         super(ClassifyFormDataText, self).__init__(*args, **kwargs)
+        if hasattr(self, 'output_file_grp'):
+            # processing context
+            self.setup()
+
+    def setup(self):
+        LOG = getLogger('processor.ClassifyFormDataLayout')
+        self.taskq = mp.Queue()
+        self.doneq = mp.Queue()
+        self.nproc = self.parameter['num_processes']
+        for i in range(self.nproc):
+            # exclude bg = 0
+            chunksize = math.ceil((len(FIELDS) - 1) / self.nproc)
+            mp.Process(target=classify,
+                       args=(self.taskq, self.doneq),
+                       kwargs={'slice': slice(1 + i * chunksize,
+                                              min(len(FIELDS), 1 + (i + 1) * chunksize)),
+                               'threshold': self.parameter['threshold']},
+                       daemon=True).start()
 
     def process(self):
         """Classify form field context lines from text recognition results.
@@ -990,8 +1011,10 @@ class ClassifyFormDataText(Processor):
                         numsegments += 1
                         # run (fuzzy, deep) text classification
                         # FIXME: pass confs as well, use to weight matches somehow
-                        for class_id, score, match in classify(texts, self.parameter['threshold'],
-                                                               'word' if isinstance(segment, WordType) else 'line'):
+                        for i in range(self.nproc):
+                            self.taskq.put((texts, 'word' if isinstance(segment, WordType) else 'line'))
+                        for class_id, score, match in itertools.chain.from_iterable(
+                                self.doneq.get() for i in range(self.nproc)):
                             nummatches += 1
                             mark_segment(segment, FIELDS[class_id])
                             if FIELDS[class_id] in ['energietraeger']:

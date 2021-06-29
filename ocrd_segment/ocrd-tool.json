@@ -157,10 +157,16 @@
       ],
       "steps": ["layout/segmentation/classification"],
       "parameters": {
+        "num_processes": {
+          "type": "number",
+          "format": "integer",
+          "default": 4,
+          "description": "number of parallel processes when searching for keyword matches"
+        },
         "threshold": {
           "type": "number",
           "format": "integer",
-          "default": 95,
+          "default": 90,
           "description": "minimum percentage of character/word match against pre-defined keywords"
         },
         "glyph_conf_cutoff": {
