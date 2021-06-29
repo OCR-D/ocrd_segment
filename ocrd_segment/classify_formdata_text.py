@@ -857,24 +857,28 @@ def normalize(text):
     return text
 
 def classify(inq, outq, threshold=95, slice=(0,None)):
-    for texts, tag in iter(inq.get, 'QUIT'):
+    for texts, tag, segment in iter(inq.get, 'QUIT'):
         LOG = getLogger('processor.ClassifyFormDataText')
-        LOG.debug("matching %s against %d candidate inputs, %s", tag, len(texts), str(slice))
+        LOG.debug("matching %s '%s' against %d candidate inputs [%d:%d]",
+                  tag, segment, len(texts), slice.start, slice.stop)
         if not texts or not any(texts):
             outq.put([])
             continue
         classes = list()
         for class_id, category in enumerate(FIELDS[slice], slice.start):
-            result = match(class_id, category, texts, tag=tag, threshold=threshold)
+            result = match(class_id, category, texts, tag=tag, segment=segment, threshold=threshold)
             if result:
                 classes.append(result)
         outq.put(classes)
 
-def match(class_id, category, texts, tag='line', threshold=95):
+def match(class_id, category, texts, tag='line', segment='', threshold=95):
     LOG = getLogger('processor.ClassifyFormDataText')
     if category not in KEYWORDS:
         raise Exception("Unknown category '%s'" % category)
     for text in texts:
+        if not text:
+            LOG.warning("ignoring empty text in '%s'", segment)
+            continue
         if NUMBER in KEYWORDS[category]:
             matches = text.translate(str.maketrans('', '', ',. ')).isnumeric()
             matcher = 'numeric'
@@ -1012,7 +1016,10 @@ class ClassifyFormDataText(Processor):
                         # run (fuzzy, deep) text classification
                         # FIXME: pass confs as well, use to weight matches somehow
                         for i in range(self.nproc):
-                            self.taskq.put((texts, 'word' if isinstance(segment, WordType) else 'line'))
+                            self.taskq.put((texts,
+                                            'word' if isinstance(segment, WordType) else
+                                            'line',
+                                            segment.id))
                         for class_id, score, match in itertools.chain.from_iterable(
                                 self.doneq.get() for i in range(self.nproc)):
                             nummatches += 1
