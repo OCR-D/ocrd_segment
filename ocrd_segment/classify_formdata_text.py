@@ -30,7 +30,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
     #  see gt-larex-prepare.mk OCR-D-OCR-TESS-deu-SEG-tesseract-sparse-CROP-FORM-LAREX-OCR
     #  and subsequent context-target-text.sh)
     None: [],
-    "abrechnungszeitraum": [
+    "abrechnungszeitraum": {
         "Abrechnungszeitraum",
         "Abrechnungszeit",
         "Abrechnungstage",
@@ -55,8 +55,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Heiz-, Warmwasser- und Haus-",
         "nebenkostenabrechnung",
         "kostenabrechnung",
-    ],
-    "nutzungszeitraum": [
+    },
+    "nutzungszeitraum": {
         "Nutzungszeit",
         "Nutzungszeitraum",
         "Ihr Nutzungszeitraum",
@@ -78,8 +78,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Heiz-, Warm- und Kaltwasser-",
         "Heiz-, Warmwasser- und Haus-",
         "kostenabrechnung",
-    ],
-    "gebaeude_heizkosten_raumwaerme": [
+    },
+    "gebaeude_heizkosten_raumwaerme": {
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Kosten",
         "Aufteilung der Kosten von",
@@ -108,8 +108,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Euro",
         "Summe Heizung",
         "Summe Kosten für Heizung",
-    ],
-    "gebaeude_heizkosten_warmwasser": [
+    },
+    "gebaeude_heizkosten_warmwasser": {
         "Anteil an den Gesamtkosten",
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Heiz- und Warmwasserkosten",
@@ -140,9 +140,9 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Kosten für Warmwasser-Erwärmung",
         "Kosten Wassererwärmung",
         "Summe Warmwasser",
-    ],
+    },
     # "prozent_grundkosten_raumwaerme"
-    "anteil_grundkost_heizen": [
+    "anteil_grundkost_heizen": {
         "Anteil an den Gesamtkosten",
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Kosten",
@@ -164,9 +164,9 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Heizungskosten",
         "Kosten",
         "Kosten für Heizung",
-    ],
+    },
     # "prozent_grundkosten_warmwasser"
-    "anteil_grundkost_warmwasser": [
+    "anteil_grundkost_warmwasser": {
         "Anteil an den Gesamtkosten",
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Kosten",
@@ -187,9 +187,9 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Warmwasserkosten (Wassererwärmungskosten)",
         "Warmwasser",
         "Kosten für Warmwasser",
-    ],
+    },
     # not used in layout model (ONLY textually), cf. KEYS
-    "energietraeger": [
+    "energietraeger": {
         "Gas",
         "bwGas",
         "Erdgas",
@@ -202,8 +202,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Heizöl",
         "Öl",
         "Strom",
-    ],
-    "energietraeger_verbrauch": [
+    },
+    "energietraeger_verbrauch": {
         "Aufstellung der Gesamtkosten",
         "Heizungsanlage",
         "Bezug",
@@ -232,8 +232,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Wärmelieferung",
         "Heizöl",
         "Öl",
-    ],
-    "energietraeger_einheit": [
+    },
+    "energietraeger_einheit": {
         "Kostenaufstellung des gesamten Objektes",
         "Kostenaufstellung",
         "Fortsetzung der Kostenaufstellung",
@@ -258,8 +258,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Fernw.",
         "Heizöl",
         "Öl",
-    ],
-    "energietraeger_kosten": [
+    },
+    "energietraeger_kosten": {
         "Aufstellung der Gesamtkosten",
         "Aufstellung der Kosten",
         "Kostenaufstellung",
@@ -286,16 +286,16 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Brennstoffkosten Summe",
         "Brennstoff- /Energiekosten",
         "Energiekosten",
-    ],
-    "gebaeude_flaeche": [
+    },
+    "gebaeude_flaeche": {
         "qm", "m2", "m²", "Quadratmeter",
         "Nutzfläche",
         "Fläche",
         "Wohnfläche",
         "Gesamteinheiten",
         "der Liegenschaft",
-    ],
-    "wohnung_flaeche": [
+    },
+    "wohnung_flaeche": {
         "qm", "m2", "m²", "Quadratmeter",
         "anteilige Einheiten",
         "Einheiten",
@@ -305,8 +305,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "beheizb. Wohnfl.",
         "Nutzfläche",
         "Wohnfläche",
-    ],
-    "gebaeude_verbrauchseinheiten": [
+    },
+    "gebaeude_verbrauchseinheiten": {
         "Gesamteinheiten",
         "der Liegenschaft",
         "Einheiten",
@@ -320,16 +320,16 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Stricheinheiten",
         "Verbrauchskosten",
         "Verbrauchswerte",
-    ],
-    "wohnung_verbrauchseinheiten": [
+    },
+    "wohnung_verbrauchseinheiten": {
         "Einheiten",
         "Ihre Einheiten",
         #"Ihre Kosten", # really?
         "Verbrauchskosten",
         "kwh", "kWh", "MWh",
         "Striche",
-    ],
-    "gebaeude_warmwasser_verbrauch": [
+    },
+    "gebaeude_warmwasser_verbrauch": {
         "Gesamteinheiten",
         "der Liegenschaft",
         "Kosten für Warmwasser",
@@ -338,28 +338,28 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Wasser",
         "Warmwasser",
         "Warmwasserkosten",
-    ],
-    "gebaeude_warmwasser_verbrauch_einheit": [
+    },
+    "gebaeude_warmwasser_verbrauch_einheit": {
         "Gesamteinheiten",
         "gesamte Einheiten",
         NUMBER,
         "Warmwasser",
-    ],
-    "kaltwasser_fuer_warmwasser": [
-    ],
-    "wohnung_warmwasser_verbrauch": [
+    },
+    "kaltwasser_fuer_warmwasser": {
+    },
+    "wohnung_warmwasser_verbrauch": {
         "Einheiten",
         "Ihre Einheiten",
         "verteilt über Verbrauch Warmwasserzähler",
         "Striche",
-    ],
-    "wohnung_warmwasser_verbrauch_einheit": [
+    },
+    "wohnung_warmwasser_verbrauch_einheit": {
         "Einheiten",
         "Ihre Einheiten",
         NUMBER,
-    ],
+    },
     # "gebaeude_grundkosten_raumwaerme",
-    "gebaeude_grundkost_heizen": [
+    "gebaeude_grundkost_heizen": {
         "Betrag",
         "€",
         "EUR",
@@ -390,9 +390,9 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Grundkosten",
         "Verteilung der Kosten",
         "Verteilung der Kosten auf die Nutzer für den Abrechnungsbereich Heizung",
-    ],
+    },
     # "gebaeude_grundkosten_warmwasser",
-    "gebaeude_grundkost_warmwasser": [
+    "gebaeude_grundkost_warmwasser": {
         "Betrag",
         "€",
         "EUR",
@@ -426,8 +426,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Aufteilung der Gesamtkosten",
         "Verteilung der Gesamtkosten",
         "Verteilung der Grundkosten",
-    ],
-    "gebaeude_heizkosten_gesamt": [
+    },
+    "gebaeude_heizkosten_gesamt": {
         "€",
         "EUR",
         "Euro",
@@ -453,8 +453,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Summe Heizanlage",
         "Summe Heizanlage (Brennstoff- und Heiznebenkosten)",
         "Weitere Heizungsbetriebskosten",
-    ],
-    "anteil_verbrauchskosten_heizen": [
+    },
+    "anteil_verbrauchskosten_heizen": {
         "Aufstellung der Kosten",
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Kosten",
@@ -473,8 +473,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Gesamtkosten",
         "Verteilung der Kosten",
         "Verteilung der Kosten auf die Nutzer für den Abrechnungsbereich Heizung",
-    ],
-    "anteil_verbrauchskosten_warmwasser": [
+    },
+    "anteil_verbrauchskosten_warmwasser": {
         "Aufstellung der Kosten",
         "Aufteilung der Gesamtkosten",
         "Aufteilung der Kosten",
@@ -493,8 +493,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten",
         "Warmwasser",
         "Warmwasserkosten",
-    ],
-    "gebaeude_verbrauchskosten_raumwaerme": [
+    },
+    "gebaeude_verbrauchskosten_raumwaerme": {
         "€",
         "EUR",
         "Euro",
@@ -514,8 +514,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verbrauchskosten",
         "Verbrauchsk. Heizung",
         "Verteilung der Kosten",
-    ],
-    "gebaeude_verbrauchskosten_warmwasser": [
+    },
+    "gebaeude_verbrauchskosten_warmwasser": {
         "€",
         "EUR",
         "Euro",
@@ -536,8 +536,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten",
         "Warmwasser",
         "Warmwasserkosten",
-    ],
-    "wohnung_heizkosten_gesamt": [
+    },
+    "wohnung_heizkosten_gesamt": {
         "€",
         "EUR",
         "Euro",
@@ -569,8 +569,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten auf die Nutzer für die Abrechnungsbereiche Heizung und Warmwasser",
         "Verteilung der Kosten für Heizung",
         "Übertrag",
-    ],
-    "wohnung_grundkosten_raumwaerme": [
+    },
+    "wohnung_grundkosten_raumwaerme": {
         "€",
         "EUR",
         "Euro",
@@ -594,8 +594,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten auf die Nutzer für den Abrechnungsbereich Heizung",
         "Verteilung der Kosten auf die Nutzer für die Abrechnungsbereiche Heizung und Warmwasser",
         "Verteilung der Kosten für Heizung",
-    ],
-    "wohnung_verbrauchskosten_raumwaerme": [
+    },
+    "wohnung_verbrauchskosten_raumwaerme": {
         "€",
         "EUR",
         "in EUR",
@@ -618,8 +618,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten auf die Nutzer für die Abrechnungsbereiche Heizung und Warmwasser",
         "Verteilung der Kosten für Heizung",
         "Verteilung der Kosten",
-    ],
-    "wohnung_grundkosten_warmwasser": [
+    },
+    "wohnung_grundkosten_warmwasser": {
         "€",
         "EUR",
         "Euro",
@@ -639,8 +639,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten für Warmwasser",
         "Warmwasser",
         "Warmwasserkosten",
-    ],
-    "wohnung_verbrauchskosten_warmwasser": [
+    },
+    "wohnung_verbrauchskosten_warmwasser": {
         "€",
         "EUR",
         "in EUR",
@@ -659,8 +659,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Verteilung der Kosten für Warmwasser",
         "Warmwasser",
         "Warmwasserkosten",
-    ],
-    "warmwasser_temperatur": [
+    },
+    "warmwasser_temperatur": {
         "Brauchwassertemperatur",
         "°C",
         "Erwärmung Warmwasser",
@@ -671,8 +671,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Warmwassertemperatur",
         "Warmwasserversorgung",
         "Wassererwärmung",
-    ],
-    "nebenkosten_betriebsstrom": [
+    },
+    "nebenkosten_betriebsstrom": {
         "€",
         "EUR",
         "in EUR",
@@ -701,8 +701,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Weitere Kosten",
         "Weitere Kosten der Heizungsanlage",
         "Zusatzkosten Heizung",
-    ],
-    "nebenkosten_wartung_heizung": [
+    },
+    "nebenkosten_wartung_heizung": {
         "Art der Aufwendung",
         "Aufstellung der Kosten",
         "Betrag",
@@ -739,8 +739,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Weitere Kosten",
         "Weitere Kosten der Heizungsanlage",
         "Zusatzkosten Heizung",
-    ],
-    "nebenkosten_messgeraet_miete": [
+    },
+    "nebenkosten_messgeraet_miete": {
         "Aufstellung der Kosten",
         "Ausgaben zur gesonderten Verteilung",
         "Betrag",
@@ -778,8 +778,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Weitere Kosten der Heizungsanlage",
         "Zusatzkosten Heizung",
         "Zusatzkosten Warmwasser",
-    ],
-    "nebenkosten_messung_abrechnung": [
+    },
+    "nebenkosten_messung_abrechnung": {
         "Ablesegebühr",
         "Abrechnungsdienst",
         "Abrechnungskosten",
@@ -805,7 +805,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Weitere Heizungsbetriebskosten",
         "Weitere Kosten",
         "Weitere Kosten der Heizungsanlage",
-    ],
+    },
 }
 
 KEYS = {"energietraeger": {"Gas": "erdgas",
@@ -898,10 +898,10 @@ def match(class_id, category, texts, tag='line', segment='', threshold=95):
         if text.startswith('m') and len(text) <= 2 and (
                 'm²' in KEYWORDS[category] or 'm2' in KEYWORDS[category] or
                 'm³' in KEYWORDS[category] or 'm3' in KEYWORDS[category]):
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, list(KEYWORDS[category])[0], category)
             return class_id, 100, text
         if 'C' in text and len(text) <= 2 and '°C' in KEYWORDS[category]:
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, KEYWORDS[category][0], category)
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, list(KEYWORDS[category])[0], category)
             return class_id, 100, text
         # fuzz scores are relative to length, but we actually
         # want to have a measure of the edit distance, or a

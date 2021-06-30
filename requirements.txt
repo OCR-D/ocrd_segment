@@ -2,7 +2,7 @@ ocrd >= 2.20.0
 shapely >= 1.7.1
 scikit-image
 numpy
-fuzzywuzzy[speedup]
+rapidfuzz
 opencv-python-headless
 # We cannot use constructs like these when passing directly to setuptools.
 # So instead of explicating imgaug here, let's rely on mask-rcnn for it.
