@@ -16,6 +16,7 @@ from ocrd_models.ocrd_page import TextLineType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
+from maskrcnn_cli.formdata import ALPHA_CTXT_CHANNEL, ALPHA_TEXT_CHANNEL
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-formdata'
@@ -116,11 +117,11 @@ class ExtractFormData(Processor):
             # iterate through all regions that could have lines
             for region in page.get_AllRegions(classes=['Text']):
                 if region.get_type() == context_type:
-                    fill = 255 # LAREX formatting (@type=page-number)
+                    fill = ALPHA_CTXT_CHANNEL # LAREX formatting (@type=page-number)
                 elif region.get_type() == 'other' and categories[-1]['name'] in get_context(region):
-                    fill = 255 # OCRD formatting (@custom=subtype:context=...)
+                    fill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
                 else:
-                    fill = 200
+                    fill = ALPHA_TEXT_CHANNEL
                 if not region.get_TextLine():
                     LOG.warning('text region "%s" does not contain text lines on page "%s"',
                                 region.id, page_id)
@@ -130,22 +131,22 @@ class ExtractFormData(Processor):
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
                     if categories[-1]['name'] in get_context(line):
-                        lfill = 255 # OCRD formatting (@custom=subtype:context=...)
+                        lfill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
                     else:
                         lfill = fill
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
                         list(map(tuple, polygon.tolist())), fill=lfill)
-                    if lfill == 255:
-                        continue
+                    if lfill == ALPHA_CTXT_CHANNEL:
+                        continue # already fully marked
                     for word in line.get_Word():
                         if categories[-1]['name'] in get_context(word):
                             # OCRD formatting (@custom=subtype:context=...)
                             polygon = coordinates_of_segment(word, page_image, page_coords)
                             # draw word mask:
                             ImageDraw.Draw(page_image_mask).polygon(
-                                list(map(tuple, polygon.tolist())), fill=255)
+                                list(map(tuple, polygon.tolist())), fill=ALPHA_CTXT_CHANNEL)
                 if region.get_type() != target_type and not (
                         region.get_type() == 'other' and categories[-1]['name'] in get_target(region)):
                     continue
