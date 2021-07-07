@@ -909,7 +909,7 @@ def match(class_id, category, texts, tag='line', segment='', threshold=95):
         # fuzz scores are relative to length, but we actually
         # want to have a measure of the edit distance, or a
         # mix of both; so here we just attenuate short strings
-        min_score = (1-math.exp(-len(text))) * threshold
+        min_score = (1-math.exp(-len(text)-1)) * threshold
         result = fuzz_process.extractOne(text, KEYWORDS[category],
                                          processor=normalize,
                                          scorer=fuzz.QRatio, #WRatio
