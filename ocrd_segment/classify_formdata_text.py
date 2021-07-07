@@ -180,6 +180,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Betrag", "in EUR",
         #"30%", "40%", "50%",
         "Festkosten",
+        "Grundkosten",
         "Grundkosten Warmwasser",
         "Grundk.",
         "Grundk. Warmwasser",
@@ -196,7 +197,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Stadtgas",
         "Fl.-Gas",
         "Flüssiggas",
-        "Fernw."
+        "Fernw.",
         "Fernwärme",
         "Wärmelieferung",
         "Heizöl",
@@ -324,6 +325,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
     "wohnung_verbrauchseinheiten": {
         "Einheiten",
         "Ihre Einheiten",
+        "Ihre",
         #"Ihre Kosten", # really?
         "Verbrauchskosten",
         "kwh", "kWh", "MWh",
@@ -338,6 +340,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Wasser",
         "Warmwasser",
         "Warmwasserkosten",
+        "m³",
     },
     "gebaeude_warmwasser_verbrauch_einheit": {
         "Gesamteinheiten",
@@ -405,8 +408,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Kosten in EUR",
         "Kosten für Warmwasser",
         "Kosten für Warmwasser-Erwärmung",
-        "Verbrauchsk. Warmw.",
-        "Verbrauchskosten",
+        #"Verbrauchsk. Warmw.",
+        #"Verbrauchskosten",
         "Festkosten",
         "Grundk.",
         "Grundk. Warmwasser",
@@ -558,7 +561,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Ihre Kosten",
         "Ihre Kosten (alle Beträge in brutto)",
         "Kosten",
-        "Kosten EUR"
+        "Kosten EUR",
         "Rechnungsbetrag",
         "Summe",
         "Summe Heizung",
@@ -587,7 +590,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Ihre Kosten",
         "Ihre Kosten (alle Beträge in brutto)",
         "Kosten",
-        "Kosten EUR"
+        "Kosten EUR",
         "Kosten für Heizung",
         "Verteilung der Gesamtkosten",
         "Verteilung der Kosten",
@@ -609,7 +612,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Ihre Kosten (alle Beträge in brutto)",
         "Ihre Kosten",
         "Kosten",
-        "Kosten EUR"
+        "Kosten EUR",
         "Kosten für Heizung",
         "Verbrauchsk. Heizung",
         "Verbrk. Heizung",
@@ -633,8 +636,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Ihre Kosten",
         "Ihre Kosten (alle Beträge in brutto)",
         "Kosten",
-        "Kosten EUR"
-        "Kosten für Warmwasser"
+        "Kosten EUR",
+        "Kosten für Warmwasser",
         "Verteilung der Kosten",
         "Verteilung der Kosten für Warmwasser",
         "Warmwasser",
@@ -651,8 +654,8 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Ihre Kosten (alle Beträge in brutto)",
         "Ihre Kosten",
         "Kosten",
-        "Kosten EUR"
-        "Kosten für Warmwasser"
+        "Kosten EUR",
+        "Kosten für Warmwasser",
         "Verbrauchsk. Warmwasser",
         "Verbrauchsk. Warmw.",
         "Verbrauchskosten",
@@ -708,7 +711,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Betrag",
         "Betrag in EUR",
         "Betrag EUR",
-        "€"
+        "€",
         "EUR",
         "in EUR",
         "Brennerservice/Kesselreinigung",
@@ -746,7 +749,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Betrag",
         "Betrag in EUR",
         "Betrag EUR",
-        "€"
+        "€",
         "EUR",
         "in EUR",
         "Energiekosten Heizung",
@@ -789,7 +792,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Betrag",
         "Betrag in EUR",
         "Betrag EUR",
-        "€"
+        "€",
         "EUR",
         "in EUR",
         "BFW-Kundendienstgebühr",
@@ -898,10 +901,10 @@ def match(class_id, category, texts, tag='line', segment='', threshold=95):
         if text.startswith('m') and len(text) <= 2 and (
                 'm²' in KEYWORDS[category] or 'm2' in KEYWORDS[category] or
                 'm³' in KEYWORDS[category] or 'm3' in KEYWORDS[category]):
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, list(KEYWORDS[category])[0], category)
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, "m²", category)
             return class_id, 100, text
-        if 'C' in text and len(text) <= 2 and '°C' in KEYWORDS[category]:
-            LOG.debug("exception %s match: %s~%s in %s", tag, text, list(KEYWORDS[category])[0], category)
+        if text.endswith('C') and len(text) <= 2 and '°C' in KEYWORDS[category]:
+            LOG.debug("exception %s match: %s~%s in %s", tag, text, "°C", category)
             return class_id, 100, text
         # fuzz scores are relative to length, but we actually
         # want to have a measure of the edit distance, or a
