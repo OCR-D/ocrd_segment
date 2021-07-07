@@ -981,17 +981,18 @@ class ClassifyFormDataText(Processor):
             nummatches = 0
             for region in allregions:
                 for line in region.get_TextLine():
-                    for segment in [line] + line.get_Word() or []:
+                    words = line.get_Word() or []
+                    for segment in [line] + words:
                         # get OCR results (best on line/word level, n-best concatenated from glyph level)
-                        texts = list()
-                        confs = list()
+                        segment.texts = list()
+                        segment.confs = list()
                         textequivs = segment.get_TextEquiv()
                         for textequiv in textequivs:
-                            texts.append(textequiv.Unicode)
-                            confs.append(textequiv.conf)
+                            segment.texts.append(textequiv.Unicode)
+                            segment.confs.append(textequiv.conf)
                         # now go looking for OCR hypotheses at the glyph level
                         def cutoff(textequiv):
-                            return (textequiv.conf or 0) > self.parameter['glyph_conf_cutoff']
+                            return (textequiv.conf or 1) > self.parameter['glyph_conf_cutoff']
                         topn = self.parameter['glyph_topn_cutoff']
                         if isinstance(segment, WordType):
                             glyphs = [filter(cutoff, glyph.TextEquiv[:topn])
@@ -1007,11 +1008,21 @@ class ClassifyFormDataText(Processor):
                         if textequivs:
                             def glyphword(textequiv):
                                 return textequiv.parent_object_.parent_object_
-                            texts.extend([' '.join(''.join(te.Unicode for te in word)
+                            # regroup the line's (or word's) flat glyph sequence into words
+                            # then join glyphs into words and words into a text:
+                            segment.texts.extend([' '.join(''.join(te.Unicode for te in word)
                                                    for _, word in itertools.groupby(seq, glyphword))
-                                          for seq in textequivs])
-                            confs.extend([sum(te.conf for te in seq) / (len(seq) or 1) for seq in textequivs])
-                        if not texts:
+                                                  for seq in textequivs])
+                            segment.confs.extend([sum(te.conf for te in seq) / (len(seq) or 1)
+                                                  for seq in textequivs])
+                    if not any(True for word in words
+                               if any(True for text in word.texts
+                                      if text.translate(str.maketrans('', '', ',.% ')).isnumeric())):
+                        # only allow sub-line level matching if there is a free (i.e. fully numeric) token
+                        words = []
+                    # match results against keywords of all classes
+                    for segment in [line] + words:
+                        if not segment.texts:
                             LOG.error("Segment '%s' on page '%s' contains no text results",
                                   segment.id, page_id)
                             continue
@@ -1019,7 +1030,7 @@ class ClassifyFormDataText(Processor):
                         # run (fuzzy, deep) text classification
                         # FIXME: pass confs as well, use to weight matches somehow
                         for i in range(self.nproc):
-                            self.taskq.put((texts,
+                            self.taskq.put((segment.texts,
                                             'word' if isinstance(segment, WordType) else
                                             'line',
                                             segment.id))
@@ -1033,7 +1044,7 @@ class ClassifyFormDataText(Processor):
                                 # annotate nearest text value for target
                                 segment.insert_TextEquiv_at(0, TextEquivType(
                                     Unicode=KEYS[FIELDS[class_id]].get(match),
-                                    conf=confs[0]))
+                                    conf=segment.confs[0]))
             LOG.info("Found %d lines/words and %d matches across classes",
                      numsegments, nummatches)
 
