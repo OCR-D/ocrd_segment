@@ -280,21 +280,21 @@ class ClassifyFormDataLayout(Processor):
                 for segment in [line] + line.get_Word() or []:
                     polygon = coordinates_of_segment(segment, page_image, page_coords)
                     polygon_mask = draw.polygon(polygon[:,1], polygon[:,0], page_array.shape)
-                    polygon_hull = draw.polygon_perimeter(polygon[:,1], polygon[:,0], page_array.shape)
+                    #polygon_hull = draw.polygon_perimeter(polygon[:,1], polygon[:,0], page_array.shape)
                     polygon_tmask = (polygon_mask[0], polygon_mask[1], 3 * np.ones_like(polygon_mask[0]))
                     polygon_amask = (polygon_mask[0], polygon_mask[1], 4 * np.ones_like(polygon_mask[0]))
-                    polygon_thull = (polygon_hull[0], polygon_hull[1], 3 * np.ones_like(polygon_hull[0]))
-                    polygon_ahull = (polygon_hull[0], polygon_hull[1], 4 * np.ones_like(polygon_hull[0]))
+                    #polygon_thull = (polygon_hull[0], polygon_hull[1], 3 * np.ones_like(polygon_hull[0]))
+                    #polygon_ahull = (polygon_hull[0], polygon_hull[1], 4 * np.ones_like(polygon_hull[0]))
                     # mark text in all arrays
                     for array in active_arrays:
                         array[polygon_tmask] = 255
-                        array[polygon_thull] = 255
+                        #array[polygon_thull] = 255
                     categories = get_context(segment)
                     # mark context, if any
                     for category in categories:
                         array = active_arrays[active_categories.index(category)]
                         array[polygon_amask] = 255
-                        array[polygon_ahull] = 255
+                        #array[polygon_ahull] = 255
         # prepare data generator
         class ArrayDataset(utils.Dataset):
             def __init__(self, arrays, categories):
