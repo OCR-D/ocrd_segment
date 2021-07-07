@@ -1003,8 +1003,22 @@ class ClassifyFormDataText(Processor):
                                       for word in segment.Word
                                       for glyph in word.Glyph]
                             topn = self.parameter['line_topn_cutoff']
-                        # get up to n best hyoptheses
-                        textequivs = list(itertools.islice(itertools.product(*glyphs), topn))
+                        # get up to n best hypotheses (without exhaustively expanding)
+                        def aggconf(textequivs):
+                            return sum(-math.log(te.conf or 1e-30) for te in textequivs)
+                        def nbestproduct(*groups, n=1, key=id):
+                            # FIXME this is just an approximation (for true breadth-first n-best outer product)
+                            def add(values, prefixes):
+                                sequences = []
+                                for prefix in prefixes:
+                                    for value in values:
+                                        sequences.append(prefix + (value,))
+                                return sorted(sequences, key=key)[:n]
+                            stack = iter(((),))
+                            for group in map(tuple,groups):
+                                stack = add(group, stack)
+                            return stack
+                        textequivs = nbestproduct(*glyphs, key=aggconf, n=topn)
                         if textequivs:
                             def glyphword(textequiv):
                                 return textequiv.parent_object_.parent_object_
