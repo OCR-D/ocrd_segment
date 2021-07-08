@@ -254,9 +254,12 @@ class ClassifyFormDataLayout(Processor):
                     if cat.startswith('subtype:context=')]
         time1 = time.time()
         allregions = page.get_AllRegions(classes=['Text'], depth=2)
+        target_regions = []
         active_categories = []
         for region in allregions:
             for line in region.get_TextLine():
+                if 'subtype:target=' in (line.get_custom() or ''):
+                    target_regions.append(region)
                 categories = set(get_context(line))
                 for word in line.get_Word():
                     categories.update(get_context(word))
@@ -267,7 +270,7 @@ class ClassifyFormDataLayout(Processor):
                         active_categories.append(category)
         # remove existing segmentation (have only detected targets survive)
         page.set_ReadingOrder(None)
-        page.set_TextRegion([])
+        page.set_TextRegion(target_regions)
         page.set_custom('coords=%s' % page_coords['transform'])
         if active_categories:
             LOG.info("Page '%s' has context for: %s", page_id, str(active_categories))
