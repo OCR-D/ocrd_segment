@@ -203,12 +203,29 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Stadtgas",
         "Fl.-Gas",
         "Flüssiggas",
+        "Nahwärme",
         "Fernw.",
         "Fernwärme",
+        "Fernwaerme",
         "Wärmelieferung",
+        "Waermelieferung",
+        "Wärmel.",
+        "Waermel.",
+        "Wärme",
+        "Waerme",
+        "Menge Wärme",
         "Heizöl",
+        "Heizoel",
         "Öl",
+        "Oel",
         "Strom",
+        # Kohle?
+        "Holzpellets",
+        "Holzbriketts",
+        "Pellets",
+        "Scheitholz",
+        "Wärmepumpe",
+        "Waermepumpe",
     },
     "energietraeger_verbrauch": {
         "Aufstellung der Gesamtkosten",
@@ -817,30 +834,92 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
     },
 }
 
-KEYS = {"energietraeger": {"Gas": "erdgas",
-                           "bwGas": "erdgas",
-                           "Erdgas": "erdgas",
-                           "Stadtgas": "erdgas",
-                           "Fl.-Gas": "fluessiggas",
-                           "Flüssiggas": "fluessiggas",
-                           "Fernw.": "fernwaerme",
-                           "Fernwärme": "fernwaerme",
-                           "Wärmelieferung": "fernwaerme",
-                           "Heizöl": "heizoel",
-                           "Öl": "heizoel",
-                           # Pellets?
-                           # Kohle?
-                           "Strom": "strom"},
-        "energietraeger_einheit": {"Ltr.": "liter",
-                                   "Liter": "liter",
-                                   "cbm": "cbm",
-                                   "m³": "cbm",
-                                   "m3": "cbm",
-                                   "Kubikmeter": "cbm",
-                                   "kWh": "kwh",
-                                   "MWh": "mwh"}
-        # "gebaeude_warmwasser_verbrauch_einheit"
-        # "wohnung_warmwasser_verbrauch_einheit"
+KEYS = {
+    # applied here:
+    "energietraeger": {
+        "Gas": "erdgas",
+        "bwGas": "erdgas",
+        "Erdgas": "erdgas",
+        "Stadtgas": "erdgas",
+        "Fl.-Gas": "fluessiggas",
+        "Flüssiggas": "fluessiggas",
+        "Nahwärme": "fernwaerme",
+        "Fernw.": "fernwaerme",
+        "Fernwärme": "fernwaerme",
+        "Fernwaerme": "fernwaerme",
+        "Wärmelieferung": "fernwaerme",
+        "Waermelieferung": "fernwaerme",
+        "Wärmel.": "fernwaerme",
+        "Waermel.": "fernwaerme",
+        "Wärme": "fernwaerme",
+        "Waerme": "fernwaerme",
+        "Menge Wärme": "fernwaerme",
+        "Heizöl": "heizoel",
+        "Heizoel": "heizoel",
+        "Öl": "heizoel",
+        "Oel": "heizoel",
+        # Kohle?
+        "Holzpellets": "holz",
+        "Holzbriketts": "holz",
+        "Pellets": "holz",
+        "Scheitholz": "holz",
+        "Wärmepumpe": "strom",
+        "Waermepumpe": "strom",
+        "Strom": "strom",
+    },
+    # applied by postcorrect_formdata:
+    "energietraeger_einheit": {
+        "l": "liter",
+        "Ltr.": "liter",
+        "Liter": "liter",
+        "cbm": "cbm",
+        "m³": "cbm",
+        "m3": "cbm",
+        "Kubikmeter": "cbm",
+        "Kilogramm": "kg",
+        "kg": "kg",
+        "GJ": "gj",
+        "Kilowattstunde": "kwh",
+        "Kilowattstunden": "kwh",
+        "kWh": "kwh",
+        "MWh": "mwh",
+    },
+    # applied by postcorrect_formdata:
+    "gebaeude_warmwasser_verbrauch_einheit": {
+        "cbm": "cbm",
+        "m³": "cbm",
+        "m3": "cbm",
+        "Kubikmeter": "cbm",
+        "kWh": "kwh",
+        "Kilowattstunde": "kwh",
+        "Kilowattstunden": "kwh",
+        # ???
+        "Einheiten": "einheiten",
+        "Personen": "personen",
+        "Zapfstellen": "zapfstellen",
+        "qm": "qm",
+        "m²": "qm",
+        "m2": "qm",
+        "Quadratmeter": "qm",
+    },
+    # applied by postcorrect_formdata:
+    "wohnung_warmwasser_verbrauch_einheit": {
+        "cbm": "cbm",
+        "m³": "cbm",
+        "m3": "cbm",
+        "Kubikmeter": "cbm",
+        "kWh": "kwh",
+        "Kilowattstunde": "kwh",
+        "Kilowattstunden": "kwh",
+        # ???
+        "Einheiten": "einheiten",
+        "Personen": "personen",
+        "Zapfstellen": "zapfstellen",
+        "qm": "qm",
+        "m²": "qm",
+        "m2": "qm",
+        "Quadratmeter": "qm",
+    },
 }
 
 # normalize spelling
@@ -957,9 +1036,9 @@ class ClassifyFormDataText(Processor):
         Open and deserialize PAGE input files and their respective images,
         then iterate over the element hierarchy down to the text line level.
         
-        Get the text results of each line and match them against keywords
-        of all categories. For each match close enough, annotate the class
-        via `@custom` descriptor.
+        Get the text results (including glyph-level alternatives) of each line
+        and word and search them for keywords of all categories. For each
+        match close enough, annotate the class via `@custom` descriptor.
         
         Produce a new output file by serialising the resulting hierarchy.
         """
