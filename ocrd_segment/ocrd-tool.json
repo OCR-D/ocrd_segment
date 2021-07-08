@@ -269,6 +269,11 @@
           "format": "integer",
           "default": 100,
           "description": "maximum number of line OCR hypotheses to consider in string search"
+        },
+        "make_consistent": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search known pairs/groups of targets of locally valid results for consistent combinations if non-empty."
         }
       }
     },
