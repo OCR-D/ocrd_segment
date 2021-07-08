@@ -13,7 +13,13 @@ from ocrd_utils import (
     assert_file_grp_cardinality,
     MIMETYPE_PAGE
 )
-from ocrd_models.ocrd_page import to_xml, TextEquivType, WordType
+from ocrd_models.ocrd_page import (
+    TextRegionType,
+    TextLineType,
+    WordType,
+    TextEquivType,
+    to_xml
+)
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -1019,20 +1025,22 @@ class ClassifyFormDataText(Processor):
                                 stack = add(group, stack)
                             return stack
                         textequivs = nbestproduct(*glyphs, key=aggconf, n=topn)
-                        if textequivs:
-                            def glyphword(textequiv):
-                                return textequiv.parent_object_.parent_object_
-                            # regroup the line's (or word's) flat glyph sequence into words
-                            # then join glyphs into words and words into a text:
-                            segment.texts.extend([' '.join(''.join(te.Unicode for te in word)
-                                                   for _, word in itertools.groupby(seq, glyphword))
-                                                  for seq in textequivs])
-                            segment.confs.extend([sum(te.conf for te in seq) / (len(seq) or 1)
-                                                  for seq in textequivs])
+                        def glyphword(textequiv):
+                            return textequiv.parent_object_.parent_object_
+                        # regroup the line's (or word's) flat glyph sequence into words
+                        # then join glyphs into words and words into a text:
+                        segment.texts.extend([' '.join(''.join(te.Unicode for te in word
+                                                               if te.Unicode)
+                                               for _, word in itertools.groupby(seq, glyphword))
+                                              for seq in textequivs
+                                              if any(seq)])
+                        segment.confs.extend([sum(te.conf for te in seq) / (len(seq) or 1)
+                                              for seq in textequivs
+                                              if any(seq)])
+                    # only allow sub-line level matching if there is a free (i.e. fully numeric) token
                     if not any(True for word in words
                                if any(True for text in word.texts
                                       if text.translate(str.maketrans('', '', ',.% ')).isnumeric())):
-                        # only allow sub-line level matching if there is a free (i.e. fully numeric) token
                         words = []
                     # match results against keywords of all classes
                     for segment in [line] + words:
@@ -1054,11 +1062,18 @@ class ClassifyFormDataText(Processor):
                             mark_segment(segment, FIELDS[class_id])
                             if FIELDS[class_id] in ['energietraeger']:
                                 # classified purely textually (i.e. target segment = context segment)
-                                mark_segment(segment, FIELDS[class_id], subtype='target')
-                                # annotate nearest text value for target
-                                segment.insert_TextEquiv_at(0, TextEquivType(
-                                    Unicode=KEYS[FIELDS[class_id]].get(match),
-                                    conf=segment.confs[0]))
+                                category = FIELDS[class_id]
+                                region_id = region.id + '_' + category
+                                region_new = TextRegionType(id=region_id, Coords=segment.Coords, type_='other')
+                                line_new = TextLineType(id=region_id + '_line', Coords=segment.Coords,
+                                                        custom='subtype:target=' + category)
+                                equiv_new = TextEquivType(Unicode=KEYS[category].get(match),
+                                                          conf=segment.confs[0])
+                                line_new.add_TextEquiv(equiv_new)
+                                region_new.add_TextLine(line_new)
+                                page.add_TextRegion(region_new)
+                                LOG.info("Detected %s %s (p=%.2f) on page '%s'",
+                                         category, region.id, score, page_id)
             LOG.info("Found %d lines/words and %d matches across classes",
                      numsegments, nummatches)
 
