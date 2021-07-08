@@ -17,6 +17,7 @@ from .classify_address_layout import ClassifyAddressLayout
 from .classify_formdata_text import ClassifyFormDataText
 from .classify_formdata_layout import ClassifyFormDataLayout
 from .classify_formdata_dummy import ClassifyFormDataDummy
+from .postcorrect_formdata import PostCorrectFormData
 
 @click.command()
 @ocrd_cli_options
@@ -97,3 +98,8 @@ def ocrd_segment_classify_formdata_layout(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_classify_formdata_dummy(*args, **kwargs):
     return ocrd_cli_wrap_processor(ClassifyFormDataDummy, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_postcorrect_formdata(*args, **kwargs):
+    return ocrd_cli_wrap_processor(PostCorrectFormData, *args, **kwargs)

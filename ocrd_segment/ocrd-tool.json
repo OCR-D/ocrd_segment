@@ -75,7 +75,7 @@
     "ocrd-segment-classify-address-text": {
       "executable": "ocrd-segment-classify-address-text",
       "categories": ["Text recognition and optimization"],
-      "description": "",
+      "description": "Classify OCR results of text lines into address parts (as context layer for address-layout), using @custom for marking.",
       "input_file_grp": [
         "OCR-D-OCR"
       ],
@@ -89,7 +89,7 @@
     "ocrd-segment-classify-address-layout": {
       "executable": "ocrd-segment-classify-address-layout",
       "categories": ["Layout analysis"],
-      "description": "",
+      "description": "Find text regions that belong to addresses and classify them into sender/receiver/other (feeding context from address-text), using @custom for marking.",
       "input_file_grp": [
         "OCR-D-OCR-ADDR"
       ],
@@ -148,7 +148,7 @@
     "ocrd-segment-classify-formdata-text": {
       "executable": "ocrd-segment-classify-formdata-text",
       "categories": ["Text recognition and optimization"],
-      "description": "",
+      "description": "Classify OCR results of text lines into context labels around form fields (as context layer for formdata-layout), using @custom for marking.",
       "input_file_grp": [
         "OCR-D-OCR-FORMDATA"
       ],
@@ -198,7 +198,7 @@
     "ocrd-segment-classify-formdata-layout": {
       "executable": "ocrd-segment-classify-formdata-layout",
       "categories": ["Layout analysis"],
-      "description": "",
+      "description": "Find text regions that contain form fields for various classes (feeding context from formdata-text), using @custom for marking.",
       "input_file_grp": [
         "OCR-D-OCR-FORMDATA"
       ],
@@ -231,6 +231,44 @@
           "format": "float",
           "default": 0.5,
           "description": "minimum probability for region candidates"
+        }
+      }
+    },
+    "ocrd-segment-postcorrect-formdata": {
+      "executable": "ocrd-segment-postcorrect-formdata",
+      "categories": ["Text recognition and optimization"],
+      "description": "Decode OCR alternatives of text lines for form fields (from formdata-layout), trying to match predefined regular expressions for each class.",
+      "input_file_grp": [
+        "OCR-D-OCR-FORMDATA"
+      ],
+      "output_file_grp": [
+        "OCR-D-COR-FORMDATA"
+      ],
+      "steps": ["recognition/post-correction"],
+      "parameters": {
+        "glyph_conf_cutoff": {
+          "type": "number",
+          "format": "float",
+          "default": 0.01,
+          "description": "minimum probability of glyph OCR hypotheses to consider in string search"
+        },
+        "glyph_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 5,
+          "description": "maximum number of glyph OCR hypotheses to consider in string search"
+        },
+        "word_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 10,
+          "description": "maximum number of word OCR hypotheses to consider in string search"
+        },
+        "line_topn_cutoff": {
+          "type": "number",
+          "format": "integer",
+          "default": 100,
+          "description": "maximum number of line OCR hypotheses to consider in string search"
         }
       }
     },
