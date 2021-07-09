@@ -84,7 +84,7 @@ NUM_CONSTRAINTS = {
     "warmwasser_temperatur": lambda x: 35 <= x <= 70,
 }
 
-RENAME = {
+RENAME_FIELDS = {
     "anteil_grundkost_heizen": "prozent_grundkosten_raumwaerme",
     "anteil_grundkost_warmwasser": "prozent_grundkosten_warmwasser",
     "gebaeude_grundkost_heizen": "gebaeude_grundkosten_raumwaerme",
@@ -92,10 +92,6 @@ RENAME = {
     "anteil_verbrauchskosten_heizen": "prozent_verbrauchskosten_raumwaerme",
     "anteil_verbrauchskosten_warmwasser": "prozent_verbrauchskosten_warmwasser",
 }
-
-for i, category in enumerate(FIELDS):
-    if category in RENAME:
-        FIELDS[i] = RENAME[category]
 
 # normalize spelling
 def normalize(text):
@@ -325,6 +321,14 @@ class PostCorrectFormData(Processor):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
         super(PostCorrectFormData, self).__init__(*args, **kwargs)
+        if hasattr(self, 'output_file_grp'):
+            # processing context
+            self.setup()
+
+    def setup(self):
+        for i, category in enumerate(FIELDS):
+            if category in RENAME_FIELDS:
+                FIELDS[i] = RENAME_FIELDS[category]
 
     def process(self):
         """Post-correct form field target lines from text recognition results.
@@ -366,7 +370,7 @@ class PostCorrectFormData(Processor):
                     if not category:
                         LOG.warning("Line '%s' on page '%s' contains no target category", line.id, page_id)
                         continue
-                    category = RENAME.get(category, category)
+                    category = RENAME_FIELDS.get(category, category)
                     line.set_custom('subtype:target=%s' % category)
                     # get OCR results (best on line/word level, n-best concatenated from glyph level)
                     line.texts = list()
