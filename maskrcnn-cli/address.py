@@ -74,7 +74,7 @@ from keras.callbacks import Callback
 tf.get_logger().setLevel('ERROR')
 
 ALPHA_TEXT_CHANNEL = 200
-ALPHA_ADDR_CHANNEL = 255
+ALPHA_CTXT_CHANNEL = 255
 
 ############################################################
 #  Configurations
@@ -524,12 +524,12 @@ class CocoDataset(utils.Dataset):
         if image.shape[-1] != 4:
             raise Exception('image %d ("%s") has no alpha channel' % (
                 image_id, self.image_info[image_id]['path']))
-        # Convert from RGBA to RGB+Text+Address
+        # Convert from RGBA to RGB+Text+Context
         tmask = image[:,:,3:4] > 0
-        amask = image[:,:,3:4] == ALPHA_ADDR_CHANNEL
+        cmask = image[:,:,3:4] == ALPHA_CTXT_CHANNEL
         image = np.concatenate([image[:,:,:3],
                                 255 * tmask.astype(np.uint8),
-                                255 * amask.astype(np.uint8)],
+                                255 * cmask.astype(np.uint8)],
                                axis=2)
         return image
     
@@ -637,8 +637,6 @@ def detect_coco(model, dataset, verbose=False, limit=None, image_ids=None, plot=
         image_path = dataset.image_info[image_id]['path']
         image_cocoid = dataset.image_info[image_id]['id']
         image_source = dataset.image_info[image_id]['source']
-
-        # Run detection
         r = preds[i]
         assert image_cocoid == r['image_id'], "Generator queue failed to preserve image order"
         if verbose:
@@ -675,9 +673,12 @@ def sort_coco(coco, image_ids=None):
     images = coco.dataset['images']
     if image_ids is not None:
         images = [img for img in images if img['id'] in image_ids]
-    images2 = sorted(images, key=lambda img: img['file_name'])
+    def fname(img):
+        return img['file_name']
+    # redefine image ids by file_name sort order
+    images2 = sorted(images, key=fname)
+    mapping = dict((id_, i) for i, id_ in enumerate(img['id'] for img in images))
     coco.dataset['images'] = images2
-    mapping = dict((id_, i) for i, id_ in enumerate(img['id'] for img in images2))
     for img in images:
         img['id'] = mapping[img['id']]
     for ann in coco.dataset['annotations']:
