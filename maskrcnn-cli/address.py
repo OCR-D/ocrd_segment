@@ -303,7 +303,8 @@ class SaveDebugImage(imgaug.augmenters.meta.Augmenter):
     (in the form of segmentation maps with bg as index 0),
     and draws them on the image, reducing tmask/amask to alpha
     (by setting coloring output segmap / mask and
-     by setting input alpha channel to 255 if amask else 200 if tmask else 0).
+     by setting input alpha channel to 255 if amask else 200 if tmask else 0),
+    and then blending the alpha onto RGB.
     These images are written as temporary files.
     Use them for debugging only (RGB, not RGBA as in CocoDataset).
     (The batch itself is not modified.)
@@ -330,8 +331,8 @@ class SaveDebugImage(imgaug.augmenters.meta.Augmenter):
             # print("image with %f%% text with %f%% address" % (
             #     100.0 * np.count_nonzero(tmask == 255)/np.prod(tmask.shape),
             #     100.0 * np.count_nonzero(amask == 255)/np.count_nonzero(tmask == 255)))
-            #image[tmask < 255] = 255
             image[amask < 255] = 200 + 55/255 * image[amask < 255]
+            image[tmask < 255] = 255
             images.append(image)
         image = imgaug.augmenters.debug.draw_debug_image(
             images,

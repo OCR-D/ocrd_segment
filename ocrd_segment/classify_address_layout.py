@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import os.path
 import os
 import numpy as np
 from shapely.geometry import Polygon, asPolygon
@@ -9,10 +8,12 @@ from shapely.ops import unary_union
 import cv2
 from PIL import Image, ImageDraw
 
+#pylint: disable=wrong-import-position
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn import model
-from mrcnn.config import Config
 import tensorflow as tf
+import keras.backend as K
+#pylint: disable=wrong-import-position
 tf.get_logger().setLevel('ERROR')
 
 from ocrd_utils import (
@@ -43,28 +44,11 @@ from ocrd_models.ocrd_page_generateds import (
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
+from maskrcnn_cli.address import InferenceConfig
+
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-address-layout'
-
-class AddressConfig(Config):
-    """Configuration for detection on address resegmentation"""
-    NAME = "address"
-    IMAGES_PER_GPU = 1
-    GPU_COUNT = 1
-    BACKBONE = "resnet50"
-    # Number of classes (including background)
-    NUM_CLASSES = 3 + 1  # new address model has bg + 3 classes (rcpt/sndr/contact)
-    #NUM_CLASSES = 1 + 1  # old address model has bg + 1 classes (rcpt)
-    DETECTION_MAX_INSTANCES = 5
-    DETECTION_MIN_CONFIDENCE = 0.7
-    PRE_NMS_LIMIT = 2000
-    POST_NMS_ROIS_INFERENCE = 500
-    IMAGE_RESIZE_MODE = "square"
-    IMAGE_MIN_DIM = 600
-    IMAGE_MAX_DIM = 768
-    IMAGE_CHANNEL_COUNT = 5
-    MEAN_PIXEL = np.array([123.7, 116.8, 103.9, 0, 0])
 
 class ClassifyAddressLayout(Processor):
 
@@ -93,10 +77,26 @@ class ClassifyAddressLayout(Processor):
                 model_path = os.path.join(directory, self.parameter['model'])
                 break
         if not model_path:
-            raise Exception("model file '%s' not found", self.parameter['model'])
+            raise Exception("model file '%s' not found" % self.parameter['model'])
         LOG.info("Loading model '%s'", model_path)
-        config = AddressConfig()
-        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence']
+        config = InferenceConfig()
+        config.IMAGES_PER_GPU = self.parameter['images_per_gpu']
+        config.BATCH_SIZE = config.IMAGES_PER_GPU * config.GPU_COUNT
+        config.DETECTION_MIN_CONFIDENCE = self.parameter['min_confidence'] / 2 # will be raised after NMS
+        config.DETECTION_MAX_INSTANCES = 10 # will be reduced to 5 after cross-class NMS
+        assert config.NUM_CLASSES == len(self.categories)
+        proto = tf.compat.v1.ConfigProto()
+        proto.gpu_options.allow_growth = True  # dynamically alloc GPU memory as needed
+        # avoid over-allocation / OOM
+        if 'MRCNNPROCS' in os.environ:
+            # share GPU with nprocs others
+            proto.gpu_options.per_process_gpu_memory_fraction = 1.0 / int(os.environ['MRCNNPROCS'])
+        # fall-back to CPU / swap-out
+        #proto.gpu_options.experimental.use_unified_memory = True # allow swapping memory back to CPU instead of OOM
+        self.sess = tf.compat.v1.Session(config=proto)
+        #sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(
+        #    gpu_options=tf.compat.v1.GPUOptions(allow_growth=True)))
+        K.tensorflow_backend.set_session(self.sess) # set this as default session for Keras / Mask-RCNN
         #config.display()
         self.model = model.MaskRCNN(
             mode="inference", config=config,
@@ -139,7 +139,7 @@ class ClassifyAddressLayout(Processor):
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             self.add_metadata(pcgts)
-            
+
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
