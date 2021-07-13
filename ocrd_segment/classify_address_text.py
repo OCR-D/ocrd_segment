@@ -1,9 +1,11 @@
 from __future__ import absolute_import
 
 import json
-import os.path
 import os
-
+import math
+import itertools
+import multiprocessing as mp
+import queue
 import requests
 
 from ocrd_utils import (
@@ -13,7 +15,7 @@ from ocrd_utils import (
     bbox_from_points,
     MIMETYPE_PAGE
 )
-from ocrd_models.ocrd_page import to_xml
+from ocrd_models.ocrd_page import to_xml, TextEquivType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
@@ -21,23 +23,47 @@ from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-address-text'
 
+# upper time limit to web API requests for textual address classification:
+# (average) time (in seconds) per request (i.e. line text alternative)
+SERVICE_TIMEOUT = os.environ.get('SERVICE_TIMEOUT', 10.0)
+
+NUMERIC = str.maketrans('', '', '-., €%')
+
 # FIXME: rid of this switch, convert GT instead (from region to line level annotation)
 # set True if input is GT, False to use classifier
 ALREADY_CLASSIFIED = False
 
+def pairwise(iterable):
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return itertools.zip_longest(a, b)
+
 # text classification for address snippets
-def classify_address(text):
+def classify(inq, outq):
+    # Queue.get() blocks, Queue.put() too (but maxsize is infinite)
+    # loop forever (or until receiving None)
+    for text in iter(inq.get, None):
+        outq.put(match(text))
+
+def match(text):
     LOG = getLogger('processor.ClassifyAddressText')
     # TODO more simple heuristics to avoid API call
     # when no chance to be an address text
     if not 8 <= len(text) <= 100:
-        return 'ADDRESS_NONE'
+        # too short or too long for an address line (part)
+        return text, 'ADDRESS_NONE', 1.0
+    if (text.translate(NUMERIC).isdigit() or
+        text.isalpha()):
+        # must be mixed alpha _and_ numeric
+        return text, 'ADDRESS_NONE', 1.0
+    # normalize white-space
+    text = ' '.join(text.strip().split())
     # reduce allcaps to titlecase
-    words = [word.title() if word.isupper() else word for word in text.split(' ')]
-    text = ' '.join(words)
+    if text.isupper():
+        text = text.title()
     # workaround for bad OCR:
-    text = text.replace('ı', 'i')
-    text = text.replace(']', 'I')
+    #text = text.replace('ı', 'i')
+    #text = text.replace(']', 'I')
     result = requests.post(
         os.environ['SERVICE_URL'], json={'text': text},
         auth=requests.auth.HTTPBasicAuth(
@@ -55,20 +81,40 @@ def classify_address(text):
     # "Hier ist keine Adresse sondern Rechnungsnummer 12312234:"
     # FIXME: train visual models for multi-class input and use multi-line text
     # TODO: check result network status
-    LOG.debug("text classification result for '%s' is: %s", text, result.text)
+    #LOG.debug("text classification result for '%s' is: %s", text, result.text)
     result = json.loads(result.text)
     # TODO: train visual models for soft input and use result['confidence']
-    result = result['resultClass']
-    if result != 'ADDRESS_NONE':
-        return result
+    class_ = result['resultClass']
+    conf = result['confidence']
+    if class_ != 'ADDRESS_NONE':
+        LOG.debug("text classification result for '%s' is: %s [%.1f]", text, class_, conf)
+        return text, class_, conf
     # try a few other fallbacks
     if '·' in text:
-        return classify_address(text.replace('·', ','))
+        return match(text.replace('·', ','))
     if ' - ' in text:
-        return classify_address(text.replace(' - ', ', '))
+        return match(text.replace(' - ', ', '))
     if ' | ' in text:
-        return classify_address(text.replace(' | ', ', '))
-    return result
+        return match(text.replace(' | ', ', '))
+    return text, 'ADDRESS_NONE', 1.0
+
+def isbetter(class1, class2):
+    """Is class1 strictly more informative than class2?"""
+    if class1 == 'ADDRESS_NONE':
+        return False # (worst is always worse)
+    if class2 == 'ADDRESS_NONE':
+        return True # (anything better than nothing)
+    if class2 == 'ADDRESS_FULL':
+        return False # (nothing better than best)
+    if class1 == 'ADDRESS_FULL':
+        return True # (best is always better)
+    if class1 == 'ADDRESS_ZIP_CITY':
+        return False # (nothing but worst worse than 2nd-worst)
+    if class2 == 'ADDRESS_ZIP_CITY':
+        return True # (anything but worst better than 2nd-worst)
+    # undecided:
+    # - 'ADDRESS_STREET_HOUSENUMBER_ZIP_CITY' vs 'ADDRESS_ADRESSEE_ZIP_CITY'
+    return False
 
 class ClassifyAddressText(Processor):
 
@@ -76,6 +122,20 @@ class ClassifyAddressText(Processor):
         kwargs['ocrd_tool'] = OCRD_TOOL['tools'][TOOL]
         kwargs['version'] = OCRD_TOOL['version']
         super(ClassifyAddressText, self).__init__(*args, **kwargs)
+        if hasattr(self, 'output_file_grp'):
+            # processing context
+            self.setup()
+
+    def setup(self):
+        self.taskq = mp.Queue() # from arbiter to workers
+        self.doneq = mp.Queue() # from workers to arbiter
+        self.nproc = self.parameter['num_processes']
+        self.timeout = self.parameter['line_topn_cutoff'] / self.parameter['num_processes'] * SERVICE_TIMEOUT
+        for _ in range(self.nproc):
+            mp.Process(target=classify,
+                       args=(self.taskq, self.doneq),
+                       # ensure automatic termination at exit
+                       daemon=True).start()
 
     def process(self):
         """Classify text lines belonging to addresses from text recognition results.
@@ -102,10 +162,13 @@ class ClassifyAddressText(Processor):
             self.add_metadata(pcgts)
             
             page = pcgts.get_Page()
-            def mark_line(line, text_class):
-                if text_class != 'ADDRESS_NONE':
-                    line.set_custom('subtype: %s' % text_class)
-            def left_of(rseg, lseg):
+            def mark_line(line, class_name, text=None, conf=None):
+                if class_name != 'ADDRESS_NONE':
+                    line.set_custom('subtype: %s' % class_name)
+                    if text:
+                        line.insert_TextEquiv_at(0, TextEquivType(
+                            Unicode=text, conf=conf or 1.0))
+            def left_of(lseg, rseg):
                 r_x1, r_y1, r_x2, r_y2 = bbox_from_points(rseg.get_Coords().points)
                 l_x1, l_y1, l_x2, l_y2 = bbox_from_points(lseg.get_Coords().points)
                 return (r_y1 < l_y2 and l_y1 < r_y2 and l_x2 < r_x1)
@@ -114,22 +177,67 @@ class ClassifyAddressText(Processor):
             # but along annotated reading order to better connect
             # ((name+)street+)zip parts split across lines
             allregions = page.get_AllRegions(classes=['Text'], order='reading-order', depth=2)
-            last_lines = [None, None, None]
+            numlines, nummatches = 0, 0
+            last_lines = list()
             for region in allregions:
                 for line in region.get_TextLine():
+                    numlines += 1
                     if ALREADY_CLASSIFIED:
                         # use GT classification
                         subtype = ''
                         if region.get_type() == 'other' and region.get_custom():
                             subtype = region.get_custom().replace('subtype:', '')
                         if subtype.startswith('address'):
+                            nummatches += 1
                             mark_line(line, 'ADDRESS_FULL')
-                        else:
-                            mark_line(line, 'ADDRESS_NONE')
                         continue
                     # run text classification
+                    line.texts = list()
+                    line.confs = list()
                     textequivs = line.get_TextEquiv()
-                    if not textequivs:
+                    for textequiv in textequivs:
+                        line.texts.append(textequiv.Unicode)
+                        line.confs.append(textequiv.conf)
+                    # now go looking for OCR hypotheses at the glyph level
+                    def cutoff(textequiv):
+                        return (textequiv.conf or 1) > self.parameter['glyph_conf_cutoff']
+                    topn = self.parameter['glyph_topn_cutoff']
+                    glyphs = [filter(cutoff, glyph.TextEquiv[:topn])
+                              for word in line.Word
+                              for glyph in word.Glyph]
+                    topn = self.parameter['line_topn_cutoff']
+                    # get up to n best hypotheses (without exhaustively expanding)
+                    def aggconf(textequivs):
+                        return sum(-math.log(te.conf or 1e-30) for te in textequivs)
+                    def nbestproduct(*groups, n=1, key=id):
+                        # FIXME this is just an approximation (for true breadth-first n-best outer product)
+                        def add(values, prefixes):
+                            sequences = []
+                            for prefix in prefixes:
+                                for value in values:
+                                    sequences.append(prefix + (value,))
+                            return sorted(sequences, key=key)[:n]
+                        stack = iter(((),))
+                        for group in map(tuple,groups):
+                            stack = add(group, stack)
+                        return stack
+                    sequences = nbestproduct(*glyphs, key=aggconf, n=topn)
+                    def glyphword(textequiv):
+                        return textequiv.parent_object_.parent_object_
+                    # regroup the line's flat glyph sequence into words
+                    # then join glyphs into words and words into a text:
+                    for seq in sequences:
+                        if not any(seq):
+                            continue
+                        text = ' '.join(''.join(te.Unicode for te in word
+                                                if te.Unicode)
+                                        for _, word in itertools.groupby(seq, glyphword))
+                        conf = sum(te.conf for te in seq) / (len(seq) or 1)
+                        if text in line.texts:
+                            continue
+                        line.texts.append(text)
+                        line.confs.append(conf)
+                    if not line.texts:
                         LOG.error("Line '%s' in region '%s' of page '%s' contains no text results",
                                   line.id, region.id, page_id)
                         continue
@@ -142,24 +250,58 @@ class ClassifyAddressText(Processor):
                     # it may contain more than one line (without comma),
                     # but the text classifier is too liberal here, so
                     # we stop short at the last line of the name.
-                    last_lines += [line] # expand
-                    text = ''
-                    for this_line, prev_line in zip(reversed(last_lines),
-                                                    reversed([None] + last_lines[:-1])):
-                        text = this_line.get_TextEquiv()[0].Unicode + text
-                        result = classify_address(text)
-                        if result == 'ADDRESS_NONE':
+                    # This uses multiprocessing queues for the alternative
+                    # OCR texts; as soon as an address-like alternative is
+                    # found, the queues are flushed.
+                    last_lines.append(line) # shift in
+                    text, class_ = '', 'ADDRESS_NONE'
+                    for this_line, prev_line in pairwise(reversed(last_lines)):
+                        for this_text in this_line.texts:
+                            self.taskq.put(this_text + text)
+                        this_text, this_class, this_conf = None, 'ADDRESS_NONE', None
+                        done = False
+                        i = 0
+                        for _ in this_line.texts:
+                            #LOG.debug("OCR%d/%d: taskq=%d doneq=%d", i, len(this_line.texts), self.taskq.qsize(), self.doneq.qsize())
+                            if done:
+                                self.doneq.get(True, self.timeout)
+                                i += 1
+                                continue
+                            # get textual prediction
+                            alt_text, alt_class, alt_conf = self.doneq.get(True, self.timeout)
+                            i += 1
+                            if isbetter(alt_class, this_class):
+                                this_text, this_class, this_conf = alt_text, alt_class, alt_conf
+                            if isbetter(this_class, class_):
+                                # ignore other alternatives - by canceling additional tasks and
+                                # consuming all follow-up results (we cannot just clear queues,
+                                # because currently active workers might still produce results):
+                                while not self.taskq.empty():
+                                    try:
+                                        self.taskq.get(False)
+                                        self.doneq.put(None)
+                                    except queue.Empty:
+                                        pass
+                                done = True
+                        #if not isbetter(this_class, class_):
+                        if this_class == 'ADDRESS_NONE':
+                            # no improvement or no address at all - stop trying with more lines
                             break
-                        mark_line(this_line, result)
-                        last_lines = [None] * len(last_lines) # reset
+                        LOG.info("Line '%s' ['%s'] is an %s", this_line.id, this_text, this_class)
+                        nummatches += 1
+                        mark_line(this_line, this_class,
+                                  text=this_text[:len(this_text)-len(text)], conf=this_conf)
+                        last_lines = list() # reset
                         if not prev_line:
                             break
-                        text = ' ' + text
-                        if result == 'ADDRESS_FULL':
-                            break # avoid false positives
-                        if result != 'ADDRESS_FULL' and not left_of(prev_line, this_line):
+                        if this_class == 'ADDRESS_FULL':
+                            break # avoid false positives, already best
+                        text = ' ' + this_text
+                        if not left_of(prev_line, this_line):
                             text = ',' + text
-                    last_lines = last_lines[1:] # advance
+                        class_ = this_class
+                    last_lines = last_lines[-3:] # shift out
+            LOG.info("Found %d lines and %d matches", numlines, nummatches)
 
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
