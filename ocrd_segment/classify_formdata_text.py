@@ -1110,7 +1110,7 @@ class ClassifyFormDataText(Processor):
                         # then join glyphs into words and words into a text:
                         segment.texts.extend([' '.join(''.join(te.Unicode for te in word
                                                                if te.Unicode)
-                                               for _, word in itertools.groupby(seq, glyphword))
+                                                       for _, word in itertools.groupby(seq, glyphword))
                                               for seq in textequivs
                                               if any(seq)])
                         segment.confs.extend([sum(te.conf for te in seq) / (len(seq) or 1)

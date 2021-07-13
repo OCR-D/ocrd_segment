@@ -38,9 +38,9 @@ from ocrd_models.ocrd_page import (
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
-from .config import OCRD_TOOL
-
 from maskrcnn_cli.formdata import FIELDS, InferenceConfig
+
+from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-formdata-layout'
 # prefer Tensorflow (GPU/CPU) over Numpy (CPU)
@@ -202,7 +202,7 @@ class ClassifyFormDataLayout(Processor):
             # ensure RGB (if raw was merely grayscale)
             page_image = page_image.convert(mode='RGB')
             page_array = np.array(page_image)
-            # convert to RGB+Text+Address array
+            # convert to RGB+Text+Context array
             page_array = np.dstack([page_array,
                                     np.zeros_like(page_array[:,:,:2], np.uint8)])
             # convert binarized to single-channel negative
@@ -693,6 +693,10 @@ def polygon_for_parent(polygon, parent):
     # (this can happen when shapes valid in floating point are rounded)
     childp = make_valid(childp)
     parentp = make_valid(parentp)
+    if not childp.is_valid:
+        return None
+    if not parentp.is_valid:
+        return None
     # check if clipping is necessary
     if childp.within(parentp):
         return childp.exterior.coords[:-1]
