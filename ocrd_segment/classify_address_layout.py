@@ -200,10 +200,25 @@ class ClassifyAddressLayout(Processor):
                     page_array_bin = page_array_bin[:,:,0]
             threshold = 0.5 * (page_array_bin.min() + page_array_bin.max())
             page_array_bin = np.array(page_array_bin <= threshold, np.bool)
+            # get connected components
             _, components  = cv2.connectedComponents(page_array_bin.astype(np.uint8))
-            
+            # estimate glyph scale (roughly)
+            _, counts = np.unique(components, return_counts=True)
+            if counts.shape[0] > 1:
+                counts = np.sqrt(3 * counts)
+                counts = counts[(5 < counts) & (counts < 100)]
+                scale = int(np.median(counts))
+            else:
+                scale = 43
+
             # ensure RGB (if raw was merely grayscale)
             page_image = page_image.convert(mode='RGB')
+            if page_image.mode.startswith('I') or page_image.mode == 'F':
+                # workaround for Pillow#4926
+                page_image = page_image.convert('RGB')
+            if page_image.mode == '1':
+                page_image = page_image.convert('L')
+            
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
             def mark_line(line):
@@ -217,16 +232,7 @@ class ClassifyAddressLayout(Processor):
                 ImageDraw.Draw(page_image_mask).polygon(
                     list(map(tuple, polygon.tolist())),
                     fill=200 if text_class == 'ADDRESS_NONE' else 255)
-            
-            # prepare reading order
-            reading_order = dict()
-            ro = page.get_ReadingOrder()
-            if ro:
-                rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
-                if rogroup:
-                    page_get_reading_order(reading_order, rogroup)
-            
-            # iterate through all regions that could have lines
+            # iterate through all regions that could have text/context lines
             oldregions = []
             allregions = page.get_AllRegions(classes=['Text'], order='reading-order', depth=2)
             allpolys = [prep(Polygon(coordinates_of_segment(region, page_image, page_coords)))
@@ -236,35 +242,48 @@ class ClassifyAddressLayout(Processor):
                     mark_line(line)
             
             # combine raw with aggregated mask to RGBA array
-            if page_image.mode.startswith('I') or page_image.mode == 'F':
-                # workaround for Pillow#4926
-                page_image = page_image.convert('RGB')
-            if page_image.mode == '1':
-                page_image = page_image.convert('L')
             page_image.putalpha(page_image_mask)
             page_array = np.array(page_image)
-            # convert to RGB+Text+Address array
+            # convert to RGB+Text+Context array
             tmask = page_array[:,:,3:4] > 0
             amask = page_array[:,:,3:4] == 255
             page_array = np.concatenate([page_array[:,:,:3],
                                          255 * tmask.astype(np.uint8),
                                          255 * amask.astype(np.uint8)],
                                         axis=2)
+            
+            # prepare reading order
+            reading_order = dict()
+            ro = page.get_ReadingOrder()
+            if ro:
+                rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
+                if rogroup:
+                    page_get_reading_order(reading_order, rogroup)
+            
             # predict
+            K.tensorflow_backend.set_session(self.sess)
             preds = self.model.detect([page_array], verbose=0)[0]
             worse = []
-            for i in range(len(preds['class_ids'])):
-                for j in range(i + 1, len(preds['class_ids'])):
-                    imask = preds['masks'][:,:,i]
-                    jmask = preds['masks'][:,:,j]
-                    if np.count_nonzero(imask * jmask) / np.count_nonzero(imask + jmask) > 0.5:
-                        worse.append(i if preds['scores'][i] < preds['scores'][j] else j)
+            instances = np.arange(len(preds['class_ids']))
+            instances_i, instances_j = np.meshgrid(instances, instances, indexing='ij')
+            combinations = list(zip(*np.where(instances_i < instances_j)))
+            for i, j in combinations:
+                imask = preds['masks'][:,:,i]
+                jmask = preds['masks'][:,:,j]
+                intersection = np.count_nonzero(imask * jmask)
+                if not intersection:
+                    continue
+                union = np.count_nonzero(imask + jmask)
+                if intersection / union > 0.5:
+                    worse.append(i if preds['scores'][i] < preds['scores'][j] else j)
             best = np.zeros(4)
             for i in range(len(preds['class_ids'])):
                 if i in worse:
                     continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
+                if score < self.parameter['min_confidence']:
+                    continue
                 if cat not in [1,2]:
                     # only best probs for sndr and rcpt (other can be many)
                     continue
@@ -278,34 +297,65 @@ class ClassifyAddressLayout(Processor):
                               preds['class_ids'][i])
                     continue
                 cat = preds['class_ids'][i]
+                name = self.categories[cat]
                 score = preds['scores'][i]
                 if not cat:
                     raise Exception('detected region for background class')
                 if score < best[cat]:
-                    LOG.debug("Degrading instance for class %d with non-maximum score to class 3",
-                              preds['class_ids'][i])
+                    LOG.debug("reassigning instance for %s with non-maximum score to address-contact",
+                              name)
                     cat = 3
-                name = self.categories[cat]
                 mask = preds['masks'][:,:,i]
-                bbox = np.around(preds['rois'][i])
                 area = np.count_nonzero(mask)
-                scale = int(np.sqrt(area)//10)
-                scale = scale + (scale+1)%2 # odd
-                LOG.debug("post-processing prediction for '%s' at %s area %d scale %d score %f",
-                          name, str(bbox), area, scale, score)
+                bbox = np.around(preds['rois'][i])
+                top, left, bottom, right = bbox
+                w, h = right - left, bottom - top
+                LOG.debug("post-processing prediction for %s at %s area %d score %f",
+                          name, str(bbox), area, score)
                 # fill pixel mask from (padded) inner bboxes
                 complabels = np.unique(mask * components)
                 for label in complabels:
                     if not label:
                         continue # bg/white
-                    left, top, w, h = cv2.boundingRect((components==label).astype(np.uint8))
-                    right = left + w
-                    bottom = top + h
-                    left = max(0, left - 4)
-                    top = max(0, top - 4)
-                    right = min(page_image.width, right + 4)
-                    bottom = min(page_image.height, bottom + 4)
-                    mask[top:bottom, left:right] = mask.max()
+                    suppress = False
+                    leftc, topc, wc, hc = cv2.boundingRect((components==label).astype(np.uint8))
+                    rightc = leftc + wc
+                    bottomc = topc + hc
+                    if wc > 2 * w or hc > 2 * h:
+                        # huge (non-text?) component
+                        suppress = True
+                    if (min(right, rightc) - max(left, leftc)) * \
+                       (min(bottom, bottomc) - max(top, topc)) < 0.4 * wc * hc:
+                        # intersection over component too small
+                        # (snap inverse)
+                        suppress = True
+                    newleft = min(left, leftc)
+                    newtop = min(top, topc)
+                    newright = max(right, rightc)
+                    newbottom = max(bottom, bottomc)
+                    if (newright - newleft) > 2 * w or (newbottom - newtop) > 1.5 * h:
+                        # huge (non-text?) component
+                        suppress = True
+                    elif (newright - newleft) < 1.1 * w and (newbottom - newtop) < 1.1 * h:
+                        suppress = False
+                    if suppress:
+                        leftc = min(mask.shape[1], leftc + 4)
+                        topc = min(mask.shape[0], topc + 4)
+                        rightc = max(0, rightc - 4)
+                        bottomc = max(0, bottomc - 4)
+                        mask[topc:bottomc, leftc:rightc] = False
+                    else:
+                        leftc = max(0, leftc - 4)
+                        topc = max(0, topc - 4)
+                        rightc = min(mask.shape[1], rightc + 4)
+                        bottomc = min(mask.shape[0], bottomc + 4)
+                        mask[topc:bottomc, leftc:rightc] = True
+                        left = newleft
+                        top = newtop
+                        right = newright
+                        bottom = newbottom
+                        w = right - left
+                        h = bottom - top
                 # dilate and find (outer) contour
                 contours = [None, None]
                 for _ in range(10):
