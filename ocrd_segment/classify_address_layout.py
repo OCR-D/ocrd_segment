@@ -22,17 +22,17 @@ from ocrd_utils import (
     assert_file_grp_cardinality,
     coordinates_of_segment,
     coordinates_for_segment,
+    crop_image,
     polygon_from_bbox,
     points_from_polygon,
+    polygon_from_points,
     MIMETYPE_PAGE
 )
 from ocrd_models.ocrd_page import (
     to_xml,
     TextRegionType,
     PageType,
-    CoordsType
-)
-from ocrd_models.ocrd_page_generateds import (
+    CoordsType,
     RegionRefType,
     RegionRefIndexedType,
     OrderedGroupType,
@@ -151,10 +151,40 @@ class ClassifyAddressLayout(Processor):
                     dpi = round(dpi * 2.54)
             else:
                 dpi = None
+
             page_image_binarized, _, _ = self.workspace.image_from_page(
                 page, page_id,
                 feature_selector='binarized')
-            
+            # workaround for OCR-D/core#687:
+            if 0 < abs(page_image.width - page_image_binarized.width) <= 2:
+                diff = page_image.width - page_image_binarized.width
+                if diff > 0:
+                    page_image = crop_image(
+                        page_image,
+                        (int(np.floor(diff / 2)), 0,
+                         page_image.width - int(np.ceil(diff / 2)),
+                         page_image.height))
+                else:
+                    page_image_binarized = crop_image(
+                        page_image_binarized,
+                        (int(np.floor(-diff / 2)), 0,
+                         page_image_binarized.width - int(np.ceil(-diff / 2)),
+                         page_image_binarized.height))
+            if 0 < abs(page_image.height - page_image_binarized.height) <= 2:
+                diff = page_image.height - page_image_binarized.height
+                if diff > 0:
+                    page_image = crop_image(
+                        page_image,
+                        (0, int(np.floor(diff / 2)),
+                         page_image.width,
+                         page_image.height - int(np.ceil(diff / 2))))
+                else:
+                    page_image_binarized = crop_image(
+                        page_image_binarized,
+                        (0, int(np.floor(-diff / 2)),
+                         page_image_binarized.width,
+                         page_image_binarized.height - int(np.ceil(-diff / 2))))
+            # convert binarized to single-channel negative
             page_array_bin = np.array(page_image_binarized)
             if page_array_bin.ndim == 3:
                 if page_array_bin.shape[-1] == 3:
