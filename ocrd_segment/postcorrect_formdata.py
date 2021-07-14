@@ -442,9 +442,9 @@ class PostCorrectFormData(Processor):
                     # run regex decoding (1-best match, but keep continuation if any)
                     it = match(category, zip(line.texts, line.confs), line.id)
                     try:
-                        targets[category] = line
                         line.text, line.conf, line.pattern = next(it)
                         line.iter = it
+                        targets[category] = line
                         nummatches += 1
                         # annotate correct text value for target
                         line.insert_TextEquiv_at(0, TextEquivType(
