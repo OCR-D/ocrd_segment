@@ -290,10 +290,10 @@ def consist(targets):
             for (text_total, conf_total, pattern_total), *alternative_addends \
             in itertools.product(*prepend(prepend((value_total.text, value_total.conf, value_total.pattern),
                                                   value_total.iter),
-                                          itertools.chain.from_iterable(
+                                          map(lambda value_addend:
                                               prepend((value_addend.text, value_addend.conf, value_addend.pattern),
-                                                      value_addend.iter)
-                                              for value_addend in value_addends))):
+                                                      value_addend.iter),
+                                              value_addends))):
                 num_total = float(text_total.translate(TODECIMAL))
                 num_addends = [float(text_addend.translate(TODECIMAL)) for text_addend, _, _ in alternative_addends]
                 if 0.98 <= sum(num_addends) / (num_total or 1e-9) <= 1.02:
