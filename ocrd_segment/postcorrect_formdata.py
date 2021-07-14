@@ -438,20 +438,19 @@ class PostCorrectFormData(Processor):
                         LOG.error("Line '%s' on page '%s' contains no text results",
                                   line.id, page_id)
                         continue
-                    targets[category] = line
                     numsegments += 1
                     # run regex decoding (1-best match, but keep continuation if any)
                     it = match(category, zip(line.texts, line.confs), line.id)
                     try:
+                        targets[category] = line
                         line.text, line.conf, line.pattern = next(it)
+                        line.iter = it
                         nummatches += 1
                         # annotate correct text value for target
                         line.insert_TextEquiv_at(0, TextEquivType(
                             Unicode=line.text, conf=line.conf, comments=line.pattern))
                     except StopIteration:
                         pass
-                    finally:
-                        line.iter = it
                 # remove region-level text results
                 region.set_TextEquiv([])
             LOG.info("Found %d lines and %d matches",
