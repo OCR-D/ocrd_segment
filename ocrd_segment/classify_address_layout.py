@@ -282,8 +282,6 @@ class ClassifyAddressLayout(Processor):
                     continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
-                if score < self.parameter['min_confidence']:
-                    continue
                 if cat not in [1,2]:
                     # only best probs for sndr and rcpt (other can be many)
                     continue
@@ -292,15 +290,17 @@ class ClassifyAddressLayout(Processor):
             if not np.any(best):
                 LOG.warning("Detected no sndr/rcpt address on page '%s'", page_id)
             for i in range(len(preds['class_ids'])):
-                if i in worse:
-                    LOG.debug("Ignoring instance for class %d overlapping better neighbour",
-                              preds['class_ids'][i])
-                    continue
                 cat = preds['class_ids'][i]
                 name = self.categories[cat]
                 score = preds['scores'][i]
                 if not cat:
                     raise Exception('detected region for background class')
+                if i in worse:
+                    LOG.debug("Ignoring instance for %s overlapping better neighbour", name)
+                    continue
+                if score < self.parameter['min_confidence']:
+                    LOG.debug("Ignoring instance for %s with too low score (%.2f)", name, score)
+                    continue
                 if score < best[cat]:
                     LOG.debug("reassigning instance for %s with non-maximum score to address-contact",
                               name)
