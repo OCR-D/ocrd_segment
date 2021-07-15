@@ -4,8 +4,8 @@ import json
 import os
 import math
 import itertools
-import multiprocessing as mp
-import queue
+from multiprocessing import Process, Queue
+from queue import Empty
 import requests
 
 from ocrd_utils import (
@@ -24,8 +24,7 @@ from .config import OCRD_TOOL
 TOOL = 'ocrd-segment-classify-address-text'
 
 # upper time limit to web API requests for textual address classification:
-# (average) time (in seconds) per request (i.e. line text alternative)
-SERVICE_TIMEOUT = os.environ.get('SERVICE_TIMEOUT', 10.0)
+SERVICE_TIMEOUT = os.environ.get('SERVICE_TIMEOUT', 1.0)
 
 NUMERIC = str.maketrans('', '', '-., €%')
 
@@ -127,15 +126,24 @@ class ClassifyAddressText(Processor):
             self.setup()
 
     def setup(self):
-        self.taskq = mp.Queue() # from arbiter to workers
-        self.doneq = mp.Queue() # from workers to arbiter
+        self.taskq = Queue() # from arbiter to workers
+        self.doneq = Queue() # from workers to arbiter
         self.nproc = self.parameter['num_processes']
-        self.timeout = self.parameter['line_topn_cutoff'] / self.parameter['num_processes'] * SERVICE_TIMEOUT
         for _ in range(self.nproc):
-            mp.Process(target=classify,
-                       args=(self.taskq, self.doneq),
-                       # ensure automatic termination at exit
-                       daemon=True).start()
+            Process(target=classify,
+                    args=(self.taskq, self.doneq),
+                    # ensure automatic termination at exit
+                    daemon=True).start()
+
+    def cancelq(self):
+        # we cannot just clear queues,
+        # because currently active workers might still produce results:
+        while not self.taskq.empty():
+            try:
+                self.taskq.get(False)
+                self.doneq.put(None)
+            except Empty:
+                pass
 
     def process(self):
         """Classify text lines belonging to addresses from text recognition results.
@@ -259,30 +267,24 @@ class ClassifyAddressText(Processor):
                         for this_text in this_line.texts:
                             self.taskq.put(this_text + text)
                         this_text, this_class, this_conf = None, 'ADDRESS_NONE', None
-                        done = False
-                        i = 0
+                        cancelled = False
                         for _ in this_line.texts:
-                            #LOG.debug("OCR%d/%d: taskq=%d doneq=%d", i, len(this_line.texts), self.taskq.qsize(), self.doneq.qsize())
-                            if done:
-                                self.doneq.get(True, self.timeout)
-                                i += 1
+                            try:
+                                if cancelled:
+                                    self.doneq.get(True, SERVICE_TIMEOUT)
+                                    continue
+                                # get textual prediction
+                                alt_text, alt_class, alt_conf = self.doneq.get(True, SERVICE_TIMEOUT)
+                            except Empty:
+                                LOG.error("No text classification result after %ds (qsize=%d)", SERVICE_TIMEOUT, self.doneq.qsize())
                                 continue
-                            # get textual prediction
-                            alt_text, alt_class, alt_conf = self.doneq.get(True, self.timeout)
-                            i += 1
                             if isbetter(alt_class, this_class):
                                 this_text, this_class, this_conf = alt_text, alt_class, alt_conf
                             if isbetter(this_class, class_):
                                 # ignore other alternatives - by canceling additional tasks and
-                                # consuming all follow-up results (we cannot just clear queues,
-                                # because currently active workers might still produce results):
-                                while not self.taskq.empty():
-                                    try:
-                                        self.taskq.get(False)
-                                        self.doneq.put(None)
-                                    except queue.Empty:
-                                        pass
-                                done = True
+                                # consuming all follow-up results
+                                self.cancelq()
+                                cancelled = True
                         #if not isbetter(this_class, class_):
                         if this_class == 'ADDRESS_NONE':
                             # no improvement or no address at all - stop trying with more lines
