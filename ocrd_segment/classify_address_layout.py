@@ -358,14 +358,19 @@ class ClassifyAddressLayout(Processor):
                         h = bottom - top
                 # dilate and find (outer) contour
                 contours = [None, None]
+                invalid = True
                 for _ in range(10):
-                    if len(contours) == 1:
-                        break
-                    mask = cv2.dilate(mask.astype(np.uint8),
-                                      np.ones((scale,scale), np.uint8)) > 0
                     contours, _ = cv2.findContours(mask.astype(np.uint8),
                                                    cv2.RETR_EXTERNAL,
                                                    cv2.CHAIN_APPROX_SIMPLE)
+                    if len(contours) == 1 and len(contours[0]) > 3:
+                        invalid = False
+                        break
+                    mask = cv2.dilate(mask.astype(np.uint8),
+                                      np.ones((scale,scale), np.uint8)) > 0
+                if invalid:
+                    LOG.warning("Ignoring non-contiguous (%d) region for '%s'", len(contours), name)
+                    continue
                 region_polygon = contours[0][:,0,:] # already in x,y order
                 #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
                 region_polygon = coordinates_for_segment(region_polygon,

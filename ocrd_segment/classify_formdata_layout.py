@@ -365,7 +365,7 @@ class ClassifyFormDataLayout(Processor):
                 contours, _ = cv2.findContours(mask.astype(np.uint8),
                                                cv2.RETR_EXTERNAL,
                                                cv2.CHAIN_APPROX_SIMPLE)
-                if len(contours) == 1:
+                if len(contours) == 1 and len(contours[0]) > 3:
                     invalid = False
                     break
                 mask = cv2.dilate(mask.astype(np.uint8),
