@@ -4,7 +4,7 @@ import json
 import os
 import math
 import itertools
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, JoinableQueue
 from queue import Empty
 import requests
 
@@ -42,6 +42,7 @@ def classify(inq, outq):
     # Queue.get() blocks, Queue.put() too (but maxsize is infinite)
     # loop forever (or until receiving None)
     for text in iter(inq.get, None):
+        inq.task_done()
         outq.put(match(text))
 
 def match(text):
@@ -126,7 +127,7 @@ class ClassifyAddressText(Processor):
             self.setup()
 
     def setup(self):
-        self.taskq = Queue() # from arbiter to workers
+        self.taskq = JoinableQueue() # from arbiter to workers
         self.doneq = Queue() # from workers to arbiter
         self.nproc = self.parameter['num_processes']
         for _ in range(self.nproc):
@@ -266,6 +267,7 @@ class ClassifyAddressText(Processor):
                     for this_line, prev_line in pairwise(reversed(last_lines)):
                         for this_text in this_line.texts:
                             self.taskq.put(this_text + text)
+                        self.taskq.join() # FIXME just workaround bug in queue syncing here
                         this_text, this_class, this_conf = None, 'ADDRESS_NONE', None
                         cancelled = False
                         for _ in this_line.texts:
