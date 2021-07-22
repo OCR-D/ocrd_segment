@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import json
 import os
 import math
+import atexit
 import itertools
 from multiprocessing import Process, SimpleQueue
 from queue import Empty
@@ -131,14 +132,18 @@ class ClassifyAddressText(Processor):
             self.setup()
 
     def setup(self):
-        self.taskq = JoinableQueue() # from arbiter to workers
-        self.doneq = Queue() # from workers to arbiter
+        self.taskq = SimpleQueue() # from arbiter to workers
+        self.doneq = SimpleQueue() # from workers to arbiter
         self.nproc = self.parameter['num_processes']
         for _ in range(self.nproc):
             Process(target=classify,
                     args=(self.taskq, self.doneq),
                     # ensure automatic termination at exit
                     daemon=True).start()
+        def stopq():
+            for _ in range(self.nproc):
+                self.taskq.put(None)
+        atexit.register(stopq)
 
     def cancelq(self):
         # we cannot just clear queues,
