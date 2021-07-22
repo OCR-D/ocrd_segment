@@ -223,15 +223,22 @@ class ClassifyAddressLayout(Processor):
             threshold = 0.5 * (page_array_bin.min() + page_array_bin.max())
             page_array_bin = np.array(page_array_bin <= threshold, np.bool)
             # get connected components
-            _, components  = cv2.connectedComponents(page_array_bin.astype(np.uint8))
+            _, components, cstats, _  = cv2.connectedComponentsWithStats(page_array_bin.astype(np.uint8))
             # estimate glyph scale (roughly)
-            _, counts = np.unique(components, return_counts=True)
-            if counts.shape[0] > 1:
-                counts = np.sqrt(3 * counts)
-                counts = counts[(5 < counts) & (counts < 100)]
-                scale = int(np.median(counts))
+            scalemap = np.zeros_like(components)
+            for label in np.argsort(cstats[:,4]):
+                if not label: continue
+                left, top, width, height, area = cstats[label]
+                right, bottom = left + width, top + height
+                if np.max(scalemap[top:bottom, left:right]) > 0:
+                    continue
+                scalemap[top:bottom, left:right] = np.sqrt(area)
+            scalemap = scalemap[(5 / zoom * zoomed < scalemap) & (scalemap < 100 / zoom * zoomed)]
+            if np.any(scalemap):
+                scale = int(np.median(scalemap))
             else:
-                scale = 43
+                scale = int(43 / zoom * zoomed)
+            LOG.debug("detected scale = %d", scale)
 
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
