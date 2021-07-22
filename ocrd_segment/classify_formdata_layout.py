@@ -9,6 +9,7 @@ from shapely.geometry import Polygon, asPolygon
 from shapely.ops import unary_union
 from skimage import draw
 import cv2
+from PIL import Image
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn import model, utils
@@ -164,8 +165,17 @@ class ClassifyFormDataLayout(Processor):
                 dpi = page_image_info.resolution
                 if page_image_info.resolutionUnit == 'cm':
                     dpi = round(dpi * 2.54)
+                zoom = 300.0 / dpi
             else:
                 dpi = None
+                zoom = 1.0
+            if zoom < 0.7:
+                LOG.info("scaling %dx%d image by %.2f", page_image.width, page_image.height, zoom)
+                # actual resampling: see below
+                zoomed = zoom
+            else:
+                zoomed = 1.0
+            
             page_image_binarized, _, _ = self.workspace.image_from_page(
                 page, page_id,
                 feature_selector='binarized')
@@ -198,9 +208,21 @@ class ClassifyFormDataLayout(Processor):
                         (0, int(np.floor(-diff / 2)),
                          page_image_binarized.width,
                          page_image_binarized.height - int(np.ceil(-diff / 2))))
-            
             # ensure RGB (if raw was merely grayscale)
+            if page_image.mode == '1':
+                page_image = page_image.convert('L')
             page_image = page_image.convert(mode='RGB')
+            # reduce resolution to 300 DPI max
+            if zoomed != 1.0:
+                page_image_binarized = page_image_binarized.resize(
+                    (int(page_image.width * zoomed),
+                     int(page_image.height * zoomed)),
+                    resample=Image.BICUBIC)
+                page_image = page_image.resize(
+                    (int(page_image.width * zoomed),
+                     int(page_image.height * zoomed)),
+                    resample=Image.BICUBIC)
+            
             page_array = np.array(page_image)
             # convert to RGB+Text+Context array
             page_array = np.dstack([page_array,
@@ -222,7 +244,7 @@ class ClassifyFormDataLayout(Processor):
             threshold = 0.5 * (page_array_bin.min() + page_array_bin.max())
             page_array_bin = np.array(page_array_bin <= threshold, np.bool)
             
-            self._process_page(page, page_image, page_coords, page_id, page_array, page_array_bin)
+            self._process_page(page, page_image, page_coords, page_id, page_array, page_array_bin, zoomed)
             
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
@@ -237,7 +259,7 @@ class ClassifyFormDataLayout(Processor):
             LOG.info('created file ID: %s, file_grp: %s, path: %s',
                      file_id, self.output_file_grp, out.local_filename)
     
-    def _process_page(self, page, page_image, page_coords, page_id, page_array, page_array_bin):
+    def _process_page(self, page, page_image, page_coords, page_id, page_array, page_array_bin, zoomed):
         # iterate through all regions that have lines,
         # look for @custom annotated context of any class,
         # derive active classes for this page, and for each class
@@ -282,6 +304,8 @@ class ClassifyFormDataLayout(Processor):
             for line in region.get_TextLine():
                 for segment in [line] + line.get_Word() or []:
                     polygon = coordinates_of_segment(segment, page_image, page_coords)
+                    if zoomed != 1.0:
+                        polygon = np.round(polygon * zoomed).astype(np.int32)
                     polygon_mask = draw.polygon(polygon[:,1], polygon[:,0], page_array.shape)
                     #polygon_hull = draw.polygon_perimeter(polygon[:,1], polygon[:,0], page_array.shape)
                     polygon_tmask = (polygon_mask[0], polygon_mask[1], 3 * np.ones_like(polygon_mask[0]))
@@ -374,6 +398,8 @@ class ClassifyFormDataLayout(Processor):
                 LOG.warning("Ignoring non-contiguous (%d) region for '%s'", len(contours), category)
                 continue
             region_polygon = contours[0][:,0,:] # already in x,y order
+            if zoomed != 1.0:
+                region_polygon = region_polygon / zoomed
             # ensure consistent and valid polygon outline
             region_polygon = coordinates_for_segment(region_polygon,
                                                      page_image, page_coords)

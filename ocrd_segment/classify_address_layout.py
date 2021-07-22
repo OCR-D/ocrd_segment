@@ -149,8 +149,16 @@ class ClassifyAddressLayout(Processor):
                 dpi = page_image_info.resolution
                 if page_image_info.resolutionUnit == 'cm':
                     dpi = round(dpi * 2.54)
+                zoom = 300.0 / dpi
             else:
                 dpi = None
+                zoom = 1.0
+            if zoom < 0.7:
+                LOG.info("scaling %dx%d image by %.2f", page_image.width, page_image.height, zoom)
+                # actual resampling: see below
+                zoomed = zoom
+            else:
+                zoomed = 1.0
 
             page_image_binarized, _, _ = self.workspace.image_from_page(
                 page, page_id,
@@ -184,6 +192,20 @@ class ClassifyAddressLayout(Processor):
                         (0, int(np.floor(-diff / 2)),
                          page_image_binarized.width,
                          page_image_binarized.height - int(np.ceil(-diff / 2))))
+            # ensure RGB (if raw was merely grayscale)
+            if page_image.mode == '1':
+                page_image = page_image.convert('L')
+            page_image = page_image.convert(mode='RGB')
+            # reduce resolution to 300 DPI max
+            if zoomed != 1.0:
+                page_image_binarized = page_image_binarized.resize(
+                    (int(page_image.width * zoomed),
+                     int(page_image.height * zoomed)),
+                    resample=Image.BICUBIC)
+                page_image = page_image.resize(
+                    (int(page_image.width * zoomed),
+                     int(page_image.height * zoomed)),
+                    resample=Image.BICUBIC)
             # convert binarized to single-channel negative
             page_array_bin = np.array(page_image_binarized)
             if page_array_bin.ndim == 3:
@@ -211,14 +233,6 @@ class ClassifyAddressLayout(Processor):
             else:
                 scale = 43
 
-            # ensure RGB (if raw was merely grayscale)
-            page_image = page_image.convert(mode='RGB')
-            if page_image.mode.startswith('I') or page_image.mode == 'F':
-                # workaround for Pillow#4926
-                page_image = page_image.convert('RGB')
-            if page_image.mode == '1':
-                page_image = page_image.convert('L')
-            
             # prepare mask image (alpha channel for input image)
             page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
             def mark_line(line):
@@ -228,6 +242,8 @@ class ClassifyAddressLayout(Processor):
                     text_class = 'ADDRESS_NONE'
                 # add to mask image (alpha channel for input image)
                 polygon = coordinates_of_segment(line, page_image, page_coords)
+                if zoomed != 1.0:
+                    polygon = np.round(polygon * zoomed).astype(np.int32)
                 # draw line mask:
                 ImageDraw.Draw(page_image_mask).polygon(
                     list(map(tuple, polygon.tolist())),
@@ -373,6 +389,8 @@ class ClassifyAddressLayout(Processor):
                     continue
                 region_polygon = contours[0][:,0,:] # already in x,y order
                 #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
+                if zoomed != 1.0:
+                    region_polygon = region_polygon / zoomed
                 region_polygon = coordinates_for_segment(region_polygon,
                                                          page_image, page_coords)
                 region_polygon = polygon_for_parent(region_polygon, page)
