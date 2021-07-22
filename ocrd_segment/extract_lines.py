@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import json
-import itertools
 
 from ocrd_utils import (
     getLogger,
@@ -34,6 +33,9 @@ class ExtractLines(Processor):
         Extract an image for each textline (which depending on the workflow
         can already be deskewed, dewarped, binarized etc.), cropped to its
         minimal bounding box, and masked by the coordinate polygon outline.
+        Apply ``feature_filter`` (a comma-separated list of image features,
+        cf. :py:func:`ocrd.workspace.Workspace.image_from_page`) to skip
+        specific features when retrieving derived images.
         If ``transparency`` is true, then also add an alpha channel which is
         fully transparent outside of the mask.
         
@@ -75,6 +77,7 @@ class ExtractLines(Processor):
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
+                feature_filter=self.parameter['feature_filter'],
                 transparency=self.parameter['transparency'])
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
@@ -84,14 +87,13 @@ class ExtractLines(Processor):
                 dpi = None
             ptype = page.get_type()
             
-            regions = itertools.chain.from_iterable(
-                [page.get_TextRegion()] +
-                [subregion.get_TextRegion() for subregion in page.get_TableRegion()])
+            regions = page.get_AllRegions(classes=['Text'], order='reading-order')
             if not regions:
                 LOG.warning("Page '%s' contains no text regions", page_id)
             for region in regions:
                 region_image, region_coords = self.workspace.image_from_segment(
                     region, page_image, page_coords,
+                    feature_filter=self.parameter['feature_filter'],
                     transparency=self.parameter['transparency'])
                 rtype = region.get_type()
                 
@@ -101,6 +103,7 @@ class ExtractLines(Processor):
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
+                        feature_filter=self.parameter['feature_filter'],
                         transparency=self.parameter['transparency'])
                     lpolygon_rel = coordinates_of_segment(
                         line, line_image, line_coords).tolist()

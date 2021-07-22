@@ -1,5 +1,5 @@
 {
-  "version": "0.1.3",
+  "version": "0.1.11",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-extract-formdata": {
@@ -310,7 +310,7 @@
     "ocrd-segment-repair": {
       "executable": "ocrd-segment-repair",
       "categories": ["Layout analysis"],
-      "description": "Analyse and repair region segmentation",
+      "description": "Analyse and repair region segmentation; at least ensure validity and consistency of coordinates.",
       "input_file_grp": [
         "OCR-D-IMG",
         "OCR-D-SEG-BLOCK"
@@ -353,8 +353,60 @@
       "parameters": {
         "colordict": {
           "type": "object",
-          "default": {},
-          "description": "Mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '#00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background)). Cf. output of ocrd-segment-extract-pages for an example (this is also the default)."
+          "default": {
+            "FFFFFF00": "",
+            "FFFFFFFF": "Border",
+            "8B4513FF": "TableRegion",
+            "4682B4FF": "AdvertRegion",
+            "FF8C00FF": "ChemRegion",
+            "9400D3FF": "MusicRegion",
+            "9ACDD2FF": "MapRegion",
+            "0000FFFF": "TextRegion",
+            "0000FFFA": "TextRegion:paragraph",
+            "0000FFF5": "TextRegion:heading",
+            "0000FFF0": "TextRegion:caption",
+            "0000FFEB": "TextRegion:header",
+            "0000FFE6": "TextRegion:footer",
+            "0000FFE1": "TextRegion:page-number",
+            "0000FFDC": "TextRegion:drop-capital",
+            "0000FFD7": "TextRegion:credit",
+            "0000FFD2": "TextRegion:floating",
+            "0000FFCD": "TextRegion:signature-mark",
+            "0000FFC8": "TextRegion:catch-word",
+            "0000FFC3": "TextRegion:marginalia",
+            "0000FFBE": "TextRegion:footnote",
+            "0000FFB9": "TextRegion:footnote-continued",
+            "0000FFB4": "TextRegion:endnote",
+            "0000FFAF": "TextRegion:TOC-entry",
+            "0000FFA5": "TextRegion:list-label",
+            "0000FFA0": "TextRegion:other",
+            "800080FF": "ChartRegion",
+            "800080FA": "ChartRegion:bar",
+            "800080F5": "ChartRegion:line",
+            "800080F0": "ChartRegion:pie",
+            "800080EB": "ChartRegion:scatter",
+            "800080E6": "ChartRegion:surface",
+            "800080E1": "ChartRegion:other",
+            "008000FF": "GraphicRegion",
+            "008000FA": "GraphicRegion:logo",
+            "008000F0": "GraphicRegion:letterhead",
+            "008000EB": "GraphicRegion:decoration",
+            "008000E6": "GraphicRegion:frame",
+            "008000E1": "GraphicRegion:handwritten-annotation",
+            "008000DC": "GraphicRegion:stamp",
+            "008000D7": "GraphicRegion:signature",
+            "008000D2": "GraphicRegion:barcode",
+            "008000CD": "GraphicRegion:paper-grow",
+            "008000C8": "GraphicRegion:punch-hole",
+            "008000C3": "GraphicRegion:other",
+            "00CED1FF": "ImageRegion",
+            "B8860BFF": "LineDrawingRegion",
+            "00BFFFFF": "MathsRegion",
+            "FF0000FF": "NoiseRegion",
+            "FF00FFFF": "SeparatorRegion",
+            "646464FF": "UnknownRegion",
+            "637C81FF": "CustomRegion"},
+          "description": "Mapping from color values in the input masks to region types to annotate; color must be encoded hexadecimal (e.g. '00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped colors will be ignored (i.e. treated as background)). Default is PageViewer color scheme. Cf. colordict.json output and colordict parameter of ocrd-segment-extract-pages."
         }
       }
     },
@@ -389,10 +441,15 @@
         "OCR-D-GT-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-PAGE"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -403,6 +460,83 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "plot_overlay": {
+          "type": "boolean",
+          "default": false,
+          "description": "When generating mask images with `plot_segmasks`, instead of starting with a blank image and having layers and segments replace each other, start with the raw image and superimpose (alpha-composite) layers and segments."
+        },
+        "plot_segmasks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["order", "page", "region", "line", "word", "glyph"]
+          },
+          "default": ["region"],
+          "description": "Generate mask images of the page segmentation in the last output fileGrp. Draw filled polygons for each specified PAGE hierarchy level in the list (in that order), where 'page' denotes the Border polygon, 'region' denotes Region types, 'line' denotes TextLine, 'word' denotes Word and 'glyph' denotes Glyph. Each type must be mapped in `colordict`. Where neighbors of the same type intersect, show a warning (unless `plot_overlay` is true). If 'order' is present, then draw arrows for reading order, too."
+        },
+        "colordict": {
+          "type": "object",
+          "default": {
+            "":                                     "FFFFFF00",
+            "ReadingOrderLevel0":                   "DC143CFF",
+            "ReadingOrderLevel1":                   "9400D3FF",
+            "ReadingOrderLevelN":                   "8B0000FF",
+            "Border":                               "FFFFFFFF",
+            "TableRegion":                          "8B4513FF",
+            "AdvertRegion":                         "4682B4FF",
+            "ChemRegion":                           "FF8C00FF",
+            "MusicRegion":                          "9400D3FF",
+            "MapRegion":                            "9ACDD2FF",
+            "TextRegion":                           "0000FFFF",
+            "TextRegion:paragraph":                 "0000FFFA",
+            "TextRegion:heading":                   "0000FFF5",
+            "TextRegion:caption":                   "0000FFF0",
+            "TextRegion:header":                    "0000FFEB",
+            "TextRegion:footer":                    "0000FFE6",
+            "TextRegion:page-number":               "0000FFE1",
+            "TextRegion:drop-capital":              "0000FFDC",
+            "TextRegion:credit":                    "0000FFD7",
+            "TextRegion:floating":                  "0000FFD2",
+            "TextRegion:signature-mark":            "0000FFCD",
+            "TextRegion:catch-word":                "0000FFC8",
+            "TextRegion:marginalia":                "0000FFC3",
+            "TextRegion:footnote":                  "0000FFBE",
+            "TextRegion:footnote-continued":        "0000FFB9",
+            "TextRegion:endnote":                   "0000FFB4",
+            "TextRegion:TOC-entry":                 "0000FFAF",
+            "TextRegion:list-label":                "0000FFA5",
+            "TextRegion:other":                     "0000FFA0",
+            "ChartRegion":                          "800080FF",
+            "ChartRegion:bar":                      "800080FA",
+            "ChartRegion:line":                     "800080F5",
+            "ChartRegion:pie":                      "800080F0",
+            "ChartRegion:scatter":                  "800080EB",
+            "ChartRegion:surface":                  "800080E6",
+            "ChartRegion:other":                    "800080E1",
+            "GraphicRegion":                        "008000FF",
+            "GraphicRegion:logo":                   "008000FA",
+            "GraphicRegion:letterhead":             "008000F0",
+            "GraphicRegion:decoration":             "008000EB",
+            "GraphicRegion:frame":                  "008000E6",
+            "GraphicRegion:handwritten-annotation": "008000E1",
+            "GraphicRegion:stamp":                  "008000DC",
+            "GraphicRegion:signature":              "008000D7",
+            "GraphicRegion:barcode":                "008000D2",
+            "GraphicRegion:paper-grow":             "008000CD",
+            "GraphicRegion:punch-hole":             "008000C8",
+            "GraphicRegion:other":                  "008000C3",
+            "ImageRegion":                          "00CED1FF",
+            "LineDrawingRegion":                    "B8860BFF",
+            "MathsRegion":                          "00BFFFFF",
+            "NoiseRegion":                          "FF0000FF",
+            "SeparatorRegion":                      "FF00FFFF",
+            "UnknownRegion":                        "646464FF",
+            "CustomRegion":                         "637C81FF",
+            "TextLine":                             "32CD32FF",
+            "Word":                                 "B22222FF",
+            "Glyph":                                "2E8B08FF"},
+          "description": "Mapping from segment types to extract to color values in the output mask images and COCO; color must be encoded hexadecimal (e.g. '00FF00'); region type equals the element name in PAGE-XML, optionally followed by a colon and a subtype (e.g. 'TextRegion:paragraph'; unmapped region types will be ignored (i.e. treated as background)). Default is PageViewer color scheme. Cf. colordict parameter of ocrd-segment-from-masks."
         }
       }
     },
@@ -415,10 +549,15 @@
         "OCR-D-GT-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-REGION"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -441,10 +580,77 @@
         "OCR-D-GT-SEG-LINE"
       ],
       "output_file_grp": [
-        "OCR-D-IMG-CROP"
+        "OCR-D-IMG-LINE"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-words": {
+      "executable": "ocrd-segment-extract-words",
+      "categories": ["Image preprocessing"],
+      "description": "Extract word segmentation as word images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "input_file_grp": [
+        "OCR-D-SEG-WORD",
+        "OCR-D-GT-SEG-WORD"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-WORD"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
+        "mimetype": {
+          "type": "string",
+          "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
+          "default": "image/png",
+          "description": "File format to save extracted images in."
+        },
+        "transparency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add alpha channels with segment masks to the images"
+        }
+      }
+    },
+    "ocrd-segment-extract-glyphs": {
+      "executable": "ocrd-segment-extract-glyphs",
+      "categories": ["Image preprocessing"],
+      "description": "Extract glyph segmentation as glyph images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "input_file_grp": [
+        "OCR-D-SEG-GLYPH",
+        "OCR-D-GT-SEG-GLYPH"
+      ],
+      "output_file_grp": [
+        "OCR-D-IMG-GLYPH"
+      ],
+      "steps": ["layout/analysis"],
+      "parameters": {
+        "feature_filter": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
@@ -468,20 +674,19 @@
         "OCR-D-OCR"
       ],
       "output_file_grp": [
-        "OCR-D-SEG-CROP",
-        "OCR-D-IMG-CROP"
+        "OCR-D-SEG-CROP"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
           "feature_selector": {
               "type": "string",
               "default": "",
-              "description": "comma-separated list of required image features (e.g. binarized,despeckled)"
+              "description": "Comma-separated list of required image features (e.g. `binarized,despeckled`)"
           },
           "feature_filter": {
               "type": "string",
               "default": "",
-              "description": "comma-separated list of forbidden image features (e.g. binarized,despeckled)"
+              "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)"
           },
           "transform_coordinates": {
               "type": "boolean",
@@ -500,8 +705,8 @@
         "OCR-D-OCR"
       ],
       "output_file_grp": [
-        "OCR-D-SEG-CROP",
-        "OCR-D-IMG-CROP"
+        "OCR-D-SEG-LINE",
+        "OCR-D-OCR"
       ],
       "steps": ["layout/analysis"],
       "parameters": {
