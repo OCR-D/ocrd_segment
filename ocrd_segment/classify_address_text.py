@@ -4,7 +4,7 @@ import json
 import os
 import math
 import itertools
-from multiprocessing import Process, Queue, JoinableQueue
+from multiprocessing import Process, SimpleQueue
 from queue import Empty
 import requests
 
@@ -24,7 +24,7 @@ from .config import OCRD_TOOL
 TOOL = 'ocrd-segment-classify-address-text'
 
 # upper time limit to web API requests for textual address classification:
-SERVICE_TIMEOUT = os.environ.get('SERVICE_TIMEOUT', 1.0)
+SERVICE_TIMEOUT = os.environ.get('SERVICE_TIMEOUT', 3.0)
 
 NUMERIC = str.maketrans('', '', '-., €%')
 
@@ -42,7 +42,6 @@ def classify(inq, outq):
     # Queue.get() blocks, Queue.put() too (but maxsize is infinite)
     # loop forever (or until receiving None)
     for text in iter(inq.get, None):
-        inq.task_done()
         outq.put(match(text))
 
 def match(text):
@@ -64,11 +63,16 @@ def match(text):
     # workaround for bad OCR:
     #text = text.replace('ı', 'i')
     #text = text.replace(']', 'I')
-    result = requests.post(
-        os.environ['SERVICE_URL'], json={'text': text},
-        auth=requests.auth.HTTPBasicAuth(
-            os.environ['SERVICE_LGN'],
-            os.environ['SERVICE_PWD']))
+    try:
+        result = requests.post(
+            os.environ['SERVICE_URL'], json={'text': text},
+            timeout=SERVICE_TIMEOUT,
+            auth=requests.auth.HTTPBasicAuth(
+                os.environ['SERVICE_LGN'],
+                os.environ['SERVICE_PWD']))
+    except requests.exceptions.Timeout:
+        LOG.warning("timeout for request: %s", text)
+        return text, 'ADDRESS_NONE', 1.0
     # should have result ADDRESS_ZIP_CITY
     # "Irgendwas 50667 Köln"
     # should have result ADDRESS_STREET_HOUSENUMBER_ZIP_CITY
@@ -267,19 +271,14 @@ class ClassifyAddressText(Processor):
                     for this_line, prev_line in pairwise(reversed(last_lines)):
                         for this_text in this_line.texts:
                             self.taskq.put(this_text + text)
-                        self.taskq.join() # FIXME just workaround bug in queue syncing here
                         this_text, this_class, this_conf = None, 'ADDRESS_NONE', None
                         cancelled = False
                         for _ in this_line.texts:
-                            try:
-                                if cancelled:
-                                    self.doneq.get(True, SERVICE_TIMEOUT)
-                                    continue
-                                # get textual prediction
-                                alt_text, alt_class, alt_conf = self.doneq.get(True, SERVICE_TIMEOUT)
-                            except Empty:
-                                LOG.error("No text classification result after %ds (qsize=%d)", SERVICE_TIMEOUT, self.doneq.qsize())
+                            if cancelled:
+                                self.doneq.get()
                                 continue
+                            # get textual prediction
+                            alt_text, alt_class, alt_conf = self.doneq.get()
                             if isbetter(alt_class, this_class):
                                 this_text, this_class, this_conf = alt_text, alt_class, alt_conf
                             if isbetter(this_class, class_):
