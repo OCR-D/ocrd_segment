@@ -115,4 +115,3 @@ def ocrd_segment_classify_formdata_dummy(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_postcorrect_formdata(*args, **kwargs):
     return ocrd_cli_wrap_processor(PostCorrectFormData, *args, **kwargs)
-

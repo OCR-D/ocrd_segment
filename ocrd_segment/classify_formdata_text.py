@@ -23,9 +23,9 @@ from ocrd_models.ocrd_page import (
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
-from .config import OCRD_TOOL
-
 from maskrcnn_cli.formdata import FIELDS
+
+from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-classify-formdata-text'
 
@@ -1016,7 +1016,6 @@ class ClassifyFormDataText(Processor):
             self.setup()
 
     def setup(self):
-        LOG = getLogger('processor.ClassifyFormDataLayout')
         self.taskq = mp.Queue()
         self.doneq = mp.Queue()
         self.nproc = self.parameter['num_processes']
@@ -1130,12 +1129,12 @@ class ClassifyFormDataText(Processor):
                         numsegments += 1
                         # run (fuzzy, deep) text classification
                         # FIXME: pass confs as well, use to weight matches somehow
-                        for i in range(self.nproc):
+                        for _ in range(self.nproc):
                             self.taskq.put((segment.texts,
                                             'word' if isinstance(segment, WordType) else
                                             'line',
                                             segment.id))
-                        for class_id, score, match in itertools.chain.from_iterable(
+                        for class_id, score, text in itertools.chain.from_iterable(
                                 self.doneq.get() for i in range(self.nproc)):
                             nummatches += 1
                             mark_segment(segment, FIELDS[class_id])
@@ -1146,7 +1145,7 @@ class ClassifyFormDataText(Processor):
                                 region_new = TextRegionType(id=region_id, Coords=segment.Coords, type_='other')
                                 line_new = TextLineType(id=region_id + '_line', Coords=segment.Coords,
                                                         custom='subtype:target=' + category)
-                                equiv_new = TextEquivType(Unicode=KEYS[category].get(match),
+                                equiv_new = TextEquivType(Unicode=KEYS[category].get(text),
                                                           conf=segment.confs[0])
                                 line_new.add_TextEquiv(equiv_new)
                                 region_new.add_TextLine(line_new)

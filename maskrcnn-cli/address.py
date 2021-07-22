@@ -66,11 +66,13 @@ from pycocotools.cocoeval import COCOeval
 from pycocotools import mask as maskUtils
 
 # Import Mask RCNN
+#pylint: disable=wrong-import-position
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
 import tensorflow as tf
 from keras.callbacks import Callback
+#pylint: disable=wrong-import-position
 tf.get_logger().setLevel('ERROR')
 
 ALPHA_TEXT_CHANNEL = 200

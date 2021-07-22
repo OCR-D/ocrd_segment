@@ -16,10 +16,10 @@ from ocrd_models.ocrd_page import to_xml, TextEquivType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
+from maskrcnn_cli.formdata import FIELDS
+
 from .config import OCRD_TOOL
 from .classify_formdata_text import KEYS
-
-from maskrcnn_cli.formdata import FIELDS
 
 TOOL = 'ocrd-segment-postcorrect-formdata'
 

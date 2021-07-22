@@ -2,19 +2,21 @@ from __future__ import absolute_import
 
 import os
 import time
-import numpy as np
-import multiprocessing as mp
 import ctypes
+import multiprocessing as mp
+import numpy as np
 from shapely.geometry import Polygon, asPolygon
 from shapely.ops import unary_union
 from skimage import draw
 import cv2
 from PIL import Image
 
+#pylint: disable=wrong-import-position
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # i.e. error
 from mrcnn import model, utils
 import tensorflow as tf
 import keras.backend as K
+#pylint: disable=wrong-import-position
 tf.get_logger().setLevel('ERROR')
 
 from ocrd_utils import (
@@ -333,7 +335,7 @@ class ClassifyFormDataLayout(Processor):
                         # after another while only one class is active at a time
                         self.add_class(name, i, name)
                 self.arrays = arrays
-                for i, array in enumerate(arrays):
+                for i, _ in enumerate(arrays):
                     self.add_image(categories[i], i, "")
             def load_image(self, image_id):
                 return self.arrays[image_id]

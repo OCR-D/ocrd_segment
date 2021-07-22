@@ -157,7 +157,7 @@ class ClassifyAddressText(Processor):
         # because currently active workers might still produce results:
         while not self.taskq.empty():
             try:
-                self.taskq.get(False)
+                self.taskq.get()
                 self.doneq.put(None)
             except Empty:
                 pass
@@ -298,7 +298,7 @@ class ClassifyAddressText(Processor):
                                 # consuming all follow-up results
                                 self.cancelq()
                                 cancelled = True
-                        if not isbetter(this_class, class_) and not this_class == 'ADDRESS_FULL':
+                        if not isbetter(this_class, class_) and this_class != 'ADDRESS_FULL':
                             # no improvement or no address at all - stop trying with more lines
                             # (but full address may still grow to "fuller" address)
                             break
