@@ -91,17 +91,24 @@ def match(text):
     # TODO: train visual models for soft input and use result['confidence']
     class_ = result['resultClass']
     conf = result['confidence']
-    if class_ != 'ADDRESS_NONE':
-        LOG.debug("text classification result for '%s' is: %s [%.1f]", text, class_, conf)
-        return text, class_, conf
-    # try a few other fallbacks
-    if '·' in text:
-        return match(text.replace('·', ','))
-    if ' - ' in text:
-        return match(text.replace(' - ', ', '))
-    if ' | ' in text:
-        return match(text.replace(' | ', ', '))
-    return text, 'ADDRESS_NONE', 1.0
+    # try a few other variants
+    text2 = text
+    for pattern, replacement in [
+            (' » ', ', '),
+            (' « ', ', '),
+            ('·', ','),
+            (' : ', ', '),
+            (' - ', ', '),
+            (' | ', ', '),
+    ]:
+        if pattern in text2:
+            text2 = text2.replace(pattern, replacement)
+    if text2 != text:
+        text2, class2, conf2 = match(text2)
+        if isbetter(class2, class_):
+            text, class_, conf = text2, class2, conf2
+    LOG.debug("text classification result for '%s' is: %s [%.1f]", text, class_, conf)
+    return text, class_, conf
 
 def isbetter(class1, class2):
     """Is class1 strictly more informative than class2?"""
@@ -291,9 +298,9 @@ class ClassifyAddressText(Processor):
                                 # consuming all follow-up results
                                 self.cancelq()
                                 cancelled = True
-                        #if not isbetter(this_class, class_):
-                        if this_class == 'ADDRESS_NONE':
+                        if not isbetter(this_class, class_) and not this_class == 'ADDRESS_FULL':
                             # no improvement or no address at all - stop trying with more lines
+                            # (but full address may still grow to "fuller" address)
                             break
                         LOG.info("Line '%s' ['%s'] is an %s", this_line.id, this_text, this_class)
                         nummatches += 1
