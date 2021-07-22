@@ -16,7 +16,7 @@ from ocrd_models.ocrd_page import TextLineType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
-from maskrcnn_cli.formdata import ALPHA_CTXT_CHANNEL, ALPHA_TEXT_CHANNEL
+from maskrcnn_cli.formdata import ALPHA_CTXT_CHANNEL, ALPHA_TEXT_CHANNEL, FIELDS
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-formdata'
@@ -76,6 +76,9 @@ class ExtractFormData(Processor):
         categories = self.parameter['categories']
         context_type = self.parameter['context-type']
         target_type = self.parameter['target-type']
+        if not categories:
+            for i, cat in enumerate(FIELDS):
+                categories.append({'id': i, 'name': cat or 'BG'})
         
         # pylint: disable=attribute-defined-outside-init
         i = 0
@@ -118,10 +121,22 @@ class ExtractFormData(Processor):
             for region in page.get_AllRegions(classes=['Text']):
                 if region.get_type() == context_type:
                     fill = ALPHA_CTXT_CHANNEL # LAREX formatting (@type=page-number)
-                elif region.get_type() == 'other' and categories[-1]['name'] in get_context(region):
+                elif region.get_type() == 'other' and any(
+                        cat['name'] in get_context(region)
+                        for cat in categories):
                     fill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
                 else:
                     fill = ALPHA_TEXT_CHANNEL
+                if region.get_type() == target_type:
+                    category = categories[-1]['name']
+                    class_id = categories[-1]['id']
+                elif region.get_type() == 'other':
+                    category, class_id = next(((cat['name'], cat['id'])
+                                               for cat in categories
+                                               if cat['name'] in get_target(region)),
+                                              ('', 0))
+                else:
+                    category, class_id = '', 0
                 if not region.get_TextLine():
                     LOG.warning('text region "%s" does not contain text lines on page "%s"',
                                 region.id, page_id)
@@ -130,10 +145,14 @@ class ExtractFormData(Processor):
                                                      Coords=region.get_Coords()))
                 # add to mask image (alpha channel for input image)
                 for line in region.get_TextLine():
-                    if categories[-1]['name'] in get_context(line):
+                    if any(cat['name'] in get_context(line) for cat in categories):
                         lfill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
                     else:
                         lfill = fill
+                    if any(cat['name'] in get_target(line) for cat in categories):
+                        category, class_id = next((cat['name'], cat['id'])
+                                                  for cat in categories
+                                                  if cat['name'] in get_target(line))
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
@@ -141,14 +160,13 @@ class ExtractFormData(Processor):
                     if lfill == ALPHA_CTXT_CHANNEL:
                         continue # already fully marked
                     for word in line.get_Word():
-                        if categories[-1]['name'] in get_context(word):
+                        if any(cat['name'] in get_context(word) for cat in categories):
                             # OCRD formatting (@custom=subtype:context=...)
                             polygon = coordinates_of_segment(word, page_image, page_coords)
                             # draw word mask:
                             ImageDraw.Draw(page_image_mask).polygon(
                                 list(map(tuple, polygon.tolist())), fill=ALPHA_CTXT_CHANNEL)
-                if region.get_type() != target_type and not (
-                        region.get_type() == 'other' and categories[-1]['name'] in get_target(region)):
+                if not category:
                     continue
                 # add to region JSON (output segmentation)
                 polygon = coordinates_of_segment(
@@ -159,7 +177,7 @@ class ExtractFormData(Processor):
                 poly = Polygon(polygon)
                 area = poly.area
                 description.setdefault('regions', []).append(
-                    { 'type': region.get_type(),
+                    { 'type': region.get_type() + ':' + category,
                       'coords': polygon,
                       'area': area,
                       'features': page_coords['features'],
@@ -174,7 +192,7 @@ class ExtractFormData(Processor):
                 i += 1
                 annotations.append(
                     {'id': i, 'image_id': num_page_id,
-                     'category_id': categories[-1]['id'],
+                     'category_id': class_id,
                      'segmentation': polygon2,
                      'area': area,
                      'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
