@@ -389,6 +389,7 @@ class ClassifyAddressLayout(Processor):
                 LOG.info("Detected %s region '%s' on page '%s'",
                          name, region_id, page_id)
                 has_address = False
+                neighbours = []
                 # remove overlapping existing regions
                 region_poly = Polygon(coordinates_of_segment(region, page_image, page_coords))
                 for neighbour, neighpoly in zip(allregions, allpolys):
@@ -398,39 +399,13 @@ class ClassifyAddressLayout(Processor):
                         neighpoly.within(region_poly.buffer(scale)) or
                         (neighpoly.intersects(region_poly) and (
                             neighpoly.context.almost_equals(region_poly) or
-                            neighpoly.context.intersection(region_poly).area > 0.8 * neighpoly.context.area))):
-                        LOG.debug("removing redundant region '%s' in favour of '%s'",
+                            neighpoly.context.intersection(region_poly).area >= 0.5 * neighpoly.context.area))):
+                        LOG.debug("found redundant region '%s' for '%s'",
                                   neighbour.id, region.id)
-                        # re-assign text lines
-                        line_no = len(region.get_TextLine())
-                        for line in neighbour.get_TextLine():
-                            if line.get_custom() and line.get_custom().startswith('subtype: ADDRESS_'):
-                                has_address = True
-                            LOG.debug("stealing text line '%s'", line.id)
-                            line.id = region.id + '_line%02d' % line_no
-                            line_no += 1
-                            region.add_TextLine(line)
-                            line_poly = Polygon(coordinates_of_segment(
-                                line, page_image, page_coords))
-                            if not line_poly.within(region_poly):
-                                region_poly = line_poly.union(region_poly)
-                                if region_poly.type == 'MultiPolygon':
-                                    region_poly = region_poly.convex_hull
-                                region_polygon = coordinates_for_segment(
-                                    region_poly.exterior.coords[:-1], page_image, page_coords)
-                                region.get_Coords().points = points_from_polygon(region_polygon)
-                        region.set_TextEquiv([TextEquivType(Unicode='\n'.join(
-                            line.get_TextEquiv()[0].Unicode for line in region.get_TextLine()
-                            if line.get_TextEquiv()))])
-                        # don't re-assign by another address detection
-                        oldregions.append(neighbour)
-                        # remove old region
-                        neighbour.parent_object_.TextRegion.remove(neighbour)
-                        if neighbour.id in reading_order:
-                            roelem = reading_order[neighbour.id]
-                            roelem.set_regionRef(region.id)
-                            reading_order[region.id] = roelem
-                            del reading_order[neighbour.id]
+                        if any(line.get_custom() and line.get_custom().startswith('subtype: ADDRESS_')
+                               for line in neighbour.TextLine or []):
+                            has_address = True
+                        neighbours.append(neighbour)
                     elif neighpoly.crosses(region_poly):
                         LOG.debug("ignoring crossing region '%s' for '%s'",
                                   neighbour.id, region.id)
@@ -438,11 +413,43 @@ class ClassifyAddressLayout(Processor):
                         LOG.debug("ignoring overlapping region '%s' for '%s'",
                                   neighbour.id, region.id)
                 # safe-guard against ghost detections:
-                if has_address:
-                    page.add_TextRegion(region)
-                else:
+                if not has_address:
                     LOG.info("Ignoring %s region '%s' without any address lines",
                              name, region_id)
+                    continue
+                for neighbour in neighbours:
+                    # don't re-assign by another address detection
+                    oldregions.append(neighbour)
+                    # re-assign text lines
+                    line_no = len(region.get_TextLine())
+                    for line in neighbour.get_TextLine():
+                        LOG.debug("stealing text line '%s'", line.id)
+                        line.id = region.id + '_line%02d' % line_no
+                        line_no += 1
+                        region.add_TextLine(line)
+                        line_poly = Polygon(coordinates_of_segment(
+                            line, page_image, page_coords))
+                        if not line_poly.within(region_poly):
+                            region_poly = line_poly.union(region_poly)
+                            if region_poly.type == 'MultiPolygon':
+                                region_poly = region_poly.convex_hull
+                            region_polygon = coordinates_for_segment(
+                                region_poly.exterior.coords[:-1], page_image, page_coords)
+                            region.get_Coords().points = points_from_polygon(region_polygon)
+                        LOG.info("Removing redundant region '%s' for '%s'",
+                                  neighbour.id, region.id)
+                        region.set_TextEquiv([TextEquivType(Unicode='\n'.join(
+                        line.get_TextEquiv()[0].Unicode
+                        for line in region.get_TextLine()
+                        if line.get_TextEquiv()))])
+                    # remove old region
+                    neighbour.parent_object_.TextRegion.remove(neighbour)
+                    if neighbour.id in reading_order:
+                        roelem = reading_order[neighbour.id]
+                        roelem.set_regionRef(region.id)
+                        reading_order[region.id] = roelem
+                        del reading_order[neighbour.id]
+                page.add_TextRegion(region)
 
             file_id = make_file_id(input_file, self.output_file_grp)
             file_path = os.path.join(self.output_file_grp,
