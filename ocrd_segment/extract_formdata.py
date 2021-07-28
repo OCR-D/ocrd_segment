@@ -130,13 +130,15 @@ class ExtractFormData(Processor):
                 if region.get_type() == target_type:
                     category = categories[-1]['name']
                     class_id = categories[-1]['id']
+                    score = 1.0
                 elif region.get_type() == 'other':
                     category, class_id = next(((cat['name'], cat['id'])
                                                for cat in categories
                                                if cat['name'] in get_target(region)),
                                               ('', 0))
+                    score = region.get_Coords().get_conf() or 1.0
                 else:
-                    category, class_id = '', 0
+                    category, class_id, score = '', 0, 1.0
                 if not region.get_TextLine():
                     LOG.warning('text region "%s" does not contain text lines on page "%s"',
                                 region.id, page_id)
@@ -153,6 +155,7 @@ class ExtractFormData(Processor):
                         category, class_id = next((cat['name'], cat['id'])
                                                   for cat in categories
                                                   if cat['name'] in get_target(line))
+                        score = line.get_Coords().get_conf() or score
                     polygon = coordinates_of_segment(line, page_image, page_coords)
                     # draw line mask:
                     ImageDraw.Draw(page_image_mask).polygon(
@@ -196,6 +199,7 @@ class ExtractFormData(Processor):
                      'segmentation': polygon2,
                      'area': area,
                      'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
+                     'score': score,
                      'iscrowd': 0})
             # write raw+mask RGBA PNG
             if page_image.mode.startswith('I') or page_image.mode == 'F':
