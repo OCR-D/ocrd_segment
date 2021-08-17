@@ -327,7 +327,7 @@ class ClassifyAddressLayout(Processor):
                 if score < best[cat]:
                     LOG.debug("reassigning instance for %s with non-maximum score to address-contact",
                               name)
-                    cat = 3
+                    name = "address-contact"
                 mask = preds['masks'][:,:,i]
                 area = np.count_nonzero(mask)
                 bbox = np.around(preds['rois'][i])
