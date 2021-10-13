@@ -245,6 +245,35 @@ class SegmapDropout(imgaug.augmenters.meta.Augmenter):
     def get_parameters(self):
         return [self.p]
 
+class SegmapEnsureContext(imgaug.augmenters.meta.Augmenter):
+    """Augment by dropping instances or image alpha if either is empty.
+
+    Deterministic augmenter that takes instance masks
+    (in the form of segmentation maps with bg as index 0) and
+    - always drops all instances by setting its output segmap / mask to bg,
+      if its input 5th / context channel is 0 everywhere, and
+    - always sets its input 5th / context channel to 0 everywhere,
+      if there are no instances in the output segmap / mask.
+    This is supposed to help strictly requiring context for targets,
+    and ignore empty pages that have (automatic) context.
+    """
+    def __init__(self, name=None, **kwargs):
+        super(SegmapEnsureContext, self).__init__(name=name, **kwargs)
+    def _augment_batch_(self, batch, random_state, parents, hooks):
+        for i in range(batch.nb_rows):
+            image = batch.images[i]
+            segmap = batch.segmentation_maps[i].arr
+            assert segmap.shape[-1] == 1, "segmentation map is not in argmax form"
+            ninstances = segmap.max()
+            hascontext = np.any(image[:,:,4])
+            if ninstances and not hascontext:
+                segmap[:,:,:] = 0 # set to bg
+                batch.segmentation_maps[i].arr = segmap
+            elif hascontext and not ninstances:
+                image[:,:,4] = 0 # set cmask=0
+                batch.images[i] = image
+        return batch
+
 # FIXME: instead of cmask dropout, here we need cmask multiplication
 # (randomly extend cmask to tmask>0 areas that contain the same text)
 class SegmapDropoutLines(imgaug.augmenters.meta.Augmenter):
@@ -1092,6 +1121,7 @@ def main():
             #augmentation = None
             #augmentation = SegmapDropout(0.2)
             augmentation = imgaug.augmenters.Sequential([
+                SegmapEnsureContext(),
                 SegmapDropout(0.3),
                 SegmapBlackoutLines(0.1)])
             # augmentation = imgaug.augmenters.Sequential([
