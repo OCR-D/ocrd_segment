@@ -949,6 +949,8 @@ def main():
                               help='ratio of train-set in random train/test split (default=0.7 equals 70%%)')
     train_parser.add_argument('--seed', required=False, type=int, default=42, metavar="NUM",
                               help='seed value for random train/test split')
+    train_parser.add_argument('--train-seed', required=False, type=int, default=None, metavar="NUM",
+                              help='seed value for random augmentation and shuffling of samples')
     train_parser.add_argument('--exclude', required=False, default=None, metavar="<LAYER-LIST>",
                               help="Layer names to exclude when loading weights (comma-separated, or 'heads')")
     train_parser.add_argument('--depth', required=False, default=None, metavar="DEPTH-SPEC",
@@ -1119,17 +1121,19 @@ def main():
             print("Running COCO training on {} train / {} val images.".format(
                 dataset_train.num_images, dataset_val.num_images))
             #augmentation = None
-            #augmentation = SegmapDropout(0.2)
+            #augmentation = SegmapDropout(p=0.2)
             augmentation = imgaug.augmenters.Sequential([
                 SegmapEnsureContext(),
-                SegmapDropout(0.3),
-                SegmapBlackoutLines(0.1)])
+                SegmapDropout(p=0.3, seed=args.train_seed),
+                SegmapBlackoutLines(p=0.1, seed=args.train_seed)])
             # augmentation = imgaug.augmenters.Sequential([
             #     SaveDebugImage('before-augmentation'),
             #     SegmapDropout(0.3),
             #     SegmapBlackoutLines(0.1),
             #     SaveDebugImage('after-augmentation')])
             print("Augmenting with: {}".format(augmentation))
+            # extra seed for shuffling samples during epochs
+            np.random.seed(args.train_seed)
 
             # from MaskRCNN.train:
             def layers(depth, add='conv1'):
