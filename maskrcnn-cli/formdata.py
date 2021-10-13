@@ -204,6 +204,7 @@ class InferenceConfig(CocoConfig):
     #  pre-/postprocessing and GPU prediction in parallel.)
     GPU_COUNT = 1
     IMAGES_PER_GPU = 4
+    DETECTION_MIN_CONFIDENCE = 0.2
 
 ############################################################
 #  Image/Segmentation Augmentation
