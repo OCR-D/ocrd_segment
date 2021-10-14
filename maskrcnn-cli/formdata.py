@@ -274,6 +274,8 @@ class SegmapEnsureContext(imgaug.augmenters.meta.Augmenter):
                 image[:,:,4] = 0 # set cmask=0
                 batch.images[i] = image
         return batch
+    def get_parameters(self):
+        return []
 
 # FIXME: instead of cmask dropout, here we need cmask multiplication
 # (randomly extend cmask to tmask>0 areas that contain the same text)
