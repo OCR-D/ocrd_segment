@@ -369,6 +369,7 @@ KEYWORDS = { # FIXME We need a data-driven model for this (including confidence)
         "Gesamteinheiten",
         "gesamte Einheiten",
         NUMBER,
+        "Verbrauchskosten",
         "Warmwasser",
     },
     "kaltwasser_fuer_warmwasser": {
