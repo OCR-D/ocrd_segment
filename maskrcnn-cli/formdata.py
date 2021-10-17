@@ -76,9 +76,6 @@ from keras.callbacks import Callback
 #pylint: disable=wrong-import-position
 tf.get_logger().setLevel('ERROR')
 
-ALPHA_TEXT_CHANNEL = 200
-ALPHA_CTXT_CHANNEL = 255
-
 ############################################################
 #  Configurations
 ############################################################
@@ -121,6 +118,11 @@ FIELDS = [None,
           "nebenkosten_messgeraet_miete",
           "nebenkosten_messung_abrechnung",
 ]
+
+TEXT_CATEGORY = len(FIELDS)
+CTXT_CATEGORY = len(FIELDS) + 1
+# NUM_CATEGORY = len(FIELDS) + 2
+# UNIT_CATEGORY = len(FIELDS) + 3
 
 # if not overriden by --depth, use multi-staged training (n-th epoch, layers):
 STAGES = [(40, 'heads'),
@@ -377,15 +379,13 @@ class SegmapBlackoutLines(imgaug.augmenters.meta.Augmenter):
         return [self.p, self.padding]
 
 class SaveDebugImage(imgaug.augmenters.meta.Augmenter):
-    """Augment by randomly dropping instances' first line from image alpha.
+    """Augment by creating plots of image and context+target segments by side effect.
 
     Augmenter that takes instance masks
     (in the form of segmentation maps with bg as index 0),
-    and draws them on the image, reducing tmask/cmask to alpha
-    (by setting coloring output segmap / mask and
-     by setting input alpha channel to 255 if cmask else 200 if tmask else 0).
-    These images are written as temporary files.
-    Use them for debugging only (RGB, not RGBA as in CocoDataset).
+    and draws them on the image, converting tmask/cmask
+    to pseudo-segments of extra classes.
+    These images are written as temporary files (for debugging).
     (The batch itself is not modified.)
     """
     def __init__(self, title='images',
@@ -399,23 +399,23 @@ class SaveDebugImage(imgaug.augmenters.meta.Augmenter):
         self.title = title
     def _augment_batch_(self, batch, random_state, parents, hooks):
         images = []
+        segmaps = []
         for i in range(batch.nb_rows):
             img = batch.images[i]
-            # if tmask == 0, set RGB to 255 (white)
-            # elif cmask == 0, scale from 0..255 to 200..255 (gray)
-            # else keep full contrast
+            segmap = batch.segmentation_maps[i].arr.copy()
             image = img[:,:,:3]
             tmask = img[:,:,3]
             cmask = img[:,:,4]
-            # print("image with %f%% text with %f%% context" % (
-            #     100.0 * np.count_nonzero(tmask == 255)/np.prod(tmask.shape),
-            #     100.0 * np.count_nonzero(cmask == 255)/np.count_nonzero(tmask == 255)))
-            #image[tmask < 255] = 255
-            image[cmask < 255] = 200 + 55/255 * image[cmask < 255]
+            # convert context mask input channel back to segmentation (as in COCO)
+            segmap[(cmask > 0) & (segmap[:,:,0] == 0)] = 38
+            # convert text mask input channel back to segmentation (as in COCO)
+            segmap[(tmask > 0) & (segmap[:,:,0] == 0)] = 37
+            segmap = imgaug.augmentables.segmaps.SegmentationMapsOnImage(segmap, shape=img.shape)
             images.append(image)
+            segmaps.append(segmap)
         image = imgaug.augmenters.debug.draw_debug_image(
             images,
-            segmentation_maps=batch.segmentation_maps)
+            segmentation_maps=segmaps)
         from imageio import imwrite
         from tempfile import mkstemp
         from os import close
@@ -563,6 +563,9 @@ class CocoDataset(utils.Dataset):
         # Build mask of shape [height, width, instance_count] and list
         # of class IDs that correspond to each channel of the mask.
         for annotation in annotations:
+            if annotation['category_id'] in [CTXT_CATEGORY, TEXT_CATEGORY]:
+                # skip context/text segments (will be used as extra channels in load_image)
+                continue
             class_id = self.map_source_class_id(
                 "{}.{}".format(image_info["source"], annotation['category_id']))
             if class_id is None:
@@ -602,17 +605,22 @@ class CocoDataset(utils.Dataset):
         # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
             image = skimage.color.gray2rgb(image)
-        # If has no alpha channel, complain
-        if image.shape[-1] != 4:
-            raise Exception('image %d ("%s") has no alpha channel' % (
-                image_id, self.image_info[image_id]['path']))
-        # Convert from RGBA to RGB+Text+Context
-        tmask = image[:,:,3:4] > 0
-        cmask = image[:,:,3:4] == ALPHA_CTXT_CHANNEL
-        image = np.concatenate([image[:,:,:3],
-                                255 * tmask.astype(np.uint8),
-                                255 * cmask.astype(np.uint8)],
-                               axis=2)
+        if image.shape[2] > 3:
+            image = image[:,:,:3]
+        size = image.shape[:2]
+        # Build text+context mask of shape [height, width, 2], then add to RGB
+        cmask = np.zeros(size + (1,), np.uint8) # context
+        tmask = np.zeros(size + (1,), np.uint8) # text vs non-text
+        # Pick from special COCO segments
+        annotations = self.image_info[image_id]["annotations"]
+        for annotation in annotations:
+            if annotation['category_id'] == CTXT_CATEGORY:
+                m = self.annToMask(annotation, *size).astype(np.bool)
+                cmask[m] = 255 # todo: context confidence?
+            if annotation['category_id'] == TEXT_CATEGORY:
+                m = self.annToMask(annotation, *size).astype(np.bool)
+                tmask[m] = 255 # todo: textline/OCR confidence?
+        image = np.concatenate([image, tmask, cmask], axis=2)
         return image
     
     # The following two functions are from pycocotools with a few changes.
@@ -1127,7 +1135,8 @@ def main():
             #augmentation = SegmapDropout(p=0.2)
             augmentation = imgaug.augmenters.Sequential([
                 SegmapEnsureContext(),
-                SegmapDropout(p=0.3, seed=args.train_seed),
+                #SaveDebugImage(),
+                SegmapDropout(p=0.1, seed=args.train_seed),
                 SegmapBlackoutLines(p=0.1, seed=args.train_seed)])
             # augmentation = imgaug.augmenters.Sequential([
             #     SaveDebugImage('before-augmentation'),
@@ -1284,6 +1293,14 @@ def main():
                                      limit=valset)
             del coco
         dataset_merged.prepare()
+        if args.sort and args.combine:
+            # remove context markers from combined datasets
+            # (contexts only make sense for single class images)
+            for image_id in dataset_merged.image_ids:
+                image_info = dataset_merged.image_info[image_id]
+                if 'annotations' in image_info:
+                    image_info['annotations'] = [ann for ann in image_info['annotations']
+                                                 if ann['category_id'] not in [CTXT_CATEGORY, TEXT_CATEGORY]]
         coco = COCO()
         coco.dataset = dataset_merged.dump_coco() #os.path.dirname(args.dataset_merged)
         coco.createIndex()

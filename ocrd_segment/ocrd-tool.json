@@ -5,7 +5,7 @@
     "ocrd-segment-extract-formdata": {
       "executable": "ocrd-segment-extract-formdata",
       "categories": ["Image preprocessing"],
-      "description": "Extract page segmentation as page images (deskewed according to `/Page/@orientation` and cropped+masked along `/Page/Border`) with alpha channel color-coding textline masks [for mrcnn input], and as JSON (including region coordinates/classes and meta-data) + COCO detection format JSON (for all pages) [for mrcnn output]. Output fileGrp format is `image,json`.",
+      "description": "Extract page segmentation as page images (deskewed according to `/Page/@orientation` and cropped+masked along `/Page/Border`) and as JSON (including region coordinates/classes and meta-data) + COCO detection format JSON (for all pages) [for mrcnn input/context and output/target]. Output fileGrp format is `image,json`.",
       "input_file_grp": [
         "OCR-D-SEG-LINE",
         "OCR-D-GT-SEG-LINE",
@@ -17,22 +17,11 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
-        "categories": {
-          "type": "array",
-          "default": [],
-          "description": "List of target classes in COCO format (dict with numeric `id`, string `name` and string `source`). IDs may start with zero and collide with other data sources. Categories are extracted from `TextRegion/@type`."
-        },
-        "context-type": {
+        "source": {
           "type": "string",
-          "enum": ["paragraph", "heading", "caption", "header", "footer", "page-number", "drop-capital", "credit", "floating", "signature-mark", "catch-word", "marginalia", "footnote", "footnote-continued", "endnote", "TOC-entry", "list-label", "other"],
-          "default": "page-number",
-          "description": "`TextRegion/@type` used to mark context [mrcnn input] regions."
-        },
-        "target-type": {
-          "type": "string",
-          "enum": ["paragraph", "heading", "caption", "header", "footer", "page-number", "drop-capital", "credit", "floating", "signature-mark", "catch-word", "marginalia", "footnote", "footnote-continued", "endnote", "TOC-entry", "list-label", "other"],
-          "default": "paragraph",
-          "description": "`TextRegion/@type` used to mark target [mrcnn output] regions."
+          "default": "Sonstige",
+          "enum": ["Sonstige", "Brunata", "Ista", "Techem", "BFW", "Kalo", "Minol"],
+          "description": "Dataset source to annotate along with categories."
         }
       }
     },

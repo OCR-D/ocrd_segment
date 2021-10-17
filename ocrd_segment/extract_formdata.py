@@ -16,7 +16,7 @@ from ocrd_models.ocrd_page import TextLineType
 from ocrd_modelfactory import page_from_file
 from ocrd import Processor
 
-from maskrcnn_cli.formdata import ALPHA_CTXT_CHANNEL, ALPHA_TEXT_CHANNEL, FIELDS
+from maskrcnn_cli.formdata import FIELDS, CTXT_CATEGORY, TEXT_CATEGORY
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-extract-formdata'
@@ -69,19 +69,20 @@ class ExtractFormData(Processor):
         LOG = getLogger('processor.ExtractFormData')
         assert_file_grp_cardinality(self.output_file_grp, 2, msg="(masked image, JSON GT)")
         image_file_grp, json_file_grp = self.output_file_grp.split(',')
+        source = self.parameter['source']
 
         # COCO: init data structures
         images = list()
-        annotations = list()
-        categories = self.parameter['categories']
-        context_type = self.parameter['context-type']
-        target_type = self.parameter['target-type']
-        if not categories:
-            for i, cat in enumerate(FIELDS):
-                categories.append({'id': i, 'name': cat or 'BG'})
+        categories = dict()
+        annotations = dict()
+        for i, cat in enumerate(FIELDS[1:], 1):
+            categories[i] = [{'id': CTXT_CATEGORY, 'name': 'CTXT'},
+                             {'id': TEXT_CATEGORY, 'name': 'TEXT'},
+                             {'id': 0, 'name': 'BG'},
+                             {'id': i, 'name': cat, 'source': source}]
+            annotations[i] = list()
         
         # pylint: disable=attribute-defined-outside-init
-        i = 0
         for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
             num_page_id = n
@@ -93,14 +94,14 @@ class ExtractFormData(Processor):
                 page, page_id,
                 feature_filter='binarized',
                 transparency=False)
+            if page_image.mode == '1':
+                page_image = page_image.convert('L')
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
                 if page_image_info.resolutionUnit == 'cm':
                     dpi = round(dpi * 2.54)
             else:
                 dpi = None
-            # prepare mask image (alpha channel for input image)
-            page_image_mask = Image.new(mode='L', size=page_image.size, color=0)
             # prepare region JSON (output segmentation)
             description = {'angle': page.get_orientation()}
             def get_context(segment):
@@ -119,70 +120,23 @@ class ExtractFormData(Processor):
                         if cat.startswith('subtype:target=')]
             # iterate through all regions that could have lines
             for region in page.get_AllRegions(classes=['Text']):
-                if region.get_type() == context_type:
-                    fill = ALPHA_CTXT_CHANNEL # LAREX formatting (@type=page-number)
-                elif region.get_type() == 'other' and any(
-                        cat['name'] in get_context(region)
-                        for cat in categories):
-                    fill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
-                else:
-                    fill = ALPHA_TEXT_CHANNEL
-                if region.get_type() == target_type:
-                    category = categories[-1]['name']
-                    class_id = categories[-1]['id']
-                    score = 1.0
-                elif region.get_type() == 'other':
-                    category, class_id = next(((cat['name'], cat['id'])
-                                               for cat in categories
-                                               if cat['name'] in get_target(region)),
-                                              ('', 0))
-                    score = region.get_Coords().get_conf() or 1.0
-                else:
-                    category, class_id, score = '', 0, 1.0
-                if not region.get_TextLine():
-                    LOG.warning('text region "%s" does not contain text lines on page "%s"',
-                                region.id, page_id)
-                    # happens when annotating a new region in LAREX
-                    region.add_TextLine(TextLineType(id=region.id + '_line',
-                                                     Coords=region.get_Coords()))
-                # add to mask image (alpha channel for input image)
-                for line in region.get_TextLine():
-                    if any(cat['name'] in get_context(line) for cat in categories):
-                        lfill = ALPHA_CTXT_CHANNEL # OCRD formatting (@custom=subtype:context=...)
-                    else:
-                        lfill = fill
-                    if any(cat['name'] in get_target(line) for cat in categories):
-                        category, class_id = next((cat['name'], cat['id'])
-                                                  for cat in categories
-                                                  if cat['name'] in get_target(line))
-                        score = line.get_Coords().get_conf() or score
-                    polygon = coordinates_of_segment(line, page_image, page_coords)
-                    # draw line mask:
-                    ImageDraw.Draw(page_image_mask).polygon(
-                        list(map(tuple, polygon.tolist())), fill=lfill)
-                    if lfill == ALPHA_CTXT_CHANNEL:
-                        continue # already fully marked
-                    for word in line.get_Word():
-                        if any(cat['name'] in get_context(word) for cat in categories):
-                            # OCRD formatting (@custom=subtype:context=...)
-                            polygon = coordinates_of_segment(word, page_image, page_coords)
-                            # draw word mask:
-                            ImageDraw.Draw(page_image_mask).polygon(
-                                list(map(tuple, polygon.tolist())), fill=ALPHA_CTXT_CHANNEL)
-                if not category:
+                score = region.get_Coords().get_conf() or 1.0
+                polygon = coordinates_of_segment(region, page_image, page_coords)
+                if len(polygon) < 3:
+                    LOG.warning('ignoring region "%s" with only %d points', region.id, len(polygon))
                     continue
-                # add to region JSON (output segmentation)
-                polygon = coordinates_of_segment(
-                    region, page_image, page_coords)
-                polygon2 = polygon.reshape(1, -1).tolist()
-                polygon = polygon.tolist()
-                xywh = xywh_from_polygon(polygon)
-                poly = Polygon(polygon)
-                area = poly.area
+                contexts = get_context(region)
+                targets = get_target(region)
+                for i, cat in enumerate(FIELDS[1:], 1):
+                    if region.get_type() == 'other' and cat in contexts:
+                        add_annotation(annotations, num_page_id, i, CTXT_CATEGORY, polygon, score)
+                    else:
+                        add_annotation(annotations, num_page_id, i, TEXT_CATEGORY, polygon, score)
+                    if region.get_type() == 'other' and cat in targets:
+                        add_annotation(annotations, num_page_id, i, i, polygon, score)
                 description.setdefault('regions', []).append(
-                    { 'type': region.get_type() + ':' + category,
-                      'coords': polygon,
-                      'area': area,
+                    { 'type': region.get_type() + ':' + ','.join(targets),
+                      'coords': polygon.tolist(),
                       'features': page_coords['features'],
                       'DPI': dpi,
                       'region.ID': region.id,
@@ -191,23 +145,37 @@ class ExtractFormData(Processor):
                       'file_grp': self.input_file_grp,
                       'METS.UID': self.workspace.mets.unique_identifier
                     })
-                # COCO: add annotations
-                i += 1
-                annotations.append(
-                    {'id': i, 'image_id': num_page_id,
-                     'category_id': class_id,
-                     'segmentation': polygon2,
-                     'area': area,
-                     'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
-                     'score': score,
-                     'iscrowd': 0})
-            # write raw+mask RGBA PNG
-            if page_image.mode.startswith('I') or page_image.mode == 'F':
-                # workaround for Pillow#4926
-                page_image = page_image.convert('RGB')
-            if page_image.mode == '1':
-                page_image = page_image.convert('L')
-            page_image.putalpha(page_image_mask)
+                if not region.get_TextLine():
+                    LOG.warning('text region "%s" does not contain text lines on page "%s"',
+                                region.id, page_id)
+                    # happens when annotating a new region in LAREX
+                    region.add_TextLine(TextLineType(id=region.id + '_line',
+                                                     Coords=region.get_Coords()))
+                for line in region.get_TextLine():
+                    score = line.get_Coords().get_conf() or 1.0
+                    polygon = coordinates_of_segment(line, page_image, page_coords)
+                    if len(polygon) < 3:
+                        LOG.warning('ignoring line "%s" with only %d points', line.id, len(polygon))
+                        continue
+                    contexts = get_context(line)
+                    targets = get_target(line)
+                    for i, cat in enumerate(FIELDS[1:], 1):
+                        if cat in contexts:
+                            add_annotation(annotations, num_page_id, i, CTXT_CATEGORY, polygon, score)
+                        if cat in targets:
+                            add_annotation(annotations, num_page_id, i, i, polygon, score)
+                    for word in line.get_Word():
+                        score = word.get_Coords().get_conf() or 1.0
+                        polygon = coordinates_of_segment(word, page_image, page_coords)
+                        if len(polygon) < 3:
+                            LOG.warning('ignoring word "%s" with only %d points', word.id, len(polygon))
+                            continue
+                        contexts = get_context(word)
+                        targets = get_target(word)
+                        for i, cat in enumerate(FIELDS[1:], 1):
+                            if cat in contexts:
+                                add_annotation(annotations, num_page_id, i, CTXT_CATEGORY, polygon, score)
+            # annotate cropped+deskewed base image
             file_id = make_file_id(input_file, image_file_grp)
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id,
@@ -236,17 +204,31 @@ class ExtractFormData(Processor):
                 'width': page_image.width,
                 'height': page_image.height})
         
-        # write COCO JSON for all pages
-        file_id = json_file_grp + '.coco'
-        LOG.info('Writing COCO result file "%s" in "%s"', file_id, json_file_grp)
-        self.workspace.add_file(
-            ID='id' + file_id,
-            file_grp=json_file_grp,
-            pageId=None,
-            local_filename=os.path.join(json_file_grp, file_id + '.json'),
-            mimetype='application/json',
-            content=json.dumps(
-                {'categories': categories,
-                 'images': images,
-                 'annotations': annotations},
-                indent=2))
+        # write COCO JSON for all pages and all categories
+        for i, cat in enumerate(FIELDS[1:], 1):
+            file_id = json_file_grp + f'_{i:02d}.' + cat + '.coco'
+            LOG.info('Writing COCO result file "%s" in "%s"', file_id, json_file_grp)
+            self.workspace.add_file(
+                ID='id' + file_id,
+                file_grp=json_file_grp,
+                pageId=None,
+                local_filename=os.path.join(json_file_grp, file_id + '.json'),
+                mimetype='application/json',
+                content=json.dumps(
+                    {'categories': categories[i],
+                     'images': images,
+                     'annotations': annotations[i]},
+                    indent=2))
+
+def add_annotation(annotations, image_id, cat, anncat, polygon, score):
+    xywh = xywh_from_polygon(polygon.tolist())
+    # convert to COCO and add
+    i = 1 + len(annotations[cat])
+    annotations[cat].append(
+        {'id': i, 'image_id': image_id,
+         'category_id': anncat,
+         'segmentation': polygon.reshape(1, -1).tolist(),
+         'area': Polygon(polygon).area,
+         'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
+         'score': score,
+         'iscrowd': 0})
