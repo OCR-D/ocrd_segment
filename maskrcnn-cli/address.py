@@ -829,6 +829,7 @@ def store_coco(coco, filename, dataset_dir='.', anns_only=False):
                 img['file_name'] = file_name[len(prefix):]
             else:
                 img['file_name'] = os.path.join(dataset_dir, file_name)
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, 'w') as outp:
         json.dump(coco.dataset['annotations'] if anns_only else coco.dataset,
                   outp, default=json_safe, indent=2)
@@ -1135,7 +1136,7 @@ def main():
         print("Running COCO prediction on {} images.".format(dataset.num_images))
         results, _ = detect_coco(model, dataset, verbose=True, plot=args.plot)
         coco = COCO()
-        coco.dataset = dataset.dump_coco(os.path.dirname(args.dataset))
+        coco.dataset = dataset.dump_coco()
         coco.createIndex()
         if results:
             coco = coco.loadRes(results)
