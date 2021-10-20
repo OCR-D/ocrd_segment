@@ -256,12 +256,11 @@ class ClassifyAddressLayout(Processor):
                     list(map(tuple, polygon.tolist())),
                     fill=200 if text_class == 'ADDRESS_NONE' else 255)
             # iterate through all regions that could have text/context lines
-            oldregions = []
             allregions = page.get_AllRegions(classes=['Text'], order='reading-order', depth=2)
-            allpolys = [prep(Polygon(coordinates_of_segment(region, page_image, page_coords)))
-                        for region in allregions]
+            alllines = []
             for region in allregions:
                 for line in region.get_TextLine():
+                    alllines.append(line)
                     mark_line(line)
             
             # combine raw with aggregated mask to RGBA array
@@ -305,13 +304,13 @@ class ClassifyAddressLayout(Processor):
                     continue
                 cat = preds['class_ids'][i]
                 score = preds['scores'][i]
-                if cat not in [1,2]:
-                    # only best probs for sndr and rcpt (other can be many)
-                    continue
-                if score > best[cat]:
+                if cat in [3] and score > best[cat]:
+                    # only best probs for sndr and rcpt (contact can be many)
                     best[cat] = score
             if not np.any(best):
                 LOG.warning("Detected no sndr/rcpt address on page '%s'", page_id)
+            newregions = []
+            newpolys = []
             for i in range(len(preds['class_ids'])):
                 cat = preds['class_ids'][i]
                 name = self.categories[cat]
@@ -398,6 +397,7 @@ class ClassifyAddressLayout(Processor):
                 #region_polygon = polygon_from_bbox(bbox[1],bbox[0],bbox[3],bbox[2])
                 if zoomed != 1.0:
                     region_polygon = region_polygon / zoomed
+                region_poly = prep(make_valid(Polygon(region_polygon)))
                 region_polygon = coordinates_for_segment(region_polygon,
                                                          page_image, page_coords)
                 region_polygon = polygon_for_parent(region_polygon, page)
@@ -413,67 +413,75 @@ class ClassifyAddressLayout(Processor):
                                         custom='subtype:' + name)
                 LOG.info("Detected %s region '%s' on page '%s'",
                          name, region_id, page_id)
-                has_address = False
-                neighbours = []
-                # remove overlapping existing regions
-                region_poly = Polygon(coordinates_of_segment(region, page_image, page_coords))
-                for neighbour, neighpoly in zip(allregions, allpolys):
-                    if neighbour in oldregions:
-                        continue
-                    if (neighpoly.within(region_poly) or
-                        neighpoly.within(region_poly.buffer(scale)) or
-                        (neighpoly.intersects(region_poly) and (
-                            neighpoly.context.almost_equals(region_poly) or
-                            neighpoly.context.intersection(region_poly).area >= 0.5 * neighpoly.context.area))):
-                        LOG.debug("found redundant region '%s' for '%s'",
-                                  neighbour.id, region.id)
-                        if any(line.get_custom() and line.get_custom().startswith('subtype: ADDRESS_')
-                               for line in neighbour.TextLine or []):
-                            has_address = True
-                        neighbours.append(neighbour)
-                    elif neighpoly.crosses(region_poly):
-                        LOG.debug("ignoring crossing region '%s' for '%s'",
-                                  neighbour.id, region.id)
-                    elif neighpoly.overlaps(region_poly):
-                        LOG.debug("ignoring overlapping region '%s' for '%s'",
-                                  neighbour.id, region.id)
-                # safe-guard against ghost detections:
-                if not has_address:
-                    LOG.info("Ignoring %s region '%s' without any address lines",
-                             name, region_id)
+                newregions.append(region)
+                newpolys.append(region_poly)
+            # match / re-assign existing text lines to new regions
+            # (each to its largest intersecting candidate)
+            for line in alllines:
+                polygon = coordinates_of_segment(line, page_image, page_coords)
+                linepoly = make_valid(Polygon(polygon))
+                best = None, 0
+                for newreg, newpoly in zip(newregions, newpolys):
+                    if newpoly.intersects(linepoly):
+                        interp = newpoly.context.intersection(linepoly)
+                        if interp.area > best[1]:
+                            best = newreg, interp.area
+                if not best[0] or best[1] < 0.5 * linepoly.area:
+                    # no match for this line
+                    custom = line.get_custom()
+                    if custom and custom.startswith('subtype: ADDRESS_'):
+                        LOG.warning("Keeping %s line '%s' without matching address region",
+                                    custom[9:], line.id)
                     continue
-                for neighbour in neighbours:
-                    # don't re-assign by another address detection
-                    oldregions.append(neighbour)
-                    # re-assign text lines
-                    line_no = len(region.get_TextLine())
-                    for line in neighbour.get_TextLine():
-                        LOG.debug("stealing text line '%s'", line.id)
-                        line.id = region.id + '_line%02d' % line_no
-                        line_no += 1
-                        region.add_TextLine(line)
-                        line_poly = Polygon(coordinates_of_segment(
-                            line, page_image, page_coords))
-                        if not line_poly.within(region_poly):
-                            region_poly = line_poly.union(region_poly)
-                            if region_poly.type == 'MultiPolygon':
-                                region_poly = region_poly.convex_hull
-                            region_polygon = coordinates_for_segment(
-                                region_poly.exterior.coords[:-1], page_image, page_coords)
-                            region.get_Coords().points = points_from_polygon(region_polygon)
-                        LOG.info("Removing redundant region '%s' for '%s'",
-                                  neighbour.id, region.id)
-                        region.set_TextEquiv([TextEquivType(Unicode='\n'.join(
-                        line.get_TextEquiv()[0].Unicode
-                        for line in region.get_TextLine()
-                        if line.get_TextEquiv()))])
-                    # remove old region
-                    neighbour.parent_object_.TextRegion.remove(neighbour)
-                    if neighbour.id in reading_order:
-                        roelem = reading_order[neighbour.id]
-                        roelem.set_regionRef(region.id)
-                        reading_order[region.id] = roelem
-                        del reading_order[neighbour.id]
+                region = best[0]
+                polygon = coordinates_of_segment(region, page_image, page_coords)
+                regpoly = make_valid(Polygon(polygon))
+                LOG.debug("stealing text line '%s' for '%s'", line.id, region.id)
+                region.add_TextLine(line)
+                if not linepoly.within(regpoly):
+                    regpoly = linepoly.union(regpoly)
+                if regpoly.type == 'MultiPolygon':
+                    regpoly = regpoly.convex_hull
+                polygon = coordinates_for_segment(regpoly.exterior.coords[:-1], page_image, page_coords)
+                region.get_Coords().points = points_from_polygon(polygon)
+            # validate new regions and persist the new assignments
+            for region in newregions:
+                # safe-guard against ghost detections:
+                if not region.TextLine:
+                    LOG.info("Ignoring region '%s' without any lines at all", region.id)
+                    continue
+                if not any(line.get_custom() and line.get_custom().startswith('subtype: ADDRESS_')
+                           for line in region.TextLine):
+                    LOG.info("Ignoring region '%s' without any address lines", region.id)
+                    continue
+                # persist the steal
+                for line in region.get_TextLine():
+                    oldreg = line.parent_object_
+                    oldreg.TextLine.remove(line)
+                    if not oldreg.TextLine and not oldreg.TextRegion:
+                        # remove old region
+                        LOG.debug("found redundant region '%s' for '%s'",
+                                  oldreg.id, region.id)
+                        oldreg.parent_object_.TextRegion.remove(oldreg)
+                        if oldreg.id in reading_order:
+                            roelem = reading_order[oldreg.id]
+                            roelem.set_regionRef(region.id)
+                            reading_order[region.id] = roelem
+                            del reading_order[oldreg.id]
+                    else:
+                        # update old region's text content
+                        oldreg.set_TextEquiv([TextEquivType(Unicode='\n'.join(
+                            otherline.get_TextEquiv()[0].Unicode
+                            for otherline in oldreg.get_TextLine()
+                            if otherline.get_TextEquiv()))])
+                # re-order new region's text lines by relative order in original segmentation
+                region.TextLine = sorted(region.TextLine, key=lambda line: alllines.index(line))
+                # update new region's text content
+                region.set_TextEquiv([TextEquivType(Unicode='\n'.join(
+                    line.get_TextEquiv()[0].Unicode
+                    for line in region.get_TextLine()
+                    if line.get_TextEquiv()))])
+                # keep new region
                 page.add_TextRegion(region)
 
             file_id = make_file_id(input_file, self.output_file_grp)
