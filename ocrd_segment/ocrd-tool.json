@@ -716,6 +716,27 @@
       ],
       "steps": ["layout/analysis"],
       "parameters": {
+        "level-of-operation": {
+          "type": "string",
+          "enum": ["region", "line"],
+          "default": "region",
+          "description": "segment hierarchy level to compare GT and predictions at"
+        },
+        "only-fg": {
+          "type": "boolean",
+          "default": false,
+          "description": "only overlap and compare the foregrounds in the binarized image"
+        },
+        "ignore-subtype": {
+          "type": "boolean",
+          "default": false,
+          "description": "on region level, ignore @type differentiation (where applicable)"
+        },
+        "for-categories": {
+          "type": "string",
+          "default": "",
+          "description": "on region level, only compare these region types (comma-separated list; unless `ignore-subtype` is given, append subtypes via `.`; e.g. `TextRegion.page-number,TextRegion.marginalia`)"
+        }
       }
     }
   }
