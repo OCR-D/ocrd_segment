@@ -924,7 +924,7 @@ def store_coco(coco, filename, dataset_dir='.', anns_only=False):
                 img['file_name'] = file_name[len(prefix):]
             else:
                 img['file_name'] = os.path.join(dataset_dir, file_name)
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    os.makedirs(os.path.normpath(os.path.dirname(filename)), exist_ok=True)
     with open(filename, 'w') as outp:
         json.dump(coco.dataset['annotations'] if anns_only else coco.dataset,
                   outp, default=json_safe, indent=2)
