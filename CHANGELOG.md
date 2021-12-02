@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.12]
+
+Changed:
+
+ * evaluate: basic IoU matching, Pr/Rc and mAP/mAR stats via pycocotools
+
 ## [0.1.11]
 
 Fixed:
@@ -112,6 +118,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.12]: ../../compare/v0.1.11...v0.1.12
 [0.1.11]: ../../compare/v0.1.10...v0.1.11
 [0.1.10]: ../../compare/v0.1.9...v0.1.10
 [0.1.9]: ../../compare/v0.1.8...v0.1.9
