@@ -150,9 +150,9 @@ class EvaluateSegmentation(Processor):
            coco_eval.params.catIds = selected
         #coco_eval.params.iouThrs = [.5:.05:.95]
         #coco_eval.params.iouThrs = np.linspace(.3, .95, 14)
-        #coco_eval.params.maxDets = [1000000] # unlimited nr of detections FIXME
-        coco_eval.params.maxDets = [1000000, 1000000, 1000000] # summarize expects 3 levels
-        # coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
+        coco_eval.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
+        #coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
+        #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
         # FIXME: cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
         #        i.e. no way to detect undersegmentation
         # FIXME: somehow measure oversegmentation
