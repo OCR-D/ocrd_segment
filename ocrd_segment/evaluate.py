@@ -124,14 +124,16 @@ class EvaluateSegmentation(Processor):
             selected = [categories.index(cat) for cat in selected if cat in categories]
         LOG.info(f"found {len(annotations_gt)} GT / {len(annotations_dt)} DT segments"
                  f" in {len(categories) - 1} categories for {len(images)} images")
-        def add_ids(entries):
-            for i, entry in enumerate(entries):
+        def add_ids(entries, start=0):
+            for i, entry in enumerate(entries, start):
                 if isinstance(entry, dict):
                     entry['id'] = i
                 else:
                     entries[i] = {'id': i, 'name': entry}
-        for entries in [categories, images, annotations_gt, annotations_dt]:
-            add_ids(entries)
+        add_ids(categories)
+        add_ids(images)
+        add_ids(annotations_gt, 1) # cocoeval expects annotation IDs starting at 1
+        add_ids(annotations_dt, 1) # cocoeval expects annotation IDs starting at 1
         coco_gt = COCO()
         coco_dt = COCO()
         coco_gt.dataset = {'categories': categories, 'images': images,
@@ -170,23 +172,24 @@ class EvaluateSegmentation(Processor):
             cat = categories[catId]
             catName = cat['name']
             # get matches and ious and scores
-            gtMatches = img['gtMatches'][0].astype(np.int) # by lowest overlap threshold
-            dtMatches = img['dtMatches'][0].astype(np.int) # by lowest overlap threshold
-            dtScores = img['dtScores']
-            gtIds = img['gtIds']
-            dtIds = img['dtIds']
-            gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int)
+            # (pick lowest overlap threshold iouThrs[0])
+            gtMatches = img['gtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
+            dtMatches = img['dtMatches'][0].astype(np.int) # from dtind to matching GT annotation id
+            dtScores = img['dtScores'] # from dtind to DT score
+            gtIds = img['gtIds'] # from gtind to GT annotation id
+            dtIds = img['dtIds'] # from dtind to DT annotation id
+            gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int) # from GT annotation id to gtind
             for ind, id_ in enumerate(gtIds):
                 gtIndices[id_] = ind
-            dtIndices = np.zeros(max(dtIds, default=-1) + 1, np.int)
+            dtIndices = np.zeros(max(dtIds, default=-1) + 1, np.int) # from DT annotation id to dtind
             for ind, id_ in enumerate(dtIds):
                 dtIndices[id_] = ind
-            ious = coco_eval.ious[imgId, catId]
+            ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
             # record as dict by pageId / by category
             matches = stats.setdefault('matches', dict())
             imgMatches = matches.setdefault(pageId, dict())
-            imgMatches[catName] = [(annotations_gt[gtIndices[gtind]]['segment_id'],
-                                    annotations_dt[dtid]['segment_id'],
+            imgMatches[catName] = [(annotations_gt[gtIds[gtind] - 1]['segment_id'],
+                                    annotations_dt[dtid - 1]['segment_id'],
                                     ious[dtIndices[dtid], gtind])
                                    for gtind, dtid in enumerate(gtMatches)
                                    if dtid > 0]
