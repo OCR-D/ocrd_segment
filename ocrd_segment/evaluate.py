@@ -3,13 +3,16 @@ from __future__ import absolute_import
 import sys
 import os
 import json
+import click
 import numpy as np
 from skimage import draw
+from PIL import Image
 from shapely.geometry import Polygon
 
 from ocrd import Processor
 from ocrd_utils import (
     getLogger,
+    initLogging,
     assert_file_grp_cardinality,
     xywh_from_polygon,
     polygon_from_points,
@@ -17,6 +20,7 @@ from ocrd_utils import (
     MIMETYPE_PAGE
 )
 from ocrd_modelfactory import page_from_file
+from ocrd_models.ocrd_page import parse as parse_page
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -41,6 +45,7 @@ class EvaluateSegmentation(Processor):
         Then iterate over the element hierarchy down to ``level-of-operation``.
         Aggregate and convert all pages' segmentation (coordinates and classes)
         to COCO:
+
         - On the region level, unless ``ignore-subtype``, differentiate segment
           classes by their `@type`, if applicable.
         - On the region level, unless ``for-categories`` is empty, select only
@@ -100,132 +105,31 @@ class EvaluateSegmentation(Processor):
                            })
             # read annotations from each page recursively (all categories including subtypes)
             # and merge GT and prediction categories
-            for page, annotations in [(page_gt, annotations_gt), (page_dt, annotations_dt)]:
-                for region in page.get_AllRegions(classes=None if level == 'region' else ['Text']):
-                    if level == 'region':
-                        cat = region.__class__.__name__[:-4]
-                        if typed and hasattr(region, 'get_type') and region.get_type():
-                            cat += '.' + region.get_type()
-                        if cat not in categories:
-                            categories.append(cat)
-                        catid = categories.index(cat)
-                        _add_annotation(annotations, region, imgid, catid,
-                                        coords=page_coords if onlyfg else None,
-                                        mask=page_mask if onlyfg else None)
-                        continue
-                    for line in region.get_TextLine():
-                        _add_annotation(annotations, line, imgid, 1,
-                                        coords=page_coords if onlyfg else None,
-                                        mask=page_mask if onlyfg else None)
+            _add_annotations(annotations_gt, page_gt, imgid, categories,
+                             level=level, typed=typed,
+                             coords=page_coords if onlyfg else None,
+                             mask=page_mask if onlyfg else None)
+            _add_annotations(annotations_dt, page_dt, imgid, categories,
+                             level=level, typed=typed,
+                             coords=page_coords if onlyfg else None,
+                             mask=page_mask if onlyfg else None)
 
         if level == 'line':
             categories.append('textline')
         elif selected:
             selected = [categories.index(cat) for cat in selected if cat in categories]
+        _add_ids(categories)
+        _add_ids(images)
+        _add_ids(annotations_gt, 1) # cocoeval expects annotation IDs starting at 1
+        _add_ids(annotations_dt, 1) # cocoeval expects annotation IDs starting at 1
+
         LOG.info(f"found {len(annotations_gt)} GT / {len(annotations_dt)} DT segments"
                  f" in {len(categories) - 1} categories for {len(images)} images")
-        def add_ids(entries, start=0):
-            for i, entry in enumerate(entries, start):
-                if isinstance(entry, dict):
-                    entry['id'] = i
-                else:
-                    entries[i] = {'id': i, 'name': entry}
-        add_ids(categories)
-        add_ids(images)
-        add_ids(annotations_gt, 1) # cocoeval expects annotation IDs starting at 1
-        add_ids(annotations_dt, 1) # cocoeval expects annotation IDs starting at 1
-        coco_gt = COCO()
-        coco_dt = COCO()
-        coco_gt.dataset = {'categories': categories, 'images': images,
-                           'annotations': annotations_gt}
-        coco_dt.dataset = {'categories': categories, 'images': images,
-                           'annotations': annotations_dt}
-        with NoStdout():
-            coco_gt.createIndex()
-            coco_dt.createIndex()
-        LOG.info("comparing segmentations")
-        stats = dict(self.parameter)
-        coco_eval = COCOeval(coco_gt, coco_dt, 'segm') # bbox
-        if selected:
-           coco_eval.params.catIds = selected
-        #coco_eval.params.iouThrs = [.5:.05:.95]
-        #coco_eval.params.iouThrs = np.linspace(.3, .95, 14)
-        coco_eval.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
-        #coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
-        #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
-        # FIXME: cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
-        #        i.e. no way to detect undersegmentation
-        # FIXME: somehow measure oversegmentation
-        # FIXME: find way to get pixel-wise measures (IoU of matches, or IoGT-recall/IoDT-precision)
-        coco_eval.evaluate()
-        # get by-page alignment
-        for img in coco_eval.evalImgs:
-            if not img:
-                continue
-            if img['aRng'] != coco_eval.params.areaRng[0]:
-                # ignore other restricted area ranges
-                continue
-            imgId = img['image_id']
-            catId = img['category_id']
-            image = images[imgId]
-            pageId = image['file_name']
-            cat = categories[catId]
-            catName = cat['name']
-            # get matches and ious and scores
-            # (pick lowest overlap threshold iouThrs[0])
-            gtMatches = img['gtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
-            dtMatches = img['dtMatches'][0].astype(np.int) # from dtind to matching GT annotation id
-            dtScores = img['dtScores'] # from dtind to DT score
-            gtIds = img['gtIds'] # from gtind to GT annotation id
-            dtIds = img['dtIds'] # from dtind to DT annotation id
-            gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int) # from GT annotation id to gtind
-            for ind, id_ in enumerate(gtIds):
-                gtIndices[id_] = ind
-            dtIndices = np.zeros(max(dtIds, default=-1) + 1, np.int) # from DT annotation id to dtind
-            for ind, id_ in enumerate(dtIds):
-                dtIndices[id_] = ind
-            ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
-            # record as dict by pageId / by category
-            matches = stats.setdefault('matches', dict())
-            imgMatches = matches.setdefault(pageId, dict())
-            imgMatches[catName] = [(annotations_gt[gtIds[gtind] - 1]['segment_id'],
-                                    annotations_dt[dtid - 1]['segment_id'],
-                                    ious[dtIndices[dtid], gtind])
-                                   for gtind, dtid in enumerate(gtMatches)
-                                   if dtid > 0]
-        coco_eval.accumulate()
-        # get precision/recall at
-        # T[0]=0.5 IoU
-        # R[*] recall threshold equal to max recall
-        # K[*] each class
-        # A[0] all areas
-        # M[-1]=100 max detections
-        recalls = coco_eval.eval['recall'][0,:,0,-1]
-        recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
-        classInds = np.arange(len(recalls))
-        precisions = coco_eval.eval['precision'][0, recallInds, classInds, 0, -1]
-        classes = stats.setdefault('classes', dict())
-        for cat in categories:
-            classes[cat['name']] = {'precision': str(precisions[cat['id']]),
-                                    'recall': str(recalls[cat['id']])}
-        # FIXME: first row (AP for full IoU range) has fixed maxDets=100 in pycocotools, which we don't want
-        coco_eval.summarize()
-        statInds = np.ones(12, np.bool)
-        statInds[6] = False # AR maxDet[0]
-        statInds[7] = False # AR maxDet[1]
-        coco_eval.stats = coco_eval.stats[statInds]
-        stats['scores'] = dict(zip([
-            'Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all ]',
-            'Average Precision  (AP) @[ IoU=0.50      | area=   all ]',
-            'Average Precision  (AP) @[ IoU=0.75      | area=   all ]',
-            'Average Precision  (AP) @[ IoU=0.50:0.95 | area= small ]',
-            'Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium ]',
-            'Average Precision  (AP) @[ IoU=0.50:0.95 | area= large ]',
-            'Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all ]',
-            'Average Recall     (AR) @[ IoU=0.50:0.95 | area= small ]',
-            'Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium ]',
-            'Average Recall     (AR) @[ IoU=0.50:0.95 | area= large ]',
-            ], coco_eval.stats.tolist()))
+
+        coco_gt = _create_coco(categories, images, annotations_gt)
+        coco_dt = _create_coco(categories, images, annotations_dt)
+
+        stats = evaluate_coco(coco_gt, coco_dt, self.parameter, selected)
 
         # write regions to custom JSON for this page
         file_id = 'id' + self.output_file_grp + '_report'
@@ -238,14 +142,265 @@ class EvaluateSegmentation(Processor):
             content=json.dumps(stats, indent=2))
         # todo: also write report for each page
 
-    def _compare_segmentation(self, coco_gt, coco_dt, page_id):
-        LOG = getLogger('processor.EvaluateSegmentation')
-        gt_regions = gt_page.get_TextRegion()
-        pred_regions = pred_page.get_TextRegion()
-        if len(gt_regions) != len(pred_regions):
-            LOG.warning("page '%s': %d vs %d text regions",
-                        page_id, len(gt_regions), len(pred_regions))
-        # FIXME: add actual layout alignment and comparison
+@click.command()
+@click.option('-G', '--gt-page-filelst', type=click.File('r'),
+              help="list file of ground-truth page file paths")
+@click.option('-D', '--dt-page-filelst', type=click.File('r'),
+              help="list file of detection page file paths")
+@click.option('-I', '--bin-img-filelst', type=click.File('r'),
+              help="list file of binarized image file paths")
+@click.option('-L', '--level-of-operation', type=click.Choice(['region', 'line']), default='region',
+              help="hierarchy level of segments to compare")
+@click.option('-T', '--ignore-subtype', is_flag=True,
+              help="on region level, ignore @type distinction")
+@click.option('-C', '--for-categories', default='', type=str,
+              help="on region level, comma-separated list of category names to evaluate (empty for all)")
+@click.option('-R', '--report-file', type=click.File('w'), default="eval.log",
+              help="file name to write evaluation results to")
+@click.argument('tabfile', type=click.File('r'), required=False)
+def standalone_cli(gt_page_filelst,
+                   dt_page_filelst,
+                   bin_img_filelst,
+                   level_of_operation,
+                   ignore_subtype,
+                   for_categories,
+                   report_file,
+                   tabfile):
+    """Performs segmentation evaluation with pycocotools on the given PAGE-XML files.
+
+    \b
+    Open and deserialize PAGE files from the list files.
+    Then iterate over the element hierarchy down to ``level-of-operation``.
+    Aggregate and convert all pages' segmentation (coordinates and classes)
+    to COCO:
+
+    \b
+    - On the region level, unless ``ignore-subtype``, differentiate segment
+      classes by their `@type`, if applicable.
+    - On the region level, unless ``for-categories`` is empty, select only
+      segment classes in that (comma-separated) list.
+    - If image files are given (as separate file list or in the 3rd column
+      of the tab-separated list file), then for each PAGE file pair, use
+      the foreground mask from the binarized image inside all segments for
+      overlap calculations.
+
+    \b
+    Next, configure and run COCOEval for comparison of all pages. Show the 
+    matching pairs (GT segment ID, prediction segment ID, IoU) for every
+    overlap on each page.
+    Also, calculate per-class precision and recall (at maximum recall).
+    Finally, get the typical summary mean average precision / recall
+    (but without restriction on the number of segments), and write all
+    statistics to ``report-file``.
+
+    \b
+    Write a JSON report to the output file group.
+    """
+    assert (tabfile is None) == (gt_page_filelst is not None) == (dt_page_filelst is not None), \
+        "pass file lists either as tab-separated single file or as separate files"
+    if tabfile is None:
+        gt_page_files = [line.strip() for line in gt_page_filelst.readlines()]
+        dt_page_files = [line.strip() for line in dt_page_filelst.readlines()]
+        assert len(gt_page_files) == len(dt_page_files), \
+            "number of DT files must match number of GT files"
+        if bin_img_filelst is not None:
+            bin_img_files = [line.strip() for line in bin_img_filelst.readlines()]
+            assert len(bin_img_files) == len(gt_page_files), \
+                "number of image files must match number of GT files"
+        else:
+            bin_img_files = None
+    else:
+        files = [line.strip().split('\t') for line in tabfile.readlines()]
+        assert len(files), "list of files is empty"
+        len0 = len(files[0])
+        assert 2 <= len0 <= 3, "list of files must be tab-separated (GT, DT[, bin-img])"
+        assert all(map(lambda line: len(line) == len0, files)), \
+            "number of DT files must match number of GT files"
+        if len0 == 2:
+            gt_page_files, dt_page_files = zip(*files)
+            bin_img_files = None
+        else:
+            gt_page_files, dt_page_files, bin_img_files = zip(*files)
+    stats = evaluate_files(gt_page_files,
+                           dt_page_files,
+                           bin_img_files,
+                           level_of_operation,
+                           not ignore_subtype,
+                           for_categories)
+    json.dump(stats, report_file, indent=2)
+
+# standalone entry point
+def evaluate_files(gt_files, dt_files, img_files=None, level='region', typed=True, selected=None):
+    initLogging()
+    LOG = getLogger('processor.EvaluateSegmentation')
+    categories = ["bg"] # needed by cocoeval
+    images = []
+    annotations_gt = []
+    annotations_dt = []
+    for gt_file, dt_file, img_file in zip(gt_files, dt_files,
+                                          img_files or [None] * len(gt_files)):
+        pcgts_gt = parse_page(gt_file)
+        pcgts_dt = parse_page(dt_file)
+        page_id = pcgts_gt.pcGtsId or gt_file
+        LOG.info("processing page %s", page_id)
+        page_gt = pcgts_gt.get_Page()
+        page_dt = pcgts_dt.get_Page()
+        if img_file:
+            page_image = Image.open(img_file)
+            assert page_image.mode == '1', "input images must already be binarized"
+            assert page_image.width - 2 < page_gt.get_imageWidth() < page_image.width + 2, \
+                "mismatch between width of binary image and PAGE description"
+            assert page_image.height - 2 < page_gt.get_imageHeight() < page_image.height + 2, \
+                "mismatch between height of binary image and PAGE description"
+            page_mask = ~ np.array(page_image)
+            page_coords = {"transform": np.eye(3), "angle": 0, "features": "binarized"}
+        imgid = len(images)
+        images.append({'file_name': page_id,
+                       'width': page_gt.get_imageWidth(),
+                       'height': page_gt.get_imageHeight(),
+        })
+        # read annotations from each page recursively (all categories including subtypes)
+        # and merge GT and prediction categories
+        _add_annotations(annotations_gt, page_gt, imgid, categories,
+                         level=level, typed=typed,
+                         coords=page_coords if img_file else None,
+                         mask=page_mask if img_file else None)
+        _add_annotations(annotations_dt, page_dt, imgid, categories,
+                         level=level, typed=typed,
+                         coords=page_coords if img_file else None,
+                         mask=page_mask if img_file else None)
+
+    if level == 'line':
+        categories.append('textline')
+    elif selected:
+        selected = [categories.index(cat) for cat in selected if cat in categories]
+    _add_ids(categories)
+    _add_ids(images)
+    _add_ids(annotations_gt, 1) # cocoeval expects annotation IDs starting at 1
+    _add_ids(annotations_dt, 1) # cocoeval expects annotation IDs starting at 1
+
+    LOG.info(f"found {len(annotations_gt)} GT / {len(annotations_dt)} DT segments"
+             f" in {len(categories) - 1} categories for {len(images)} images")
+
+    coco_gt = _create_coco(categories, images, annotations_gt)
+    coco_dt = _create_coco(categories, images, annotations_dt)
+
+    parameters = {"level-of-operation": level,
+                  "only-fg": bool(img_files),
+                  "ignore-subtype": not typed,
+                  "for-categories": selected}
+    stats = evaluate_coco(coco_gt, coco_dt, parameters, selected)
+    return stats
+
+def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
+    LOG = getLogger('processor.EvaluateSegmentation')
+    LOG.info("comparing segmentations")
+    stats = dict(parameters)
+    coco_eval = COCOeval(coco_gt, coco_dt, 'segm') # bbox
+    if catIds:
+       coco_eval.params.catIds = catIds
+    #coco_eval.params.iouThrs = [.5:.05:.95]
+    #coco_eval.params.iouThrs = np.linspace(.3, .95, 14)
+    coco_eval.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
+    #coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
+    #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
+    # FIXME: cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
+    #        i.e. no way to detect undersegmentation
+    # FIXME: somehow measure oversegmentation
+    # FIXME: find way to get pixel-wise measures (IoU of matches, or IoGT-recall/IoDT-precision)
+    coco_eval.evaluate()
+    # get by-page alignment
+    for img in coco_eval.evalImgs:
+        if not img:
+            continue
+        if img['aRng'] != coco_eval.params.areaRng[0]:
+            # ignore other restricted area ranges
+            continue
+        imgId = img['image_id']
+        catId = img['category_id']
+        image = coco_gt.imgs[imgId]
+        pageId = image['file_name']
+        cat = coco_gt.cats[catId]
+        catName = cat['name']
+        # get matches and ious and scores
+        # (pick lowest overlap threshold iouThrs[0])
+        gtMatches = img['gtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
+        dtMatches = img['dtMatches'][0].astype(np.int) # from dtind to matching GT annotation id
+        dtScores = img['dtScores'] # from dtind to DT score
+        gtIds = img['gtIds'] # from gtind to GT annotation id
+        dtIds = img['dtIds'] # from dtind to DT annotation id
+        gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int) # from GT annotation id to gtind
+        for ind, id_ in enumerate(gtIds):
+            gtIndices[id_] = ind
+        dtIndices = np.zeros(max(dtIds, default=-1) + 1, np.int) # from DT annotation id to dtind
+        for ind, id_ in enumerate(dtIds):
+            dtIndices[id_] = ind
+        ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
+        # record as dict by pageId / by category
+        matches = stats.setdefault('matches', dict())
+        imgMatches = matches.setdefault(pageId, dict())
+        imgMatches[catName] = [(coco_gt.anns[gtIds[gtind]]['segment_id'],
+                                coco_dt.anns[dtid]['segment_id'],
+                                ious[dtIndices[dtid], gtind])
+                               for gtind, dtid in enumerate(gtMatches)
+                               if dtid > 0]
+    coco_eval.accumulate()
+    # get precision/recall at
+    # T[0]=0.5 IoU
+    # R[*] recall threshold equal to max recall
+    # K[*] each class
+    # A[0] all areas
+    # M[-1]=100 max detections
+    recalls = coco_eval.eval['recall'][0,:,0,-1]
+    recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
+    classInds = np.arange(len(recalls))
+    precisions = coco_eval.eval['precision'][0, recallInds, classInds, 0, -1]
+    classes = stats.setdefault('classes', dict())
+    for cat in coco_gt.cats.values():
+        classes[cat['name']] = {'precision': str(precisions[cat['id']]),
+                                'recall': str(recalls[cat['id']])}
+    coco_eval.summarize()
+    statInds = np.ones(12, np.bool)
+    statInds[7] = False # AR maxDet[1]
+    statInds[8] = False # AR maxDet[2]
+    coco_eval.stats = coco_eval.stats[statInds]
+    stats['scores'] = dict(zip([
+        'Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all ]',
+        'Average Precision  (AP) @[ IoU=0.50      | area=   all ]',
+        'Average Precision  (AP) @[ IoU=0.75      | area=   all ]',
+        'Average Precision  (AP) @[ IoU=0.50:0.95 | area= small ]',
+        'Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium ]',
+        'Average Precision  (AP) @[ IoU=0.50:0.95 | area= large ]',
+        'Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all ]',
+        'Average Recall     (AR) @[ IoU=0.50:0.95 | area= small ]',
+        'Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium ]',
+        'Average Recall     (AR) @[ IoU=0.50:0.95 | area= large ]',
+        ], coco_eval.stats.tolist()))
+    return stats
+
+def _create_coco(categories, images, annotations):
+    coco = COCO()
+    coco.dataset = {'categories': categories, 'images': images, 'annotations': annotations}
+    with NoStdout():
+        coco.createIndex()
+    return coco
+
+def _add_annotations(annotations, page, imgid, categories,
+                     level='region', typed=True, coords=None, mask=None):
+    for region in page.get_AllRegions(classes=None if level == 'region' else ['Text']):
+        if level == 'region':
+            cat = region.__class__.__name__[:-4]
+            if typed and hasattr(region, 'get_type') and region.get_type():
+                cat += '.' + region.get_type()
+            if cat not in categories:
+                categories.append(cat)
+            catid = categories.index(cat)
+            _add_annotation(annotations, region, imgid, catid,
+                            coords=coords, mask=mask)
+            continue
+        for line in region.get_TextLine():
+            _add_annotation(annotations, line, imgid, 1,
+                            coords=coords, mask=mask)
 
 def _add_annotation(annotations, segment, imgid, catid, coords=None, mask=None):
     LOG = getLogger('processor.EvaluateSegmentation')
@@ -272,6 +427,13 @@ def _add_annotation(annotations, segment, imgid, catid, coords=None, mask=None):
          'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
          'score': score,
          'iscrowd': 0})
+
+def _add_ids(entries, start=0):
+    for i, entry in enumerate(entries, start):
+        if isinstance(entry, dict):
+            entry['id'] = i
+        else:
+            entries[i] = {'id': i, 'name': entry}
 
 class NoStdout():
     def __enter__(self):

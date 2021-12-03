@@ -17,6 +17,7 @@ Installs:
     - ocrd-segment-replace-original
     - ocrd-segment-replace-page
     - ocrd-segment-evaluate
+    - page-segment-evaluate
     - ocrd-segment-extract-address
     - ocrd-segment-extract-formdata
     - ocrd-segment-classify-address-text
@@ -66,6 +67,7 @@ setup(
             'ocrd-segment-replace-original=ocrd_segment.cli:ocrd_segment_replace_original',
             'ocrd-segment-replace-page=ocrd_segment.cli:ocrd_segment_replace_page',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
+            'page-segment-evaluate=ocrd_segment.evaluate:standalone_cli',
             'ocrd-segment-extract-address=ocrd_segment.cli:ocrd_segment_extract_address',
             'ocrd-segment-extract-formdata=ocrd_segment.cli:ocrd_segment_extract_formdata',
             'ocrd-segment-classify-address-text=ocrd_segment.cli:ocrd_segment_classify_address_text',
