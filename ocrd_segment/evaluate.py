@@ -296,25 +296,33 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     LOG = getLogger('processor.EvaluateSegmentation')
     LOG.info("comparing segmentations")
     stats = dict(parameters)
+    # cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
+    # therefore, to detect undersegmentation, we need to run inverse direction, too
     coco_eval = COCOeval(coco_gt, coco_dt, 'segm') # bbox
+    coco_lave = COCOeval(coco_dt, coco_gt, 'segm') # bbox
     if catIds:
        coco_eval.params.catIds = catIds
+       coco_lave.params.catIds = catIds
     #coco_eval.params.iouThrs = [.5:.05:.95]
     #coco_eval.params.iouThrs = np.linspace(.3, .95, 14)
     coco_eval.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
+    coco_lave.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
     #coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
     #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
-    # FIXME: cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
-    #        i.e. no way to detect undersegmentation
-    # FIXME: somehow measure oversegmentation
-    # FIXME: find way to get pixel-wise measures (IoU of matches, or IoGT-recall/IoDT-precision)
+    # FIXME: the IoU threshold criterion is inadequate for flat segmentation, because over-/undersegmentation can become false negative/positive (but pixel-wise measures do not distinguish instances)
+    #        (perhaps we can run with iouThrs=0.1, but then filter eval.ious w.r.t. GT and DT areas?)
+    # FIXME: find way to get pixel-wise measures, too (IoU of matches, or IoGT-recall/IoDT-precision)
     coco_eval.evaluate()
+    coco_lave.evaluate()
     # get by-page alignment
-    for img in coco_eval.evalImgs:
+    for imgind, img in enumerate(coco_eval.evalImgs):
         if not img:
             continue
         if img['aRng'] != coco_eval.params.areaRng[0]:
             # ignore other restricted area ranges
+            continue
+        if img['maxDet'] != None:
+            # ignore restricted number of detections
             continue
         imgId = img['image_id']
         catId = img['category_id']
@@ -329,6 +337,8 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
         dtScores = img['dtScores'] # from dtind to DT score
         gtIds = img['gtIds'] # from gtind to GT annotation id
         dtIds = img['dtIds'] # from dtind to DT annotation id
+        # we can ignore gtIgnore here, because we only look at areaRng[0]=all
+        # we can ignore dtIgnore here, because we only look at maxDet=None
         gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int) # from GT annotation id to gtind
         for ind, id_ in enumerate(gtIds):
             gtIndices[id_] = ind
@@ -337,20 +347,98 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
             dtIndices[id_] = ind
         ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
         # record as dict by pageId / by category
-        matches = stats.setdefault('matches', dict())
-        imgMatches = matches.setdefault(pageId, dict())
-        imgMatches[catName] = [(coco_gt.anns[gtIds[gtind]]['segment_id'],
-                                coco_dt.anns[dtid]['segment_id'],
-                                ious[dtIndices[dtid], gtind])
-                               for gtind, dtid in enumerate(gtMatches)
-                               if dtid > 0]
+        TP = stats.setdefault('true_positives', dict())
+        imgTP = TP.setdefault(pageId, dict())
+        imgTP[catName] = [(coco_gt.anns[gtid]['segment_id'],
+                           coco_dt.anns[dtIds[dtind]]['segment_id'],
+                           ious[dtind, gtIndices[gtid]])
+                          for dtind, gtid in enumerate(dtMatches)
+                          if gtid > 0]
+        FP = stats.setdefault('false_positives', dict())
+        imgFP = FP.setdefault(pageId, dict())
+        imgFP[catName] = [coco_dt.anns[dtid]['segment_id']
+                          for dtid in dtIds
+                          if all(gtMatches != dtid)]
+        FN = stats.setdefault('false_negatives', dict())
+        imgFN = FN.setdefault(pageId, dict())
+        imgFN[catName] = [coco_gt.anns[gtid]['segment_id']
+                          for gtid in gtIds
+                          if all(dtMatches != gtid)]
+        # measure oversegmentation for this image and category
+        # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
+        OS = stats.setdefault('oversegmentation', dict())
+        imgOS = OS.setdefault(pageId, dict())
+        over_gt = set()
+        over_dt = set()
+        over_degree = 0
+        unique_gtids, unique_dtinds = np.unique(dtMatches, return_inverse=True)
+        for gtid in unique_gtids:
+            dtinds = np.nonzero(unique_dtinds == gtid)[0]
+            if len(dtinds) > 1:
+                for dtind in dtinds:
+                    over_dt.add(dtIds[dtind])
+                over_gt.add(gtid)
+                over_degree += len(dtinds) - 1
+        if len(gtIds) and len(dtIds):
+            oversegmentation = len(over_gt) * len(over_dt) / len(gtIds) / len(dtIds)
+            # Zhang's idea of attenuating the oversegmentation ratio with a "penalty"
+            # to account for the degree of further sub-segmentation is misguided IMHO:
+            # - its degree term depends on the total number of segments
+            # - our iouThr-based pairing does not find higher degrees anyway
+            # oversegmentation = np.tanh(oversegmentation * over_degree)
+        else:
+            oversegmentation = 0
+        imgOS[catName] = oversegmentation
+        # aggregate per-img/per-cat measures for microaveraging
+        img['dtIdsOver'] = list(over_dt)
+        img['gtIdsOver'] = list(over_gt)
+    # inverse direction to measure undersegmentation for this image and category
+    for imgind, img in enumerate(coco_lave.evalImgs):
+        if not img:
+            continue
+        if img['aRng'] != coco_lave.params.areaRng[0]:
+            # ignore other restricted area ranges
+            continue
+        if img['maxDet'] != None:
+            # ignore restricted number of detections
+            continue
+        gtMatches = img['dtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
+        gtIds = img['dtIds'] # from gtind to GT annotation id
+        US = stats.setdefault('undersegmentation', dict())
+        imgUS = US.setdefault(pageId, dict())
+        under_gt = set()
+        under_dt = set()
+        under_degree = 0
+        unique_dtids, unique_gtinds = np.unique(gtMatches, return_inverse=True)
+        for dtid in unique_dtids:
+            gtinds = np.nonzero(unique_gtinds == dtid)[0]
+            if len(gtinds) > 1:
+                for gtind in gtinds:
+                    under_gt.add(gtIds[gtind])
+                under_dt.add(dtid)
+                under_degree += len(gtinds) - 1
+        if len(dtIds) and len(gtIds):
+            undersegmentation = len(under_gt) * len(under_dt) / len(gtIds) / len(dtIds)
+            # Zhang's idea of attenuating the undersegmentation ratio with a "penalty"
+            # to account for the degree of further sub-segmentation is misguided IMHO:
+            # - its degree term depends on the total number of segments
+            # - our iouThr-based pairing does not find higher degrees anyway
+            # undersegmentation = np.tanh(undersegmentation * under_degree)
+        else:
+            undersegmentation = 0
+        imgUS[catName] = undersegmentation
+        # aggregate per-img/per-cat measures for microaveraging
+        img = coco_eval.evalImgs[imgind] # we throw away coco_lave here
+        img['dtIdsUnder'] = list(under_dt)
+        img['gtIdsUnder'] = list(under_gt)
+
     coco_eval.accumulate()
     # get precision/recall at
     # T[0]=0.5 IoU
     # R[*] recall threshold equal to max recall
     # K[*] each class
     # A[0] all areas
-    # M[-1]=100 max detections
+    # M[-1]=all detections
     recalls = coco_eval.eval['recall'][0,:,0,-1]
     recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
     classInds = np.arange(len(recalls))
@@ -359,6 +447,37 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     for cat in coco_gt.cats.values():
         classes[cat['name']] = {'precision': str(precisions[cat['id']]),
                                 'recall': str(recalls[cat['id']])}
+    # accumulate our over-/undersegmentation ratios
+    numImgs = len(coco_eval.params.imgIds)
+    numAreas = len(coco_eval.params.areaRng)
+    for catind, catId in enumerate(coco_eval.params.catIds):
+        cat = coco_gt.cats[catId]
+        start = catind * numImgs * numAreas
+        # again, we stay at areaRng[0]=all and maxDets[0]=all
+        evalimgs = [coco_eval.evalImgs[start + imgind] for imgind in range(numImgs)]
+        evalimgs = [img for img in evalimgs if img is not None]
+        assert all(img['category_id'] == catId for img in evalimgs)
+        assert all(img['maxDet'] is None for img in evalimgs)
+        assert all(img['aRng'] == coco_eval.params.areaRng[0] for img in evalimgs)
+        if not len(evalimgs):
+            continue
+        # again, we can ignore gtIgnore here, because we only look at areaRng[0]=all
+        # again, we can ignore dtIgnore here, because we only look at maxDet=None
+        numDTs = sum(len(img['dtIds']) for img in evalimgs)
+        numGTs = sum(len(img['gtIds']) for img in evalimgs)
+        overDTs = sum(len(img['dtIdsOver']) for img in evalimgs)
+        overGTs = sum(len(img['gtIdsOver']) for img in evalimgs)
+        underDTs = sum(len(img['dtIdsUnder']) for img in evalimgs)
+        underGTs = sum(len(img['gtIdsUnder']) for img in evalimgs)
+        if numDTs and numGTs:
+            oversegmentation = overDTs * overGTs / numDTs / numGTs
+            undersegmentation = underDTs * underGTs / numDTs / numGTs
+        else:
+            oversegmentation = 0
+            undersegmentation = 0
+        classes[cat['name']]['oversegmentation'] = oversegmentation
+        classes[cat['name']]['undersegmentation'] = undersegmentation
+
     coco_eval.summarize()
     statInds = np.ones(12, np.bool)
     statInds[7] = False # AR maxDet[1]
