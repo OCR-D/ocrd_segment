@@ -24,7 +24,11 @@ from ocrd_models.ocrd_page import parse as parse_page
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
-from pycocotools.mask import encode as encodeMask
+from pycocotools.mask import (
+    encode as encodeMask,
+    merge as mergeMasks,
+    area as maskArea
+)
 
 from .config import OCRD_TOOL
 
@@ -311,7 +315,6 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
     # FIXME: the IoU threshold criterion is inadequate for flat segmentation, because over-/undersegmentation can become false negative/positive (but pixel-wise measures do not distinguish instances)
     #        (perhaps we can run with iouThrs=0.1, but then filter eval.ious w.r.t. GT and DT areas?)
-    # FIXME: find way to get pixel-wise measures, too (IoU of matches, or IoGT-recall/IoDT-precision)
     coco_eval.evaluate()
     coco_lave.evaluate()
     # get by-page alignment
@@ -347,27 +350,46 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
             dtIndices[id_] = ind
         ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
         # record as dict by pageId / by category
-        TP = stats.setdefault('true_positives', dict())
-        imgTP = TP.setdefault(pageId, dict())
-        imgTP[catName] = [(coco_gt.anns[gtid]['segment_id'],
-                           coco_dt.anns[dtIds[dtind]]['segment_id'],
-                           ious[dtind, gtIndices[gtid]])
-                          for dtind, gtid in enumerate(dtMatches)
-                          if gtid > 0]
-        FP = stats.setdefault('false_positives', dict())
-        imgFP = FP.setdefault(pageId, dict())
-        imgFP[catName] = [coco_dt.anns[dtid]['segment_id']
-                          for dtid in dtIds
-                          if all(gtMatches != dtid)]
-        FN = stats.setdefault('false_negatives', dict())
-        imgFN = FN.setdefault(pageId, dict())
-        imgFN[catName] = [coco_gt.anns[gtid]['segment_id']
-                          for gtid in gtIds
-                          if all(dtMatches != gtid)]
+        imgstats = stats.setdefault('by-image', dict())
+        pagestats = imgstats.setdefault(pageId, dict())
+        pagestatsTP = pagestats.setdefault('true_positives', dict())
+        pagestatsTP[catName] = list()
+        # aggregate per-img/per-cat IoUs for microaveraging
+        img['IoUs'] = list()
+        img['IoGTs'] = list()
+        img['IoDTs'] = list()
+        for dtind, gtid in enumerate(dtMatches):
+            if gtid <= 0:
+                img['IoGTs'].append(0.0)
+                img['IoDTs'].append(1.0)
+                continue
+            gtind = gtIndices[gtid]
+            dtid = dtIds[dtind]
+            gtann = coco_gt.anns[gtid]
+            dtann = coco_dt.anns[dtid]
+            iou = ious[dtind, gtind]
+            union = maskArea(mergeMasks([gtann['segmentation'], dtann['segmentation']]))
+            gtarea = maskArea(gtann['segmentation'])
+            dtarea = maskArea(dtann['segmentation'])
+            pagestatsTP[catName].append({'GT.ID': gtann['segment_id'],
+                                         'DT.ID': dtann['segment_id'],
+                                         'IoGT': iou * union / gtarea,
+                                         'IoDT': iou * union / dtarea,
+                                         'IoU': iou})
+            img['IoGTs'].append(iou * union / gtarea)
+            img['IoDTs'].append(iou * union / dtarea)
+            img['IoUs'].append(iou)
+        pagestatsFP = pagestats.setdefault('false_positives', dict())
+        pagestatsFP[catName] = [coco_dt.anns[dtid]['segment_id']
+                                for dtid in dtIds
+                                if all(gtMatches != dtid)]
+        pagestatsFN = pagestats.setdefault('false_negatives', dict())
+        pagestatsFN[catName] = [coco_gt.anns[gtid]['segment_id']
+                                for gtid in gtIds
+                                if all(dtMatches != gtid)]
         # measure oversegmentation for this image and category
         # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
-        OS = stats.setdefault('oversegmentation', dict())
-        imgOS = OS.setdefault(pageId, dict())
+        pagestatsOS = pagestats.setdefault('oversegmentation', dict())
         over_gt = set()
         over_dt = set()
         over_degree = 0
@@ -388,7 +410,7 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
             # oversegmentation = np.tanh(oversegmentation * over_degree)
         else:
             oversegmentation = 0
-        imgOS[catName] = oversegmentation
+        pagestatsOS[catName] = oversegmentation
         # aggregate per-img/per-cat measures for microaveraging
         img['dtIdsOver'] = list(over_dt)
         img['gtIdsOver'] = list(over_gt)
@@ -402,10 +424,16 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
         if img['maxDet'] != None:
             # ignore restricted number of detections
             continue
+        imgId = img['image_id']
+        catId = img['category_id']
+        image = coco_gt.imgs[imgId]
+        pageId = image['file_name']
+        cat = coco_gt.cats[catId]
+        catName = cat['name']
         gtMatches = img['dtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
         gtIds = img['dtIds'] # from gtind to GT annotation id
-        US = stats.setdefault('undersegmentation', dict())
-        imgUS = US.setdefault(pageId, dict())
+        pagestats = imgstats.setdefault(pageId, dict())
+        pagestatsUS = pagestats.setdefault('undersegmentation', dict())
         under_gt = set()
         under_dt = set()
         under_degree = 0
@@ -426,7 +454,7 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
             # undersegmentation = np.tanh(undersegmentation * under_degree)
         else:
             undersegmentation = 0
-        imgUS[catName] = undersegmentation
+        pagestatsUS[catName] = undersegmentation
         # aggregate per-img/per-cat measures for microaveraging
         img = coco_eval.evalImgs[imgind] # we throw away coco_lave here
         img['dtIdsUnder'] = list(under_dt)
@@ -443,11 +471,11 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
     classInds = np.arange(len(recalls))
     precisions = coco_eval.eval['precision'][0, recallInds, classInds, 0, -1]
-    classes = stats.setdefault('classes', dict())
+    catstats = stats.setdefault('by-category', dict())
     for cat in coco_gt.cats.values():
-        classes[cat['name']] = {'precision': str(precisions[cat['id']]),
-                                'recall': str(recalls[cat['id']])}
-    # accumulate our over-/undersegmentation ratios
+        catstats[cat['name']] = {'precision': str(precisions[cat['id']]),
+                                 'recall': str(recalls[cat['id']])}
+    # accumulate our over-/undersegmentation and IoU ratios
     numImgs = len(coco_eval.params.imgIds)
     numAreas = len(coco_eval.params.areaRng)
     for catind, catId in enumerate(coco_eval.params.catIds):
@@ -469,14 +497,23 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
         overGTs = sum(len(img['gtIdsOver']) for img in evalimgs)
         underDTs = sum(len(img['dtIdsUnder']) for img in evalimgs)
         underGTs = sum(len(img['gtIdsUnder']) for img in evalimgs)
+        sumIoUs = sum(sum(img['IoUs']) for img in evalimgs)
+        sumIoGTs = sum(sum(img['IoGTs']) for img in evalimgs)
+        sumIoDTs = sum(sum(img['IoDTs']) for img in evalimgs)
         if numDTs and numGTs:
             oversegmentation = overDTs * overGTs / numDTs / numGTs
             undersegmentation = underDTs * underGTs / numDTs / numGTs
+            iou = sumIoUs / numDTs
+            iogt = sumIoGTs / numDTs
+            iodt = sumIoDTs / numDTs
         else:
-            oversegmentation = 0
-            undersegmentation = 0
-        classes[cat['name']]['oversegmentation'] = oversegmentation
-        classes[cat['name']]['undersegmentation'] = undersegmentation
+            oversegmentation = undersegmentation = 0
+            iou = iogt = iodt = 0
+        catstats[cat['name']]['oversegmentation'] = oversegmentation
+        catstats[cat['name']]['undersegmentation'] = undersegmentation
+        catstats[cat['name']]['IoGT'] = iogt
+        catstats[cat['name']]['IoDT'] = iodt
+        catstats[cat['name']]['IoU'] = iou
 
     coco_eval.summarize()
     statInds = np.ones(12, np.bool)
@@ -528,6 +565,7 @@ def _add_annotation(annotations, segment, imgid, catid, coords=None, mask=None):
     if len(polygon) < 3:
         LOG.warning('ignoring segment "%s" with only %d points', segment.id, len(polygon))
         return
+    xywh = xywh_from_polygon(polygon)
     if mask is None:
         segmentation = np.array(polygon).reshape(1, -1).tolist()
     else:
@@ -536,7 +574,6 @@ def _add_annotation(annotations, segment, imgid, catid, coords=None, mask=None):
         masked = np.zeros(mask.shape, dtype=np.uint8, order='F') # pycocotools.mask wants Fortran-contiguous arrays
         masked[py, px] = 1 * mask[py, px]
         segmentation = encodeMask(masked)
-    xywh = xywh_from_polygon(polygon)
     annotations.append(
         {'segment_id': segment.id, # non-standard string-valued in addition to 'id'
          'image_id': imgid,
