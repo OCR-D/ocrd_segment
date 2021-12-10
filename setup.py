@@ -13,18 +13,6 @@ Installs:
     - ocrd-segment-replace-original
     - ocrd-segment-replace-page
     - ocrd-segment-evaluate
-<<<<<<< HEAD
-=======
-    - page-segment-evaluate
-    - ocrd-segment-extract-address
-    - ocrd-segment-extract-formdata
-    - ocrd-segment-classify-address-text
-    - ocrd-segment-classify-address-layout
-    - ocrd-segment-classify-formdata-dummy
-    - ocrd-segment-classify-formdata-text
-    - ocrd-segment-classify-formdata-layout
-    - ocrd-segment-postcorrect-formdata
->>>>>>> e000d13... evaluate: refactor and expose standalone CLI
 """
 import codecs
 
