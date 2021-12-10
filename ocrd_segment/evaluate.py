@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import sys
 import os
 import json
+from itertools import chain
 import click
 import numpy as np
 from skimage import draw
@@ -300,186 +301,149 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     LOG = getLogger('processor.EvaluateSegmentation')
     LOG.info("comparing segmentations")
     stats = dict(parameters)
-    # cocoeval only allows/tracks 1-best (by confidence) GT match per DT,
-    # therefore, to detect undersegmentation, we need to run inverse direction, too
     coco_eval = COCOeval(coco_gt, coco_dt, 'segm') # bbox
-    coco_lave = COCOeval(coco_dt, coco_gt, 'segm') # bbox
     if catIds:
        coco_eval.params.catIds = catIds
-       coco_lave.params.catIds = catIds
     #coco_eval.params.iouThrs = [.5:.05:.95]
     #coco_eval.params.iouThrs = np.linspace(.3, .95, 14)
     coco_eval.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
-    coco_lave.params.maxDets = [None] # unlimited nr of detections (requires pycocotools#559)
     #coco_eval.params.areaRng = [(0, np.inf)] # unlimited region size
     #coco_eval.params.areaRngLbl = ['all'] # unlimited region size
-    # FIXME: the IoU threshold criterion is inadequate for flat segmentation, because over-/undersegmentation can become false negative/positive (but pixel-wise measures do not distinguish instances)
-    #        (perhaps we can run with iouThrs=0.1, but then filter eval.ious w.r.t. GT and DT areas?)
+    # Note: The IoU threshold criterion is inadequate for flat segmentation,
+    #       because over-/undersegmentation can quickly become false negative/positive.
+    #       The pycocotools implementation is especially inadequate, because
+    #       it only counts 1:1 matches (and not even the largest or best-scoring, #564).
+    #       On the other hand, purely pixel-wise measures do not distinguish instances,
+    #       i.e. neighbours can quickly become merged or instances torn apart.
+    #       Our approach therefore does not build on pycocotools for matching
+    #       and aggregation, only for fast IoU calculation. All non-zero pairs
+    #       are considered matches if their intersection over union > 0.5 _or_
+    #       their intersection over either side > 0.5. Matches can thus be n:m.
+    #       Non-matches are counted as well (false positives and false negatives).
+    #       Aggregation uses microaveraging over images. Besides counting segments,
+    #       the pixel areas are counted and averaged (as ratios).
     coco_eval.evaluate()
-    coco_lave.evaluate()
-    # get by-page alignment
-    for imgind, img in enumerate(coco_eval.evalImgs):
-        if not img:
-            continue
-        if img['aRng'] != coco_eval.params.areaRng[0]:
-            # ignore other restricted area ranges
-            continue
-        if img['maxDet'] != None:
-            # ignore restricted number of detections
-            continue
-        imgId = img['image_id']
-        catId = img['category_id']
-        image = coco_gt.imgs[imgId]
-        pageId = image['file_name']
-        cat = coco_gt.cats[catId]
-        catName = cat['name']
-        # get matches and ious and scores
-        # (pick lowest overlap threshold iouThrs[0])
-        gtMatches = img['gtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
-        dtMatches = img['dtMatches'][0].astype(np.int) # from dtind to matching GT annotation id
-        dtScores = img['dtScores'] # from dtind to DT score
-        gtIds = img['gtIds'] # from gtind to GT annotation id
-        dtIds = img['dtIds'] # from dtind to DT annotation id
-        # we can ignore gtIgnore here, because we only look at areaRng[0]=all
-        # we can ignore dtIgnore here, because we only look at maxDet=None
-        gtIndices = np.zeros(max(gtIds, default=-1) + 1, np.int) # from GT annotation id to gtind
-        for ind, id_ in enumerate(gtIds):
-            gtIndices[id_] = ind
-        dtIndices = np.zeros(max(dtIds, default=-1) + 1, np.int) # from DT annotation id to dtind
-        for ind, id_ in enumerate(dtIds):
-            dtIndices[id_] = ind
-        ious = coco_eval.ious[imgId, catId] # each by dtind,gtind
-        # record as dict by pageId / by category
-        imgstats = stats.setdefault('by-image', dict())
-        pagestats = imgstats.setdefault(pageId, dict())
-        pagestatsTP = pagestats.setdefault('true_positives', dict())
-        pagestatsTP[catName] = list()
-        # aggregate per-img/per-cat IoUs for microaveraging
-        img['IoUs'] = list()
-        img['IoGTs'] = list()
-        img['IoDTs'] = list()
-        for dtind, gtid in enumerate(dtMatches):
-            if gtid <= 0:
-                img['IoGTs'].append(0.0)
-                img['IoDTs'].append(1.0)
+    # get by-page alignment (ignoring inadequate 1:1 matching by pycocotools)
+    numImgs = len(coco_eval.params.imgIds)
+    numAreas = len(coco_eval.params.areaRng)
+    for imgind, imgId in enumerate(coco_eval.params.imgIds):
+        img = coco_gt.imgs[imgId]
+        pageId = img['file_name']
+        for catind, catId in enumerate(coco_eval.params.catIds):
+            cat = coco_gt.cats[catId]
+            catName = cat['name']
+            if not catId:
                 continue
-            gtind = gtIndices[gtid]
-            dtid = dtIds[dtind]
-            gtann = coco_gt.anns[gtid]
-            dtann = coco_dt.anns[dtid]
-            iou = ious[dtind, gtind]
-            union = maskArea(mergeMasks([gtann['segmentation'], dtann['segmentation']]))
-            gtarea = maskArea(gtann['segmentation'])
-            dtarea = maskArea(dtann['segmentation'])
-            pagestatsTP[catName].append({'GT.ID': gtann['segment_id'],
-                                         'DT.ID': dtann['segment_id'],
-                                         'IoGT': iou * union / gtarea,
-                                         'IoDT': iou * union / dtarea,
-                                         'IoU': iou})
-            img['IoGTs'].append(iou * union / gtarea)
-            img['IoDTs'].append(iou * union / dtarea)
-            img['IoUs'].append(iou)
-        pagestatsFP = pagestats.setdefault('false_positives', dict())
-        pagestatsFP[catName] = [coco_dt.anns[dtid]['segment_id']
-                                for dtid in dtIds
-                                if all(gtMatches != dtid)]
-        pagestatsFN = pagestats.setdefault('false_negatives', dict())
-        pagestatsFN[catName] = [coco_gt.anns[gtid]['segment_id']
-                                for gtid in gtIds
-                                if all(dtMatches != gtid)]
-        # measure oversegmentation for this image and category
-        # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
-        pagestatsOS = pagestats.setdefault('oversegmentation', dict())
-        over_gt = set()
-        over_dt = set()
-        over_degree = 0
-        unique_gtids, unique_dtinds = np.unique(dtMatches, return_inverse=True)
-        for gtid in unique_gtids:
-            dtinds = np.nonzero(unique_dtinds == gtid)[0]
-            if len(dtinds) > 1:
-                for dtind in dtinds:
-                    over_dt.add(dtIds[dtind])
-                over_gt.add(gtid)
-                over_degree += len(dtinds) - 1
-        if len(gtIds) and len(dtIds):
-            oversegmentation = len(over_gt) * len(over_dt) / len(gtIds) / len(dtIds)
-            # Zhang's idea of attenuating the oversegmentation ratio with a "penalty"
-            # to account for the degree of further sub-segmentation is misguided IMHO:
-            # - its degree term depends on the total number of segments
-            # - our iouThr-based pairing does not find higher degrees anyway
-            # oversegmentation = np.tanh(oversegmentation * over_degree)
-        else:
-            oversegmentation = 0
-        pagestatsOS[catName] = oversegmentation
-        # aggregate per-img/per-cat measures for microaveraging
-        img['dtIdsOver'] = list(over_dt)
-        img['gtIdsOver'] = list(over_gt)
-    # inverse direction to measure undersegmentation for this image and category
-    for imgind, img in enumerate(coco_lave.evalImgs):
-        if not img:
-            continue
-        if img['aRng'] != coco_lave.params.areaRng[0]:
-            # ignore other restricted area ranges
-            continue
-        if img['maxDet'] != None:
-            # ignore restricted number of detections
-            continue
-        imgId = img['image_id']
-        catId = img['category_id']
-        image = coco_gt.imgs[imgId]
-        pageId = image['file_name']
-        cat = coco_gt.cats[catId]
-        catName = cat['name']
-        gtMatches = img['dtMatches'][0].astype(np.int) # from gtind to matching DT annotation id
-        gtIds = img['dtIds'] # from gtind to GT annotation id
-        pagestats = imgstats.setdefault(pageId, dict())
-        pagestatsUS = pagestats.setdefault('undersegmentation', dict())
-        under_gt = set()
-        under_dt = set()
-        under_degree = 0
-        unique_dtids, unique_gtinds = np.unique(gtMatches, return_inverse=True)
-        for dtid in unique_dtids:
-            gtinds = np.nonzero(unique_gtinds == dtid)[0]
-            if len(gtinds) > 1:
-                for gtind in gtinds:
-                    under_gt.add(gtIds[gtind])
-                under_dt.add(dtid)
-                under_degree += len(gtinds) - 1
-        if len(dtIds) and len(gtIds):
-            undersegmentation = len(under_gt) * len(under_dt) / len(gtIds) / len(dtIds)
-            # Zhang's idea of attenuating the undersegmentation ratio with a "penalty"
-            # to account for the degree of further sub-segmentation is misguided IMHO:
-            # - its degree term depends on the total number of segments
-            # - our iouThr-based pairing does not find higher degrees anyway
-            # undersegmentation = np.tanh(undersegmentation * under_degree)
-        else:
-            undersegmentation = 0
-        pagestatsUS[catName] = undersegmentation
-        # aggregate per-img/per-cat measures for microaveraging
-        img = coco_eval.evalImgs[imgind] # we throw away coco_lave here
-        img['dtIdsUnder'] = list(under_dt)
-        img['gtIdsUnder'] = list(under_gt)
+            # bypassing COCOeval.evaluateImg, hook onto its results
+            # (again, we stay at areaRng[0]=all and maxDets[0]=all)
+            start = catind * numImgs * numAreas
+            evalimg = coco_eval.evalImgs[start + imgind]
+            if evalimg is None:
+                continue # no DT and GT here
+            # record as dict by pageId / by category
+            imgstats = stats.setdefault('by-image', dict())
+            pagestats = imgstats.setdefault(pageId, dict())
+            pagestatsTP = pagestats.setdefault('true_positives', dict())
+            pagestatsTP[catName] = list()
+            pagestatsFP = pagestats.setdefault('false_positives', dict())
+            pagestatsFP[catName] = list()
+            pagestatsFN = pagestats.setdefault('false_negatives', dict())
+            pagestatsFN[catName] = list()
+            # measure under/oversegmentation for this image and category
+            # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
+            pagestatsOS = pagestats.setdefault('oversegmentation', dict())
+            pagestatsUS = pagestats.setdefault('undersegmentation', dict())
+            # get matches and ious and scores
+            ious = coco_eval.ious[imgId, catId]
+            if len(ious):
+                overlaps_dt, overlaps_gt = ious.nonzero()
+            else:
+                overlaps_dt = overlaps_gt = []
+            # reconstruct score sorting in computeIoU
+            gt = coco_eval._gts[imgId, catId]
+            dt = coco_eval._dts[imgId, catId]
+            dtind = np.argsort([-d['score'] for d in dt], kind='mergesort')
+            dt = [dt[i] for i in dtind]
+            matches = list()
+            gtmatches = dict()
+            dtmatches = dict()
+            for dtind, gtind in zip(overlaps_dt, overlaps_gt):
+                d = dt[dtind]
+                g = gt[gtind]
+                iou = ious[dtind, gtind]
+                union = maskArea(mergeMasks([g['segmentation'], d['segmentation']]))
+                intersection = int(iou * union)
+                # cannot use g or d['area'] here, because mask might be fractional (only-fg) instead of outline
+                areag = int(maskArea(g['segmentation']))
+                aread = int(maskArea(d['segmentation']))
+                iogt = intersection / areag
+                iodt = intersection / aread
+                if iou < 0.5 and iogt < 0.5 and iodt < 0.5:
+                    continue
+                gtmatches.setdefault(gtind, list()).append(dtind)
+                dtmatches.setdefault(dtind, list()).append(gtind)
+                matches.append((g['id'],
+                                d['id'],
+                                iogt, iodt, iou, intersection))
+                pagestatsTP[catName].append({'GT.ID': g['segment_id'],
+                                             'DT.ID': d['segment_id'],
+                                             'GT.area': areag,
+                                             'DT.area': aread,
+                                             'I.area': intersection,
+                                             'IoGT': iogt,
+                                             'IoDT': iodt,
+                                             'IoU': iou})
+            dtmisses = []
+            for dtind, d in enumerate(dt):
+                if dtind in dtmatches:
+                    continue
+                dtmisses.append((d['id'], maskArea(d['segmentation'])))
+                pagestatsFP[catName].append({'DT.ID': d['segment_id'],
+                                             'area': int(d['area'])})
+            gtmisses = []
+            for gtind, g in enumerate(gt):
+                if gtind in gtmatches:
+                    continue
+                gtmisses.append((g['id'], maskArea(g['segmentation'])))
+                pagestatsFN[catName].append({'GT.ID': g['segment_id'],
+                                             'area': int(g['area'])})
+            over_gt = set(gtind for gtind in gtmatches if len(gtmatches[gtind]) > 1)
+            over_dt = set(chain.from_iterable(
+                gtmatches[gtind] for gtind in gtmatches if len(gtmatches[gtind]) > 1))
+            under_dt = set(dtind for dtind in dtmatches if len(dtmatches[dtind]) > 1)
+            under_gt = set(chain.from_iterable(
+                dtmatches[dtind] for dtind in dtmatches if len(dtmatches[dtind]) > 1))
+            over_degree = sum(len(gtmatches[gtind]) - 1 for gtind in gtmatches)
+            under_degree = sum(len(dtmatches[dtind]) - 1 for dtind in dtmatches)
+            if len(dt) and len(gt):
+                oversegmentation = len(over_gt) * len(over_dt) / len(gt) / len(dt)
+                undersegmentation = len(under_gt) * len(under_dt) / len(gt) / len(dt)
+                # Zhang's idea of attenuating the under/oversegmentation ratio with a "penalty"
+                # to account for the degree of further sub-segmentation is misguided IMHO,
+                # because its degree term depends on the total number of segments:
+                # oversegmentation = np.tanh(oversegmentation * over_degree)
+                # undersegmentation = np.tanh(undersegmentation * under_degree)
+            else:
+                oversegmentation = -1
+                undersegmentation = -1
+            pagestatsOS[catName] = oversegmentation
+            pagestatsUS[catName] = undersegmentation
+            # aggregate per-img/per-cat IoUs for microaveraging
+            evalimg['matches'] = matches # TP
+            evalimg['dtMisses'] = dtmisses # FP
+            evalimg['gtMisses'] = gtmisses # FN
+            evalimg['dtIdsOver'] = [dt[dtind]['id'] for dtind in over_dt]
+            evalimg['gtIdsOver'] = [gt[gtind]['id'] for gtind in over_gt]
+            evalimg['dtIdsUnder'] = [dt[dtind]['id'] for dtind in under_dt]
+            evalimg['gtIdsUnder'] = [gt[gtind]['id'] for gtind in under_gt]
 
-    coco_eval.accumulate()
-    # get precision/recall at
-    # T[0]=0.5 IoU
-    # R[*] recall threshold equal to max recall
-    # K[*] each class
-    # A[0] all areas
-    # M[-1]=all detections
-    recalls = coco_eval.eval['recall'][0,:,0,-1]
-    recallInds = np.searchsorted(np.linspace(0, 1, 101), recalls) - 1
-    classInds = np.arange(len(recalls))
-    precisions = coco_eval.eval['precision'][0, recallInds, classInds, 0, -1]
     catstats = stats.setdefault('by-category', dict())
-    for cat in coco_gt.cats.values():
-        catstats[cat['name']] = {'precision': str(precisions[cat['id']]),
-                                 'recall': str(recalls[cat['id']])}
     # accumulate our over-/undersegmentation and IoU ratios
     numImgs = len(coco_eval.params.imgIds)
     numAreas = len(coco_eval.params.areaRng)
     for catind, catId in enumerate(coco_eval.params.catIds):
         cat = coco_gt.cats[catId]
+        catstats.setdefault(cat['name'], dict())
         start = catind * numImgs * numAreas
         # again, we stay at areaRng[0]=all and maxDets[0]=all
         evalimgs = [coco_eval.evalImgs[start + imgind] for imgind in range(numImgs)]
@@ -497,24 +461,48 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
         overGTs = sum(len(img['gtIdsOver']) for img in evalimgs)
         underDTs = sum(len(img['dtIdsUnder']) for img in evalimgs)
         underGTs = sum(len(img['gtIdsUnder']) for img in evalimgs)
-        sumIoUs = sum(sum(img['IoUs']) for img in evalimgs)
-        sumIoGTs = sum(sum(img['IoGTs']) for img in evalimgs)
-        sumIoDTs = sum(sum(img['IoDTs']) for img in evalimgs)
+        numIoUs = sum(len(img['matches']) for img in evalimgs)
+        numFPs = sum(len(img['dtMisses']) for img in evalimgs)
+        numFNs = sum(len(img['gtMisses']) for img in evalimgs)
+        def get(arg):
+            return lambda x: x[arg]
+        sumIoUs = sum(sum(map(get(4), img['matches'])) for img in evalimgs) # sum(iou)
+        sumIoGTs = sum(sum(map(get(2), img['matches'])) for img in evalimgs) # sum(iogt)
+        sumIoDTs = sum(sum(map(get(3), img['matches'])) for img in evalimgs) # sum(iodt)
+        sumTParea = sum(sum(map(get(5), img['matches'])) for img in evalimgs) # sum(inter)
+        sumFParea = sum(sum(map(get(1), img['dtMisses'])) for img in evalimgs) # sum(area)
+        sumFNarea = sum(sum(map(get(1), img['gtMisses'])) for img in evalimgs) # sum(area)
         if numDTs and numGTs:
             oversegmentation = overDTs * overGTs / numDTs / numGTs
             undersegmentation = underDTs * underGTs / numDTs / numGTs
-            iou = sumIoUs / numDTs
-            iogt = sumIoGTs / numDTs
-            iodt = sumIoDTs / numDTs
+            precision = (numDTs - numFPs) / numDTs
+            recall = (numGTs - numFNs) / numGTs
         else:
-            oversegmentation = undersegmentation = 0
-            iou = iogt = iodt = 0
+            oversegmentation = undersegmentation = precision = recall = -1
+        if numIoUs:
+            iou = sumIoUs / numIoUs
+            iogt = sumIoGTs / numIoUs
+            iodt = sumIoDTs / numIoUs
+        else:
+            iou = iogt = iodt = -1
+        if sumTParea or (sumFParea and sumFNarea):
+            pixel_precision = sumTParea / (sumTParea + sumFParea)
+            pixel_recall = sumTParea / (sumTParea + sumFNarea)
+            pixel_iou = sumTParea / (sumTParea + sumFParea + sumFNarea)
+        else:
+            pixel_precision = pixel_recall = pixel_iou = -1
         catstats[cat['name']]['oversegmentation'] = oversegmentation
         catstats[cat['name']]['undersegmentation'] = undersegmentation
-        catstats[cat['name']]['IoGT'] = iogt
-        catstats[cat['name']]['IoDT'] = iodt
-        catstats[cat['name']]['IoU'] = iou
+        catstats[cat['name']]['segment-precision'] = precision
+        catstats[cat['name']]['segment-recall'] = recall
+        catstats[cat['name']]['IoGT'] = iogt # i.e. per-match pixel-recall
+        catstats[cat['name']]['IoDT'] = iodt # i.e. per-match pixel-precision
+        catstats[cat['name']]['IoU'] = iou # i.e. per-match pixel-jaccardindex
+        catstats[cat['name']]['pixel-precision'] = pixel_precision
+        catstats[cat['name']]['pixel-recall'] = pixel_recall
+        catstats[cat['name']]['pixel-iou'] = pixel_iou
 
+    coco_eval.accumulate()
     coco_eval.summarize()
     statInds = np.ones(12, np.bool)
     statInds[7] = False # AR maxDet[1]
