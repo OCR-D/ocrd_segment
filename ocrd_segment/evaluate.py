@@ -100,9 +100,11 @@ class EvaluateSegmentation(Processor):
             page_gt = pcgts_gt.get_Page()
             page_dt = pcgts_dt.get_Page()
             if onlyfg:
-                page_image, page_coords, _ = self.workspace.image_from_page(page_gt, file_gt.pageId,
-                                                                            feature_selector='binarized')
-                page_mask = ~ np.array(page_image)
+                page_image, page_coords, _ = self.workspace.image_from_page(
+                    page_gt, file_gt.pageId,
+                    feature_selector='binarized',
+                    feature_filter='clipped')
+                page_mask = ~ np.array(page_image.convert('L'))
             imgid = len(images)
             images.append({'file_name': file_gt.pageId,
                            'width': page_gt.get_imageWidth(),
