@@ -92,7 +92,7 @@ class EvaluateSegmentation(Processor):
                 LOG.warning("skipping page %s missing from GT", file_gt.pageId)
                 continue
             if not file_dt:
-                LOG.warning("skipping page %s missing from prediction", file_dt.pageId)
+                LOG.warning("skipping page %s missing from prediction", file_gt.pageId)
                 continue
             LOG.info("processing page %s", file_gt.pageId)
             pcgts_gt = page_from_file(self.workspace.download_file(file_gt))
