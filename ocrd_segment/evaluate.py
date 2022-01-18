@@ -324,8 +324,30 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
     #       Non-matches are counted as well (false positives and false negatives).
     #       Aggregation uses microaveraging over images. Besides counting segments,
     #       the pixel areas are counted and averaged (as ratios).
+    # FIXME: We must differentiate between allowable and non-allowable over/under-segmentation (splits/merges).
+    #        (A region's split is allowable if it flows in the textLineOrder of the respective GT,
+    #         i.e. lines are likely to be either on one side or the other, but not both.
+    #         For top-to-bottom/bottom-to-top regions, vertical splits are allowable.
+    #         For left-to-right/right-to-left regions, horizontal splits are allowable.
+    #         To be sure, we could also validate that explicitly – evaluating both levels at the same time.
+    #         Analogously, a number of regions' merge is allowable if it flows in the textLineOrder
+    #         of them all, and the GT global reading order has no other regions in between.
+    #         For top-to-bottom/bottom-to-top regions, vertical merges are allowable.
+    #         For left-to-right/right-to-left regions, horizontal merges are allowable.
+    #         Again, we could also validate that the overall textline flow is equivalent.)
+    #        This difference can in turn be used to weigh a match pair's score accordingly
+    #        when aggregating. For precision-like scores, we would rule out non-allowable merges
+    #        (by counting them as FP), and for recall-like scores, we would rule out non-allowable splits
+    #        (by counting them as FN).
+    #        We can also weigh these non-allowable cases by their share of height
+    #        (in vertical textLineOrder and horizontal writing) or width
+    #        (in horizontal textLineOrder and vertical writing) which is in disagreement,
+    #        or the share of its textlines that have been split or lost.
+    #        Furthermore, we can weigh matches by the share of non-text regions or fg pixels involved.
     coco_eval.evaluate()
     # get by-page alignment (ignoring inadequate 1:1 matching by pycocotools)
+    def get(arg):
+        return lambda x: x[arg]
     numImgs = len(coco_eval.params.imgIds)
     numAreas = len(coco_eval.params.areaRng)
     for imgind, imgId in enumerate(coco_eval.params.imgIds):
@@ -345,16 +367,6 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
             # record as dict by pageId / by category
             imgstats = stats.setdefault('by-image', dict())
             pagestats = imgstats.setdefault(pageId, dict())
-            pagestatsTP = pagestats.setdefault('true_positives', dict())
-            pagestatsTP[catName] = list()
-            pagestatsFP = pagestats.setdefault('false_positives', dict())
-            pagestatsFP[catName] = list()
-            pagestatsFN = pagestats.setdefault('false_negatives', dict())
-            pagestatsFN[catName] = list()
-            # measure under/oversegmentation for this image and category
-            # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
-            pagestatsOS = pagestats.setdefault('oversegmentation', dict())
-            pagestatsUS = pagestats.setdefault('undersegmentation', dict())
             # get matches and ious and scores
             ious = coco_eval.ious[imgId, catId]
             if len(ious):
@@ -387,28 +399,33 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
                 matches.append((g['id'],
                                 d['id'],
                                 iogt, iodt, iou, intersection))
-                pagestatsTP[catName].append({'GT.ID': g['segment_id'],
-                                             'DT.ID': d['segment_id'],
-                                             'GT.area': areag,
-                                             'DT.area': aread,
-                                             'I.area': intersection,
-                                             'IoGT': iogt,
-                                             'IoDT': iodt,
-                                             'IoU': iou})
+                pagestats.setdefault('true_positives', dict()).setdefault(catName, list()).append(
+                    {'GT.ID': g['segment_id'],
+                     'DT.ID': d['segment_id'],
+                     'GT.area': areag,
+                     'DT.area': aread,
+                     'I.area': intersection,
+                     'IoGT': iogt,
+                     'IoDT': iodt,
+                     'IoU': iou})
             dtmisses = []
             for dtind, d in enumerate(dt):
                 if dtind in dtmatches:
                     continue
                 dtmisses.append((d['id'], maskArea(d['segmentation'])))
-                pagestatsFP[catName].append({'DT.ID': d['segment_id'],
-                                             'area': int(d['area'])})
+                pagestats.setdefault('false_positives', dict()).setdefault(catName, list()).append(
+                    {'DT.ID': d['segment_id'],
+                     'area': int(d['area'])})
             gtmisses = []
             for gtind, g in enumerate(gt):
                 if gtind in gtmatches:
                     continue
                 gtmisses.append((g['id'], maskArea(g['segmentation'])))
-                pagestatsFN[catName].append({'GT.ID': g['segment_id'],
-                                             'area': int(g['area'])})
+                pagestats.setdefault('false_negatives', dict()).setdefault(catName, list()).append(
+                    {'GT.ID': g['segment_id'],
+                     'area': int(g['area'])})
+            # measure under/oversegmentation for this image and category
+            # (follows Zhang et al 2021: Rethinking Semantic Segmentation Evaluation [arXiv:2101.08418])
             over_gt = set(gtind for gtind in gtmatches if len(gtmatches[gtind]) > 1)
             over_dt = set(chain.from_iterable(
                 gtmatches[gtind] for gtind in gtmatches if len(gtmatches[gtind]) > 1))
@@ -425,11 +442,17 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
                 # because its degree term depends on the total number of segments:
                 # oversegmentation = np.tanh(oversegmentation * over_degree)
                 # undersegmentation = np.tanh(undersegmentation * under_degree)
-            else:
-                oversegmentation = -1
-                undersegmentation = -1
-            pagestatsOS[catName] = oversegmentation
-            pagestatsUS[catName] = undersegmentation
+                pagestats.setdefault('oversegmentation', dict())[catName] = oversegmentation
+                pagestats.setdefault('undersegmentation', dict())[catName] = undersegmentation
+                pagestats.setdefault('precision', dict())[catName] =  (len(dt) - len(dtmisses)) / len(dt)
+                pagestats.setdefault('recall', dict())[catName] =  (len(gt) - len(gtmisses)) / len(gt)
+            tparea = sum(map(get(5), matches)) # sum(inter)
+            fparea = sum(map(get(1), dtmisses)) # sum(area)
+            fnarea = sum(map(get(1), gtmisses)) # sum(area)
+            if tparea or (fparea and fnarea):
+                pagestats.setdefault('pixel_precision', dict())[catName] = tparea / (tparea + fparea)
+                pagestats.setdefault('pixel_recall', dict())[catName] =  tparea / (tparea + fnarea)
+                pagestats.setdefault('pixel_iou', dict())[catName] =  tparea / (tparea + fparea + fnarea)
             # aggregate per-img/per-cat IoUs for microaveraging
             evalimg['matches'] = matches # TP
             evalimg['dtMisses'] = dtmisses # FP
@@ -466,8 +489,6 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
         numIoUs = sum(len(img['matches']) for img in evalimgs)
         numFPs = sum(len(img['dtMisses']) for img in evalimgs)
         numFNs = sum(len(img['gtMisses']) for img in evalimgs)
-        def get(arg):
-            return lambda x: x[arg]
         sumIoUs = sum(sum(map(get(4), img['matches'])) for img in evalimgs) # sum(iou)
         sumIoGTs = sum(sum(map(get(2), img['matches'])) for img in evalimgs) # sum(iogt)
         sumIoDTs = sum(sum(map(get(3), img['matches'])) for img in evalimgs) # sum(iodt)
