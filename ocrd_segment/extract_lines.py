@@ -109,20 +109,20 @@ class ExtractLines(Processor):
             worksheet.write('D1', 'Image', bold)
             worksheet.write('E1', 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω')
             worksheet.protect('', {
-                'objects':               False,
-                'scenarios':             False,
-                'format_cells':          True,
-                'format_columns':        True,
-                'format_rows':           True,
-                'insert_columns':        True,
-                'insert_rows':           True,
-                'insert_hyperlinks':     True,
-                'delete_columns':        True,
-                'delete_rows':           True,
+                'objects':               True,
+                'scenarios':             True,
+                'format_cells':          False,
+                'format_columns':        False,
+                'format_rows':           False,
+                'insert_columns':        False,
+                'insert_rows':           False,
+                'insert_hyperlinks':     False,
+                'delete_columns':        False,
+                'delete_rows':           False,
                 'select_locked_cells':   True,
-                'sort':                  False,
-                'autofilter':            False,
-                'pivot_tables':          False,
+                'sort':                  True,
+                'autofilter':            True,
+                'pivot_tables':          True,
                 'select_unlocked_cells': True,
             })
             self.workspace.add_file(
