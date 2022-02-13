@@ -145,6 +145,24 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "min-height": {
+          "type": "number",
+          "format": "int",
+          "default": 30,
+          "description": "minimum annotated height (in px) for a line to be extracted"
+        },
+        "min-width": {
+          "type": "number",
+          "format": "int",
+          "default": 200,
+          "description": "minimum annotated width (in px) for a line to be extracted"
+        },
+        "min-length": {
+          "type": "number",
+          "format": "int",
+          "default": 5,
+          "description": "minimum annotated text length (in characters) for a line to be extracted"
         }
       }
     },

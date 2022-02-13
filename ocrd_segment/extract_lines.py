@@ -182,6 +182,9 @@ class ExtractLines(Processor):
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
                         transparency=self.parameter['transparency'])
+                    if not line_image.height or not line_image.width:
+                        LOG.error("Page '%s' line '%s' is of zero height/width", page_id, line.id)
+                        continue
                     lpolygon_rel = coordinates_of_segment(
                         line, line_image, line_coords).tolist()
                     lpolygon_abs = polygon_from_points(line.get_Coords().points)
@@ -255,7 +258,9 @@ class ExtractLines(Processor):
                         mimetype=self.parameter['mimetype'])
                     
                     # plausibilize and modify excel
-                    if len(ltext) > 10 and line_image.width > 200 and line_image.height > 30:
+                    if (len(ltext) >= self.parameter['min-length'] and
+                        line_image.width >= self.parameter['min-width'] and
+                        line_image.height >= self.parameter['min-height']):
                         scale = 40.0 / line_image.height
                         worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id, normal)
                         if len(ltext) > max_text_length:
