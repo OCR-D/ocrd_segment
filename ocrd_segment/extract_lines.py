@@ -2,7 +2,6 @@ from __future__ import absolute_import
 
 import os
 import json
-import itertools
 import xlsxwriter
 
 from ocrd_utils import (
@@ -41,6 +40,9 @@ class ExtractLines(Processor):
         Otherwise extract an image (which depending on the workflow can
         already be deskewed, dewarped, binarized etc.), cropped to its
         minimal bounding box, and masked by the coordinate polygon outline.
+        Apply ``feature_filter`` (a comma-separated list of image features,
+        cf. :py:func:`ocrd.workspace.Workspace.image_from_page`) to skip
+        specific features when retrieving derived images.
         If ``transparency`` is true, then also add an alpha channel which is
         fully transparent outside of the mask.
         
@@ -96,6 +98,7 @@ class ExtractLines(Processor):
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
                 page, page_id,
+                feature_filter=self.parameter['feature_filter'],
                 transparency=self.parameter['transparency'])
             if page_image_info.resolution != 1:
                 dpi = page_image_info.resolution
@@ -158,12 +161,13 @@ class ExtractLines(Processor):
                 url = self._get_presentation_image(input_file, library_convention)
             i = 2
             max_text_length = 0
-            regions = page.get_AllRegions(classes=['Text'])
+            regions = page.get_AllRegions(classes=['Text'], order='reading-order')
             if not regions:
                 LOG.warning("Page '%s' contains no text regions", page_id)
             for region in regions:
                 region_image, region_coords = self.workspace.image_from_segment(
                     region, page_image, page_coords,
+                    feature_filter=self.parameter['feature_filter'],
                     transparency=self.parameter['transparency'])
                 rtype = region.get_type()
                 lines = region.get_TextLine()
@@ -172,6 +176,7 @@ class ExtractLines(Processor):
                 for line in lines:
                     line_image, line_coords = self.workspace.image_from_segment(
                         line, region_image, region_coords,
+                        feature_filter=self.parameter['feature_filter'],
                         transparency=self.parameter['transparency'])
                     if not line_image.height or not line_image.width:
                         LOG.error("Page '%s' line '%s' is of zero height/width", page_id, line.id)

@@ -2,6 +2,8 @@
 
 This repository aims to provide a number of [OCR-D-compliant processors](https://ocr-d.github.io/cli) for layout analysis and evaluation.
 
+[![image](https://img.shields.io/pypi/v/ocrd_segment.svg)](https://pypi.org/project/ocrd_segment/)
+
 ## Installation
 
 In your virtual environment, run:
