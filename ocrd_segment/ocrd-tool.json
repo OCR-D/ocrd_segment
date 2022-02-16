@@ -11,25 +11,25 @@
         "OCR-D-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-EVAL-BLOCK"
+        "OCR-D-SEG-BLOCK"
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
-        "sanitize": {
-          "type": "boolean",
-          "default": false,
-          "description": "Shrink and/or expand a region in such a way that it coordinates include those of all its lines"
-        },
         "plausibilize": {
           "type": "boolean",
           "default": false,
-          "description": "Remove redundant (almost equal or almost contained) regions, and merge overlapping regions"
+          "description": "Apply the respective solutions for identified redundancies on text regions and lines (deleting/merging/shrinking where overlaps occur)."
         },
         "plausibilize_merge_min_overlap": {
           "type": "number",
           "format": "float",
           "default": 0.90,
-          "description": "When merging a region almost contained in another, require at least this ratio of area is shared with the other"
+          "description": "When merging a region or line almost contained in another, require at least this ratio of area is shared with the other."
+        },
+        "sanitize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shrink/expand each text region such that its coordinates become the convex hull of its constituent text lines."
         }
       }
     },
