@@ -32,15 +32,20 @@ class ExtractLines(Processor):
         """Extract textline images and texts from the workspace.
         
         Open and deserialize PAGE input files and their respective images,
-        then iterate over the element hierarchy down to the line level.
+        then iterate over the element hierarchy down to the textline level.
         
-        Extract an image for each textline (which depending on the workflow
-        can already be deskewed, dewarped, binarized etc.), cropped to its
+        For each textline, if the textline's image size and text length
+        do not satisfy ``min-line-height``, ``min-line-width`` or ``min-line-length``,
+        then skip.
+
+        Otherwise extract an image (which depending on the workflow can
+        already be deskewed, dewarped, binarized etc.), cropped to its
         minimal bounding box, and masked by the coordinate polygon outline.
         If ``transparency`` is true, then also add an alpha channel which is
         fully transparent outside of the mask.
         
-        Create a JSON file with:
+        \b
+        If ``output-types`` contains `json`, then create a JSON file with:
         * the IDs of the textline and its parents,
         * the textline's text content,
         * the textline's coordinates relative to the line image,
@@ -55,16 +60,21 @@ class ExtractLines(Processor):
         * the page's @type,
         * the page's DPI value.
         
-        Create a plain text file for the text content, too.
+        If ``output-types`` contains `text`, then create a plain text file for the content, too.
         
-        Write all files in the directory of the output file group, named like so:
-        * ID + '.raw.png': line image (if the workflow provides raw images)
-        * ID + '.bin.png': line image (if the workflow provides binarized images)
-        * ID + '.nrm.png': line image (if the workflow provides grayscale-normalized images)
-        * ID + '.json': line metadata.
-        * ID + '.gt.txt': line text.
+        If ``output-types`` contains `xlsx`, then (on the page level) create a spreadsheet
+        which contains all extracted lines and images in different columns for manual editing.
         
-        (This is intended for training and evaluation of OCR models.)
+        \b
+        Write all output files in the directory of the output file group, named like so:
+        * fileID + regionID + lineID + '.raw.png': line image (if the workflow provides raw images)
+        * fileID + regionID + lineID + '.bin.png': line image (if the workflow provides binarized images)
+        * fileID + regionID + lineID + '.nrm.png': line image (if the workflow provides grayscale-normalized images)
+        * fileID + regionID + lineID + '.json': line metadata.
+        * fileID + regionID + lineID + '.gt.txt': line text.
+        * fileID + '.xslx': spreadsheet file.
+        
+        (This is intended for correction, training and evaluation of OCR models.)
         """
         LOG = getLogger('processor.ExtractLines')
         assert_file_grp_cardinality(self.input_file_grp, 1)
@@ -74,6 +84,7 @@ class ExtractLines(Processor):
         min_line_length = self.parameter['min-line-length']
         min_line_width = self.parameter['min-line-width']
         min_line_height = self.parameter['min-line-height']
+        out_types = self.parameter['output-types']
 
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
@@ -93,63 +104,61 @@ class ExtractLines(Processor):
             else:
                 dpi = None
             ptype = page.get_type()
-
-            # add excel file
-            LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
-            excel_path = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
             if not os.path.isdir(self.output_file_grp):
                 os.mkdir(self.output_file_grp)
-            workbook = xlsxwriter.Workbook(excel_path,
-                                           {'strings_to_numbers':  False,
-                                            'strings_to_formulas': False,
-                                            'strings_to_urls':     False})
-            worksheet = workbook.add_worksheet()
-            bold = workbook.add_format({'bold': True})
-            normal = workbook.add_format({'valign': 'top'})
-            editable = workbook.add_format({'valign': 'top'})
-            editable.set_locked(False)
-            worksheet.set_default_row(height=40)
-            worksheet.freeze_panes(1, 0)
-            worksheet.write('A1', 'ID', bold)
-            worksheet.write('B1', 'Text', bold)
-            worksheet.write('C1', 'Status', bold)
-            worksheet.write('D1', 'Image', bold)
-            symbols = 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë č ř š ž ě — – - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι ' \
-                'Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω'.split(' ')
+
+            if 'xslx' in out_types:
+                LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
+                excel_path = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
+                workbook = xlsxwriter.Workbook(excel_path,
+                                               {'strings_to_numbers':  False,
+                                                'strings_to_formulas': False,
+                                                'strings_to_urls':     False})
+                worksheet = workbook.add_worksheet()
+                bold = workbook.add_format({'bold': True})
+                normal = workbook.add_format({'valign': 'top'})
+                editable = workbook.add_format({'valign': 'top'})
+                editable.set_locked(False)
+                worksheet.set_default_row(height=40)
+                worksheet.freeze_panes(1, 0)
+                worksheet.write('A1', 'ID', bold)
+                worksheet.write('B1', 'Text', bold)
+                worksheet.write('C1', 'Status', bold)
+                worksheet.write('D1', 'Image', bold)
+                symbols = 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë č ř š ž ě — – - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι ' \
+                    'Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω'.split(' ')
             for i, s in enumerate(symbols):
                 col_idx = 4 + i
                 worksheet.write_string(0, col_idx, s, editable)
                 worksheet.set_column(col_idx, col_idx, 2)
-            worksheet.protect('', {
-                'objects':               True,
-                'scenarios':             True,
-                'format_cells':          False,
-                'format_columns':        False,
-                'format_rows':           False,
-                'insert_columns':        False,
-                'insert_rows':           False,
-                'insert_hyperlinks':     False,
-                'delete_columns':        False,
-                'delete_rows':           False,
-                'select_locked_cells':   True,
-                'sort':                  True,
-                'autofilter':            True,
-                'pivot_tables':          True,
-                'select_unlocked_cells': True,
-            })
-            self.workspace.add_file(
-                ID=file_id,
-                mimetype='application/vnd.ms-excel',
-                pageId=page_id,
-                url=excel_path,
-                file_grp=self.output_file_grp,
-            )
-            url = self._get_presentation_image(input_file, library_convention)
+                worksheet.protect('', {
+                    'objects':               True,
+                    'scenarios':             True,
+                    'format_cells':          False,
+                    'format_columns':        False,
+                    'format_rows':           False,
+                    'insert_columns':        False,
+                    'insert_rows':           False,
+                    'insert_hyperlinks':     False,
+                    'delete_columns':        False,
+                    'delete_rows':           False,
+                    'select_locked_cells':   True,
+                    'sort':                  True,
+                    'autofilter':            True,
+                    'pivot_tables':          True,
+                    'select_unlocked_cells': True,
+                })
+                self.workspace.add_file(
+                    ID=file_id,
+                    mimetype='application/vnd.ms-excel',
+                    pageId=page_id,
+                    url=excel_path,
+                    file_grp=self.output_file_grp,
+                )
+                url = self._get_presentation_image(input_file, library_convention)
             i = 2
             max_text_length = 0
-            regions = itertools.chain.from_iterable(
-                [page.get_TextRegion()] +
-                [subregion.get_TextRegion() for subregion in page.get_TableRegion()])
+            regions = page.get_AllRegions(classes=['Text'])
             if not regions:
                 LOG.warning("Page '%s' contains no text regions", page_id)
             for region in regions:
@@ -157,7 +166,6 @@ class ExtractLines(Processor):
                     region, page_image, page_coords,
                     transparency=self.parameter['transparency'])
                 rtype = region.get_type()
-                
                 lines = region.get_TextLine()
                 if not lines:
                     LOG.warning("Region '%s' contains no text lines", region.id)
@@ -168,15 +176,19 @@ class ExtractLines(Processor):
                     if not line_image.height or not line_image.width:
                         LOG.error("Page '%s' line '%s' is of zero height/width", page_id, line.id)
                         continue
-                    lpolygon_rel = coordinates_of_segment(
-                        line, line_image, line_coords).tolist()
-                    lpolygon_abs = polygon_from_points(line.get_Coords().points)
                     ltext = line.get_TextEquiv()
                     if not ltext:
                         LOG.warning("Line '%s' contains no text content", line.id)
                         ltext = ''
                     else:
                         ltext = ltext[0].Unicode
+                    if (len(ltext) < min_line_length or
+                        line_image.width < min_line_width or
+                        line_image.height < min_line_height):
+                        continue
+                    lpolygon_rel = coordinates_of_segment(
+                        line, line_image, line_coords).tolist()
+                    lpolygon_abs = polygon_from_points(line.get_Coords().points)
                     lstyle = line.get_TextStyle() or region.get_TextStyle()
                     if lstyle:
                         lstyle = {
@@ -232,37 +244,34 @@ class ExtractLines(Processor):
                         extension = '.nrm'
                     else:
                         extension = '.raw'
-
                     file_path = self.workspace.save_image_file(
                         line_image,
                         file_id + '_' + region.id + '_' + line.id + extension,
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
-
-                    # plausibilize and modify excel
-                    if (len(ltext) >= min_line_length and
-                        line_image.width >= min_line_width and
-                        line_image.height >= min_line_height):
+                    if 'xslx' in out_types:
                         scale = 40.0 / line_image.height
                         worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id, normal)
                         if len(ltext) > max_text_length:
                             max_text_length = len(ltext)
                             worksheet.set_column('B:B', max_text_length)
                         worksheet.write('B%d' % i, ltext, editable)
-                        worksheet.data_validation('C%d' %i, {'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
+                        worksheet.data_validation('C%d' % i, {
+                            'validate': 'list', 'source': ['ToDo', 'Done', 'Error']})
                         worksheet.write('C%d' % i, 'ToDo', editable)
                         worksheet.insert_image('D%d' % i, file_path, {
                             'object_position': 1, 'url': url, 'y_scale': scale, 'x_scale': scale})
-
                     file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
-                    json.dump(description, open(file_path, 'w'))
+                    if 'json' in out_types:
+                        json.dump(description, open(file_path, 'w'))
                     file_path = file_path.replace('.json', '.gt.txt')
-                    with open(file_path, 'wb') as f:
-                        f.write((ltext + '\n').encode('utf-8'))
+                    if 'text' in out_types:
+                        with open(file_path, 'wb') as f:
+                            f.write((ltext + '\n').encode('utf-8'))
                     i += 1
-
-            workbook.close()
+            if 'xlsx' in out_types:
+                workbook.close()
 
     def _get_presentation_image(self, input_file, library_convention):
         if library_convention == 'slub':

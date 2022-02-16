@@ -125,7 +125,7 @@
     "ocrd-segment-extract-lines": {
       "executable": "ocrd-segment-extract-lines",
       "categories": ["Image preprocessing"],
-      "description": "Extract line segmentation as line images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "description": "Extract line segmentation as line images + text file + JSON.",
       "input_file_grp": [
         "OCR-D-SEG-LINE",
         "OCR-D-GT-SEG-LINE"
@@ -146,11 +146,20 @@
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
         },
+        "output-types": {
+          "type": "array",
+          "default": ["text", "json", "xslx"],
+          "items": {
+            "type": "string",
+            "enum": ["text", "json", "xslx"]
+          },
+          "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
+        },
         "library-convention": {
           "type": "string",
           "enum": ["slub", "sbb", "none"],
           "default": "none",
-          "description": "Scheme to reconstruct presentation URL of original pages, used to make line images hyperlinked. Libraries have different conventions in their METS files. Set to none to disable (the default)."
+          "description": "For xlsx extraction, to make line images hyperlinked, use this scheme in reconstructing presentation URLs of original pages. Libraries have different conventions in their METS files. Set to none to disable."
         },
         "min-line-length": {
           "type": "number",
