@@ -1,4 +1,14 @@
-ocrd >= 2.16.2
+ocrd >= 2.20.0
 shapely >= 1.7.1
 scikit-image
 numpy
+rapidfuzz
+opencv-python-headless
+#pycocotools >= 2.0.3
+# Not well maintained - neither cocodataset (upstream) nor ppwwyyxx (current PyPI pusher)
+# have all fixes and Nvidia's recent performance improvements, but the latter is not
+# on PyPI at all (and git+https does not work either, because setup.py is not in the root)
+#pycocotools@git+https://github.com/NVIDIA/cocoapi@v0.6.0
+# Is not allowed on PyPI:
+#pycocotools@git+https://github.com/bertsky/pycocotools#subdirectory=PythonAPI
+ocrd-fork-pycocotools

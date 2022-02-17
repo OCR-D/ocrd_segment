@@ -35,7 +35,11 @@ from ocrd_models.ocrd_page_generateds import (
     UnorderedGroupIndexedType,
     ReadingOrderType
 )
-from ocrd_validators.page_validator import PageValidator
+from ocrd_validators.page_validator import (
+    CoordinateConsistencyError,
+    CoordinateValidityError,
+    PageValidator
+)
 from .config import OCRD_TOOL
 
 TOOL = 'ocrd-segment-repair'
@@ -112,8 +116,57 @@ class RepairSegmentation(Processor):
                                             page_textequiv_consistency='off',
                                             check_baseline=False)
             if not report.is_valid:
+                errors = report.errors
+                report.errors = []
+                for error in errors:
+                    if isinstance(error, (CoordinateConsistencyError,CoordinateValidityError)):
+                        if error.tag == 'Page':
+                            element = page.get_Border()
+                        elif error.tag.endswith('Region'):
+                            element = next((region
+                                            for region in page.get_AllRegions()
+                                            if region.id == error.ID), None)
+                        elif error.tag == 'TextLine':
+                            element = next((line
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            if line.id == error.ID), None)
+                        elif error.tag == 'Word':
+                            element = next((word
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            for word in line.get_Word()
+                                            if word.id == error.ID), None)
+                        elif error.tag == 'Glyph':
+                            element = next((glyph
+                                            for region in page.get_AllRegions(classes=['Text'])
+                                            for line in region.get_TextLine()
+                                            for word in line.get_Word()
+                                            for glyph in word.get_Glyph()
+                                            if glyph.id == error.ID), None)
+                        else:
+                            LOG.error("Unrepairable error for unknown segment type: %s",
+                                      str(error))
+                            report.add_error(error)
+                            continue
+                        if not element:
+                            LOG.error("Unrepairable error for unknown segment element: %s",
+                                      str(error))
+                            report.add_error(error)
+                            continue
+                        if isinstance(error, CoordinateConsistencyError):
+                            try:
+                                ensure_consistent(element)
+                            except Exception as e:
+                                LOG.error(str(e))
+                                report.add_error(error)
+                                continue
+                        else:
+                            ensure_valid(element)
+                        LOG.warning("Fixed %s for %s '%s'", error.__class__.__name__,
+                                    error.tag, error.ID)
+            if not report.is_valid:
                 LOG.warning(report.to_xml())
-                # TODO: maybe skip this page if report contains any CoordinateValidityError
 
             #
             # plausibilize region segmentation (remove redundant text regions)
@@ -295,7 +348,7 @@ class RepairSegmentation(Processor):
                 region_polygon = coordinates_for_segment(polygon, page_image, page_coords)
             if region_polygon is not None:
                 LOG.debug('Using new coordinates for region "%s"', region.id)
-                region.get_Coords().points = points_from_polygon(region_polygon)
+                region.get_Coords().set_points(points_from_polygon(region_polygon))
     
 def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_merging, min_overlap, page_id):
     """Determine redundancies in a pair of regions/lines
@@ -563,6 +616,78 @@ def ensure_consistent(child):
     if interp.is_empty or interp.area == 0.0:
         raise Exception("Segment '%s' does not intersect its parent '%s'" % (
             child.id, parent.id))
+    if interp.type == 'GeometryCollection':
+        # heterogeneous result: filter zero-area shapes (LineString, Point)
+        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
+    if interp.type == 'MultiPolygon':
+        # homogeneous result: construct convex hull to connect
+        # FIXME: construct concave hull / alpha shape
+        interp = interp.convex_hull
+    if interp.minimum_clearance < 1.0:
+        # follow-up calculations will necessarily be integer;
+        # so anticipate rounding here and then ensure validity
+        interp = asPolygon(np.round(interp.exterior.coords))
+        interp = make_valid(interp)
+    polygon = interp.exterior.coords[:-1] # keep open
+    points = points_from_polygon(polygon)
+    child.get_Coords().set_points(points)
+
+def ensure_valid(element):
+    changed = False
+    coords = element.get_Coords()
+    points = coords.points
+    polygon = polygon_from_points(points)
+    array = np.array(polygon, np.int)
+    if array.min() < 0:
+        array = np.maximum(0, array)
+        changed = True
+    if array.shape[0] < 3:
+        array = np.concatenate([
+            array, array[::-1] + 1])
+        changed = True
+    polygon = array.tolist()
+    poly = Polygon(polygon)
+    if not poly.is_valid:
+        poly = make_valid(poly)
+        polygon = poly.exterior.coords[:-1]
+        changed = True
+    if changed:
+        points = points_from_polygon(polygon)
+        coords.set_points(points)
+
+def ensure_consistent(child):
+    """Clip segment element polygon to parent polygon range."""
+    points = child.get_Coords().points
+    polygon = polygon_from_points(points)
+    parent = child.parent_object_
+    childp = Polygon(polygon)
+    if isinstance(parent, PageType):
+        if parent.get_Border():
+            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+        else:
+            parentp = Polygon([[0, 0], [0, parent.get_imageHeight()],
+                               [parent.get_imageWidth(), parent.get_imageHeight()],
+                               [parent.get_imageWidth(), 0]])
+    else:
+        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+    # ensure input coords have valid paths (without self-intersection)
+    # (this can happen when shapes valid in floating point are rounded)
+    childp = make_valid(childp)
+    parentp = make_valid(parentp)
+    # check if clipping is necessary
+    if childp.within(parentp):
+        return
+    # clip to parent
+    interp = childp.intersection(parentp)
+    if interp.is_empty or interp.area == 0.0:
+        if hasattr(parent, 'pcGtsId'):
+            parent_id = parent.pcGtsId
+        elif hasattr(parent, 'imageFilename'):
+            parent_id = parent.imageFilename
+        else:
+            parent_id = parent.id
+        raise Exception("Segment '%s' does not intersect its parent '%s'" % (
+            child.id, parent_id))
     if interp.type == 'GeometryCollection':
         # heterogeneous result: filter zero-area shapes (LineString, Point)
         interp = unary_union([geom for geom in interp.geoms if geom.area > 0])

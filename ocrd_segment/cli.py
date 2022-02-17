@@ -6,9 +6,12 @@ from .import_image_segmentation import ImportImageSegmentation
 from .import_coco_segmentation import ImportCOCOSegmentation
 from .evaluate import EvaluateSegmentation
 from .replace_original import ReplaceOriginal
+from .replace_page import ReplacePage
 from .extract_pages import ExtractPages
 from .extract_regions import ExtractRegions
 from .extract_lines import ExtractLines
+from .extract_words import ExtractWords
+from .extract_glyphs import ExtractGlyphs
 
 @click.command()
 @ocrd_cli_options
@@ -37,6 +40,11 @@ def ocrd_segment_replace_original(*args, **kwargs):
 
 @click.command()
 @ocrd_cli_options
+def ocrd_segment_replace_page(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ReplacePage, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
 def ocrd_segment_extract_pages(*args, **kwargs):
     return ocrd_cli_wrap_processor(ExtractPages, *args, **kwargs)
 
@@ -49,3 +57,13 @@ def ocrd_segment_extract_regions(*args, **kwargs):
 @ocrd_cli_options
 def ocrd_segment_extract_lines(*args, **kwargs):
     return ocrd_cli_wrap_processor(ExtractLines, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_extract_words(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ExtractWords, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_extract_glyphs(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ExtractGlyphs, *args, **kwargs)
