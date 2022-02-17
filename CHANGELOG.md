@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Changed:
+
+ * repair: `plausibilize`: both analyse & apply iff enabled
+
 ## [0.1.14] - 2022-02-17
 
 Changed:

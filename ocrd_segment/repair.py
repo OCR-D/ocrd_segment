@@ -102,7 +102,7 @@ class RepairSegmentation(Processor):
         sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
         
-        for (n, input_file) in enumerate(self.input_files):
+        for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
@@ -165,96 +165,16 @@ class RepairSegmentation(Processor):
                             ensure_valid(element)
                         LOG.warning("Fixed %s for %s '%s'", error.__class__.__name__,
                                     error.tag, error.ID)
+            # show remaining errors
             if not report.is_valid:
                 LOG.warning(report.to_xml())
-
-            #
-            # plausibilize region segmentation (remove redundant text regions)
-            #
-            ro = page.get_ReadingOrder()
-            if ro:
-                rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
-            else:
-                rogroup = None
-            marked_for_deletion = list() # which regions/lines will get removed?
-            marked_for_merging = dict() # which regions/lines will get merged into which regions/lines?
-            marked_for_splitting = dict() # which regions/lines will get split along which regions/lines?
-            # cover recursive region structure (but compare only at the same level)
-            parents = list(set([region.parent_object_ for region in page.get_AllRegions(classes=['Text'])]))
-            for parent in parents:
-                regions = parent.get_TextRegion()
-                # sort by area to ensure to arrive at a total ordering compatible
-                # with the topological sort along containment/equivalence arcs
-                # (so we can avoid substituting regions with superregions that have
-                #  themselves been substituted/deleted):
-                regpolys = sorted([(region, Polygon(polygon_from_points(region.get_Coords().points)))
-                                   for region in regions],
-                                  key=lambda x: x[1].area)
-                for i in range(0, len(regpolys)):
-                    for j in range(i+1, len(regpolys)):
-                        region1 = regpolys[i][0]
-                        region2 = regpolys[j][0]
-                        regpoly1 = regpolys[i][1]
-                        regpoly2 = regpolys[j][1]
-                        if _compare_segments(region1, region2, regpoly1, regpoly2,
-                                             marked_for_deletion, marked_for_merging,
-                                             self.parameter['plausibilize_merge_min_overlap'],
-                                             page_id):
-                            # non-trivial overlap: mutually plausibilize lines
-                            linepolys1 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
-                                                 for line in region1.get_TextLine()],
-                                                key=lambda x: x[1].area)
-                            linepolys2 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
-                                                 for line in region2.get_TextLine()],
-                                                key=lambda x: x[1].area)
-                            for line1, linepoly1 in linepolys1:
-                                for line2, linepoly2 in linepolys2:
-                                    if _compare_segments(line1, line2, linepoly1, linepoly2,
-                                                         marked_for_deletion, marked_for_merging,
-                                                         self.parameter['plausibilize_merge_min_overlap'],
-                                                         page_id):
-                                        # non-trivial overlap: check how close to each other
-                                        if (linepoly1.centroid.within(linepoly2) or
-                                            linepoly2.centroid.within(linepoly1)):
-                                            # merge lines and regions
-                                            if regpoly1.area > regpoly2.area:
-                                                marked_for_merging[line2.id] = line1
-                                                marked_for_merging[region2.id] = region1
-                                            else:
-                                                marked_for_merging[line1.id] = line2
-                                                marked_for_merging[region1.id] = region2
-                                        else:
-                                            # split in favour of line with larger share
-                                            if linepoly1.area < linepoly2.area:
-                                                marked_for_splitting[line2.id] = line1
-                                            else:
-                                                marked_for_splitting[line1.id] = line2
-                        elif marked_for_merging.get(region1.id, None) == region2:
-                            marked_for_deletion.extend([line.id for line in region1.get_TextLine()])
-                        elif marked_for_merging.get(region2.id, None) == region1:
-                            marked_for_deletion.extend([line.id for line in region2.get_TextLine()])
-                # results for all pairs in this parent
-                if plausibilize:
-                    # apply everything, passing the regions sorted (see above)
-                    _plausibilize_segments(regpolys, rogroup,
-                                           marked_for_deletion,
-                                           marked_for_merging,
-                                           marked_for_splitting)
-                else:
-                    LOG.info("segments that would be deleted: %", marked_for_deletion)
-                    LOG.info("segments that would be merged: %", [{id_: other.id}
-                                                                  for id_, other
-                                                                  in marked_for_merging.items()])
-                    LOG.info("segments that would be unmerged: %", [{id_: other.id}
-                                                                    for id_, other
-                                                                    in marked_for_splitting.items()])
-
-            #
-            # sanitize region segmentation (shrink to hull of lines)
-            #
+            # delete/merge/split redundant text regions (or its text lines)
+            if plausibilize:
+                self.plausibilize_page(page, page_id)
+            # shrink/expand text regions to the hull of their text lines
             if sanitize:
                 self.sanitize_page(page, page_id)
-                
+            
             file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
@@ -264,6 +184,76 @@ class RepairSegmentation(Processor):
                 local_filename=os.path.join(self.output_file_grp,
                                             file_id + '.xml'),
                 content=to_xml(pcgts))
+    
+    def plausibilize_page(self, page, page_id):
+        ro = page.get_ReadingOrder()
+        if ro:
+            rogroup = ro.get_OrderedGroup() or ro.get_UnorderedGroup()
+        else:
+            rogroup = None
+        marked_for_deletion = list() # which regions/lines will get removed?
+        marked_for_merging = dict() # which regions/lines will get merged into which regions/lines?
+        marked_for_splitting = dict() # which regions/lines will get split along which regions/lines?
+        # cover recursive region structure (but compare only at the same level)
+        parents = {region.parent_object_
+                   for region in page.get_AllRegions(classes=['Text'])}
+        for parent in parents:
+            regions = parent.get_TextRegion()
+            # sort by area to ensure to arrive at a total ordering compatible
+            # with the topological sort along containment/equivalence arcs
+            # (so we can avoid substituting regions with superregions that have
+            #  themselves been substituted/deleted):
+            regpolys = sorted([(region, Polygon(polygon_from_points(region.get_Coords().points)))
+                               for region in regions],
+                              key=lambda x: x[1].area)
+            for i in range(0, len(regpolys)):
+                for j in range(i+1, len(regpolys)):
+                    region1 = regpolys[i][0]
+                    region2 = regpolys[j][0]
+                    regpoly1 = regpolys[i][1]
+                    regpoly2 = regpolys[j][1]
+                    if _compare_segments(region1, region2, regpoly1, regpoly2,
+                                         marked_for_deletion, marked_for_merging,
+                                         self.parameter['plausibilize_merge_min_overlap'],
+                                         page_id):
+                        # non-trivial overlap: mutually plausibilize lines
+                        linepolys1 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
+                                             for line in region1.get_TextLine()],
+                                            key=lambda x: x[1].area)
+                        linepolys2 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
+                                             for line in region2.get_TextLine()],
+                                            key=lambda x: x[1].area)
+                        for line1, linepoly1 in linepolys1:
+                            for line2, linepoly2 in linepolys2:
+                                if _compare_segments(line1, line2, linepoly1, linepoly2,
+                                                     marked_for_deletion, marked_for_merging,
+                                                     self.parameter['plausibilize_merge_min_overlap'],
+                                                     page_id):
+                                    # non-trivial overlap: check how close to each other
+                                    if (linepoly1.centroid.within(linepoly2) or
+                                        linepoly2.centroid.within(linepoly1)):
+                                        # merge lines and regions
+                                        if regpoly1.area > regpoly2.area:
+                                            marked_for_merging[line2.id] = line1
+                                            marked_for_merging[region2.id] = region1
+                                        else:
+                                            marked_for_merging[line1.id] = line2
+                                            marked_for_merging[region1.id] = region2
+                                    else:
+                                        # split in favour of line with larger share
+                                        if linepoly1.area < linepoly2.area:
+                                            marked_for_splitting[line2.id] = line1
+                                        else:
+                                            marked_for_splitting[line1.id] = line2
+                    elif marked_for_merging.get(region1.id, None) == region2:
+                        marked_for_deletion.extend([line.id for line in region1.get_TextLine()])
+                    elif marked_for_merging.get(region2.id, None) == region1:
+                        marked_for_deletion.extend([line.id for line in region2.get_TextLine()])
+                # apply everything, passing the regions sorted (see above)
+                _plausibilize_segments(regpolys, rogroup,
+                                       marked_for_deletion,
+                                       marked_for_merging,
+                                       marked_for_splitting)
     
     def sanitize_page(self, page, page_id):
         """Shrink each region outline to become the minimal convex hull of its constituent textlines."""
@@ -614,78 +604,6 @@ def ensure_consistent(child):
     if interp.is_empty or interp.area == 0.0:
         raise Exception("Segment '%s' does not intersect its parent '%s'" % (
             child.id, parent.id))
-    if interp.type == 'GeometryCollection':
-        # heterogeneous result: filter zero-area shapes (LineString, Point)
-        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
-    if interp.type == 'MultiPolygon':
-        # homogeneous result: construct convex hull to connect
-        # FIXME: construct concave hull / alpha shape
-        interp = interp.convex_hull
-    if interp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        interp = asPolygon(np.round(interp.exterior.coords))
-        interp = make_valid(interp)
-    polygon = interp.exterior.coords[:-1] # keep open
-    points = points_from_polygon(polygon)
-    child.get_Coords().set_points(points)
-
-def ensure_valid(element):
-    changed = False
-    coords = element.get_Coords()
-    points = coords.points
-    polygon = polygon_from_points(points)
-    array = np.array(polygon, np.int)
-    if array.min() < 0:
-        array = np.maximum(0, array)
-        changed = True
-    if array.shape[0] < 3:
-        array = np.concatenate([
-            array, array[::-1] + 1])
-        changed = True
-    polygon = array.tolist()
-    poly = Polygon(polygon)
-    if not poly.is_valid:
-        poly = make_valid(poly)
-        polygon = poly.exterior.coords[:-1]
-        changed = True
-    if changed:
-        points = points_from_polygon(polygon)
-        coords.set_points(points)
-
-def ensure_consistent(child):
-    """Clip segment element polygon to parent polygon range."""
-    points = child.get_Coords().points
-    polygon = polygon_from_points(points)
-    parent = child.parent_object_
-    childp = Polygon(polygon)
-    if isinstance(parent, PageType):
-        if parent.get_Border():
-            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
-        else:
-            parentp = Polygon([[0, 0], [0, parent.get_imageHeight()],
-                               [parent.get_imageWidth(), parent.get_imageHeight()],
-                               [parent.get_imageWidth(), 0]])
-    else:
-        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
-    # ensure input coords have valid paths (without self-intersection)
-    # (this can happen when shapes valid in floating point are rounded)
-    childp = make_valid(childp)
-    parentp = make_valid(parentp)
-    # check if clipping is necessary
-    if childp.within(parentp):
-        return
-    # clip to parent
-    interp = childp.intersection(parentp)
-    if interp.is_empty or interp.area == 0.0:
-        if hasattr(parent, 'pcGtsId'):
-            parent_id = parent.pcGtsId
-        elif hasattr(parent, 'imageFilename'):
-            parent_id = parent.imageFilename
-        else:
-            parent_id = parent.id
-        raise Exception("Segment '%s' does not intersect its parent '%s'" % (
-            child.id, parent_id))
     if interp.type == 'GeometryCollection':
         # heterogeneous result: filter zero-area shapes (LineString, Point)
         interp = unary_union([geom for geom in interp.geoms if geom.area > 0])

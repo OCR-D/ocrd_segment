@@ -18,7 +18,7 @@
         "plausibilize": {
           "type": "boolean",
           "default": false,
-          "description": "Apply the respective solutions for identified redundancies on text regions and lines (deleting/merging/shrinking where overlaps occur)."
+          "description": "Identify and remove redundancies on text regions and text lines (deleting/merging/shrinking where overlaps occur)."
         },
         "plausibilize_merge_min_overlap": {
           "type": "number",
