@@ -4,6 +4,13 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.14] - 2022-02-17
+
+Changed:
+
+ * repair: for non-trivial region overlaps, recurse to line level
+ * repair: for non-trivial line overlaps, merge (if centric) or subtract
+
 ## [0.1.13] - 2021-12-11
 
 Fixed:
@@ -13,7 +20,7 @@ Fixed:
 Changed:
 
  * evaluate: improved report format (hierarchy and names)
- 
+
 Added:
 
  * evaluate: over-/undersegmentation metrics, pixel-wise metrics
@@ -109,7 +116,7 @@ Fixed:
 Changed:
 
   * repair: traverse all text regions recursively
-  
+
 Fixed:
 
   * repair: be robust against invalid input polygons
@@ -132,6 +139,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.14]: ../../compare/v0.1.13...v0.1.14
 [0.1.13]: ../../compare/v0.1.12...v0.1.13
 [0.1.12]: ../../compare/v0.1.11...v0.1.12
 [0.1.11]: ../../compare/v0.1.10...v0.1.11
