@@ -2,6 +2,7 @@ ocrd >= 2.20.0
 shapely >= 1.7.1
 scikit-image
 numpy
+xlsxwriter
 rapidfuzz
 opencv-python-headless
 #pycocotools >= 2.0.3

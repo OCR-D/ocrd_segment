@@ -55,14 +55,14 @@ class RepairSegmentation(Processor):
         """Perform generic post-processing of page segmentation with Shapely and OpenCV.
         
         Open and deserialize PAGE input files and their respective images,
-        then validate syntax and semantics of the existing annotations
-        (like validity of coordinates, and multi-level consistency, i.e.
-        projectivity of polygon contours and concatenation of text content).
-        Try to repair any defects automatically.
+        then validate syntax and semantics, checking for invalid or inconsistent
+        segmentation. Fix invalidities by simplifying and/or re-ordering polygon paths.
+        Fix inconsistencies by shrinking segment polygons to their parents. Log
+        errors that cannot be repaired automatically.
         
         \b
-        Next, for each segment (top-level page or recursive region) which
-        contains any text regions, try to find all pairs of regions in it that
+        Next, if ``plausibilize``, then for each segment (top-level page or recursive region)
+        which contains any text regions, try to find all pairs of such regions in it that
         are redundant judging by their coordinates:
         - If near identical coordinates,
           then either region can be deleted.
@@ -84,10 +84,7 @@ class RepairSegmentation(Processor):
              - if either line's centroid is in the other, 
                then the smaller line can be merged into the larger,
              - otherwise the smaller line can be subtracted from the larger.
-        
-        If ``plausibilize``, then apply those analyses (recursing from
-        regions to lines) and update the reading order. Otherwise merely
-        log what would have been done.
+        Apply those repairs and update the reading order.
         
         Furthermore, if ``sanitize``, then for each text region, update
         the coordinates to become the minimal convex hull of its constituent

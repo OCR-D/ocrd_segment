@@ -7,6 +7,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 Changed:
 
  * repair: `plausibilize`: both analyse & apply iff enabled
+ * extract-lines: add parameters for output types and conditions for line extraction
+ * extract-lines: add `xlsx` output option for GT editing
 
 ## [0.1.14] - 2022-02-17
 

@@ -97,6 +97,9 @@ class ExtractRegions(Processor):
                     region_image, region_coords = self.workspace.image_from_segment(
                         region, page_image, page_coords,
                         transparency=self.parameter['transparency'])
+                    if not region_image.width or not region_image.height:
+                        LOG.error("ignoring zero-size region '%s'", region.id)
+                        continue
                     if rtype in ['TextRegion', 'ChartRegion', 'GraphicRegion']:
                         subrtype = region.get_type()
                     else:
@@ -156,10 +159,10 @@ class ExtractRegions(Processor):
                     else:
                         extension = '.raw'
 
-                    file_id = make_file_id(input_file, self.output_file_grp)
+                    file_id = make_file_id(input_file, self.output_file_grp) + '_' + region.id + extension
                     file_path = self.workspace.save_image_file(
                         region_image,
-                        file_id + '_' + region.id + extension,
+                        file_id,
                         self.output_file_grp,
                         pageId=input_file.pageId,
                         mimetype=self.parameter['mimetype'])
