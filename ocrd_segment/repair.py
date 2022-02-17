@@ -225,9 +225,7 @@ class RepairSegmentation(Processor):
                                                 marked_for_merging[region1.id] = region2
                                         else:
                                             # split in favour of line with larger share
-                                            interpoly = regpoly1.intersection(regpoly2)
-                                            if linepoly1.intersection(interpoly).area > \
-                                               linepoly2.intersection(interpoly).area:
+                                            if linepoly1.area < linepoly2.area:
                                                 marked_for_splitting[line2.id] = line1
                                             else:
                                                 marked_for_splitting[line1.id] = line2
