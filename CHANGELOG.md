@@ -4,6 +4,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.15] - 2022-02-17
+
 Changed:
 
  * repair: `plausibilize`: both analyse & apply iff enabled
@@ -145,6 +147,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.15]: ../../compare/v0.1.14...v0.1.15
 [0.1.14]: ../../compare/v0.1.13...v0.1.14
 [0.1.13]: ../../compare/v0.1.12...v0.1.13
 [0.1.12]: ../../compare/v0.1.11...v0.1.12
