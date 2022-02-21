@@ -246,11 +246,11 @@ class RepairSegmentation(Processor):
                         marked_for_deletion.extend([line.id for line in region1.get_TextLine()])
                     elif marked_for_merging.get(region2.id, None) == region1:
                         marked_for_deletion.extend([line.id for line in region2.get_TextLine()])
-                # apply everything, passing the regions sorted (see above)
-                _plausibilize_segments(regpolys, rogroup,
-                                       marked_for_deletion,
-                                       marked_for_merging,
-                                       marked_for_splitting)
+            # apply everything, passing the regions sorted (see above)
+            _plausibilize_segments(regpolys, rogroup,
+                                   marked_for_deletion,
+                                   marked_for_merging,
+                                   marked_for_splitting)
     
     def sanitize_page(self, page, page_id):
         """Shrink each region outline to become the minimal convex hull of its constituent textlines."""
