@@ -4,6 +4,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.16] - 2022-02-21
+
 Fixed:
 
  * repair: fix `plausibilize` scope of apply-list
@@ -155,6 +157,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.16]: ../../compare/v0.1.15...v0.1.16
 [0.1.15]: ../../compare/v0.1.14...v0.1.15
 [0.1.14]: ../../compare/v0.1.13...v0.1.14
 [0.1.13]: ../../compare/v0.1.12...v0.1.13
