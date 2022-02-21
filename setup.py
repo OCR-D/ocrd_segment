@@ -14,6 +14,7 @@ Installs:
     - ocrd-segment-replace-original
     - ocrd-segment-replace-page
     - ocrd-segment-evaluate
+    - page-segment-evaluate
 """
 import codecs
 
