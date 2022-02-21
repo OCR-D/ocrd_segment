@@ -2,6 +2,7 @@ import click
 
 from ocrd.decorators import ocrd_cli_options, ocrd_cli_wrap_processor
 from .repair import RepairSegmentation
+from .project import ProjectHull
 from .import_image_segmentation import ImportImageSegmentation
 from .import_coco_segmentation import ImportCOCOSegmentation
 from .evaluate import EvaluateSegmentation
@@ -17,6 +18,11 @@ from .extract_glyphs import ExtractGlyphs
 @ocrd_cli_options
 def ocrd_segment_repair(*args, **kwargs):
     return ocrd_cli_wrap_processor(RepairSegmentation, *args, **kwargs)
+
+@click.command()
+@ocrd_cli_options
+def ocrd_segment_project(*args, **kwargs):
+    return ocrd_cli_wrap_processor(ProjectHull, *args, **kwargs)
 
 @click.command()
 @ocrd_cli_options

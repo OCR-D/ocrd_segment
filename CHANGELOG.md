@@ -4,6 +4,14 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Fixed:
+
+ * repair: fix `plausibilize` scope of apply-list
+
+Changed:
+
+ * project: new processor for convex hull resegmentation
+
 ## [0.1.15] - 2022-02-17
 
 Changed:

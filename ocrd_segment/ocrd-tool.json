@@ -33,6 +33,32 @@
         }
       }
     },
+    "ocrd-segment-project": {
+      "executable": "ocrd-segment-project",
+      "categories": ["Layout analysis"],
+      "description": "Project segment coordinates to their structural parents",
+      "input_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation"],
+      "parameters": {
+        "level-of-operation": {
+          "type": "string",
+          "enum": ["page", "region", "line", "word"],
+          "default": "page",
+          "description": "hierarchy level which to assign new coordinates to"
+        },
+        "padding": {
+          "type": "number",
+          "format": "integer",
+          "default": 10,
+          "description": "margin (in px) to extend the hull in every direction"
+        }
+      }
+    },
     "ocrd-segment-from-masks": {
       "executable": "ocrd-segment-from-masks",
       "categories": ["Layout analysis"],
