@@ -1,9 +1,11 @@
 from __future__ import absolute_import
 
 import os.path
+from itertools import chain
 import numpy as np
 from shapely.geometry import asPolygon, Polygon
 from shapely.ops import unary_union
+import alphashape
 
 from ocrd import Processor
 from ocrd_utils import (
@@ -114,9 +116,9 @@ class ProjectHull(Processor):
     def _process_segment(self, segment, constituents, page_id):
         """Shrink segment outline to become the minimal convex hull of its constituent segments."""
         LOG = getLogger('processor.ProjectHull')
-        polygons = [polygon_from_points(constituent.get_Coords().points)
+        polygons = [Polygon(polygon_from_points(constituent.get_Coords().points))
                     for constituent in constituents]
-        polygon = join_polygons(polygons, extend=self.parameter['padding'])
+        polygon = join_polygons(polygons).buffer(self.parameter['padding']).exterior.coords[:-1]
         if isinstance(segment, PageType):
             oldborder = segment.Border
             segment.Border = None # ensure interim parent is the page frame itself
@@ -137,16 +139,45 @@ class ProjectHull(Processor):
             else:
                 segment.set_Coords(coords)
 
-def join_polygons(polygons, extend=2):
-    # FIXME: construct concave hull / alpha shape
-    jointp = unary_union([make_valid(Polygon(polygon)).buffer(extend)
-                          for polygon in polygons]).convex_hull
+def join_polygons(polygons, loc='', scale=20):
+    """construct concave hull (alpha shape) from input polygons"""
+    LOG = getLogger('processor.ProjectHull')
+    # ensure input polygons are simply typed
+    polygons = list(chain.from_iterable([
+        poly.geoms if poly.type in ['MultiPolygon', 'GeometryCollection']
+        else [poly]
+        for poly in polygons]))
+    if len(polygons) == 1:
+        return polygons[0]
+    # get equidistant list of points along hull
+    # (otherwise alphashape will jump across the interior)
+    points = [poly.exterior.interpolate(dist).coords[0] # .xy
+              for poly in polygons
+              for dist in np.arange(0, poly.length, scale / 2)]
+    #alpha = alphashape.optimizealpha(points) # too slow
+    alpha = 0.03
+    jointp = alphashape.alphashape(points, alpha)
+    tries = 0
+    # from descartes import PolygonPatch
+    # import matplotlib.pyplot as plt
+    while jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors):
+        # plt.figure()
+        # plt.gca().scatter(*zip(*points))
+        # for geom in jointp.geoms:
+        #     plt.gca().add_patch(PolygonPatch(geom, alpha=0.2))
+        # plt.show()
+        alpha *= 0.7
+        tries += 1
+        if tries > 10:
+            LOG.warning("cannot find alpha for concave hull on '%s'", loc)
+            alpha = 0
+        jointp = alphashape.alphashape(points, alpha)
     if jointp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
         jointp = asPolygon(np.round(jointp.exterior.coords))
         jointp = make_valid(jointp)
-    return jointp.exterior.coords[:-1]
+    return jointp
     
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.

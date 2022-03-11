@@ -13,3 +13,4 @@ opencv-python-headless
 # Is not allowed on PyPI:
 #pycocotools@git+https://github.com/bertsky/pycocotools#subdirectory=PythonAPI
 ocrd-fork-pycocotools
+alphashape
