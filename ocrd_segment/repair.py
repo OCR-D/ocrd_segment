@@ -88,7 +88,7 @@ class RepairSegmentation(Processor):
         
         Furthermore, if ``sanitize``, then for each text region, update
         the coordinates to become the minimal convex hull of its constituent
-        text lines.
+        text lines. (But consider running ocrd-segment-project instead.)
         
         Finally, produce new output files by serialising the resulting hierarchy.
         """
@@ -254,6 +254,7 @@ class RepairSegmentation(Processor):
     
     def sanitize_page(self, page, page_id):
         """Shrink each region outline to become the minimal convex hull of its constituent textlines."""
+        # FIXME: should probably be removed in favour of ocrd-segment-project entirely
         LOG = getLogger('processor.RepairSegmentation')
         regions = page.get_AllRegions(classes=['Text'])
         page_image, page_coords, _ = self.workspace.image_from_page(

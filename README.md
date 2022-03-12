@@ -26,7 +26,7 @@ Contains processors for various tasks:
     - [ocrd-segment-from-coco](ocrd_segment/import_coco_segmentation.py) (for [MS-COCO](https://cocodataset.org/) annotation)
   - post-processing or repairing layout segmentations:
     - [ocrd-segment-repair](ocrd_segment/repair.py) (validity and consistency of coordinates, reducing overlaps/redundancy between neighbours, shrinking regions to the alpha shape of their lines)
-    - [ocrd-segment-project](ocrd_segment/project.py) (remake segment coordinates into the convex hull of their constituents)
+    - [ocrd-segment-project](ocrd_segment/project.py) (remake segment coordinates into the concave hull / alpha shape of their constituents)
     - [ocrd-segment-replace-original](ocrd_segment/replace_original.py) (rebase all segments on cropped+deskewed border frame as new full page)
     - [ocrd-segment-replace-page](ocrd_segment/replace_page.py) (2 input fileGrps; overwrite segmentation below page of first fileGrp by all segments of second fileGrp, rebasing all coordinates; "inverse" of `replace-original`)
   - comparing different layout segmentations:

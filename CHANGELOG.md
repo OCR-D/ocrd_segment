@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.17] - 2022-03-12
+
+Changed:
+
+ * project: use true alpha shape instead of convex hull
+
 ## [0.1.16] - 2022-02-21
 
 Fixed:
