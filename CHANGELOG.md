@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Fixed:
+
+ * extract-lines/words: move extra parameters where they belong
+
 ## [0.1.17] - 2022-03-12
 
 Changed:

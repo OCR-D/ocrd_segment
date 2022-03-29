@@ -315,6 +315,36 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "output-types": {
+          "type": "array",
+          "default": ["text", "json", "xslx"],
+          "items": {
+            "type": "string",
+            "enum": ["text", "json", "xslx"]
+          },
+          "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
+        },
+        "library-convention": {
+          "type": "string",
+          "enum": ["slub", "sbb", "none"],
+          "default": "none",
+          "description": "For xlsx extraction, to make line images hyperlinked, use this scheme in reconstructing presentation URLs of original pages. Libraries have different conventions in their METS files. Set to none to disable."
+        },
+        "min-line-length": {
+          "type": "number",
+          "default": 5,
+          "description": "Only extract lines with at least this many characters."
+        },
+        "min-line-width": {
+          "type": "number",
+          "default": 200,
+          "description": "Only extract lines that are at least this wide (in px)."
+        },
+        "min-line-height": {
+          "type": "number",
+          "default": 30,
+          "description": "Only extract lines that are at least this high (in px)."
         }
       }
     },
@@ -346,36 +376,6 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
-        },
-        "output-types": {
-          "type": "array",
-          "default": ["text", "json", "xslx"],
-          "items": {
-            "type": "string",
-            "enum": ["text", "json", "xslx"]
-          },
-          "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
-        },
-        "library-convention": {
-          "type": "string",
-          "enum": ["slub", "sbb", "none"],
-          "default": "none",
-          "description": "For xlsx extraction, to make line images hyperlinked, use this scheme in reconstructing presentation URLs of original pages. Libraries have different conventions in their METS files. Set to none to disable."
-        },
-        "min-line-length": {
-          "type": "number",
-          "default": 5,
-          "description": "Only extract lines with at least this many characters."
-        },
-        "min-line-width": {
-          "type": "number",
-          "default": 200,
-          "description": "Only extract lines that are at least this wide (in px)."
-        },
-        "min-line-height": {
-          "type": "number",
-          "default": 30,
-          "description": "Only extract lines that are at least this high (in px)."
         }
       }
     },
