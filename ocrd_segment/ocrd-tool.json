@@ -318,10 +318,10 @@
         },
         "output-types": {
           "type": "array",
-          "default": ["text", "json", "xslx"],
+          "default": ["text", "json", "xlsx"],
           "items": {
             "type": "string",
-            "enum": ["text", "json", "xslx"]
+            "enum": ["text", "json", "xlsx"]
           },
           "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
         },

@@ -74,7 +74,7 @@ class ExtractLines(Processor):
         * fileID + regionID + lineID + '.nrm.png': line image (if the workflow provides grayscale-normalized images)
         * fileID + regionID + lineID + '.json': line metadata.
         * fileID + regionID + lineID + '.gt.txt': line text.
-        * fileID + '.xslx': spreadsheet file.
+        * fileID + '.xlsx': spreadsheet file.
         
         (This is intended for correction, training and evaluation of OCR models.)
         """
@@ -110,7 +110,7 @@ class ExtractLines(Processor):
             if not os.path.isdir(self.output_file_grp):
                 os.mkdir(self.output_file_grp)
 
-            if 'xslx' in out_types:
+            if 'xlsx' in out_types:
                 LOG.info('Writing Excel result file "%s.xlsx" in "%s"', file_id, self.output_file_grp)
                 excel_path = '%s.xlsx' % os.path.join(self.output_file_grp, file_id)
                 workbook = xlsxwriter.Workbook(excel_path,
@@ -255,7 +255,7 @@ class ExtractLines(Processor):
                         self.output_file_grp,
                         page_id=page_id,
                         mimetype=self.parameter['mimetype'])
-                    if 'xslx' in out_types:
+                    if 'xlsx' in out_types:
                         scale = 40.0 / line_image.height
                         worksheet.write('A%d' % i, file_id + '_' + region.id + '_' + line.id, normal)
                         if len(ltext) > max_text_length:
