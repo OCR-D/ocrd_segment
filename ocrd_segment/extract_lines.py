@@ -130,10 +130,10 @@ class ExtractLines(Processor):
                 worksheet.write('D1', 'Image', bold)
                 symbols = 'ſ ꝛ aͤ oͤ uͤ æ œ Æ Œ ℳ  ç ę ë č ř š ž ě — – - ⸗ = Α α Β β ϐ Γ γ Δ δ Ε ε ϵ Ζ ζ Η η Θ θ ϑ Ι ι ' \
                     'Κ κ ϰ Λ λ Μ μ Ν ν Ξ ξ Ο ο Π π ϖ Ρ ρ ϱ Σ σ ς ϲ Τ τ Υ υ ϒ Φ φ ϕ Χ χ Ψ ψ Ω ω'.split(' ')
-            for i, s in enumerate(symbols):
-                col_idx = 4 + i
-                worksheet.write_string(0, col_idx, s, editable)
-                worksheet.set_column(col_idx, col_idx, 2)
+                for i, s in enumerate(symbols):
+                    col_idx = 4 + i
+                    worksheet.write_string(0, col_idx, s, editable)
+                    worksheet.set_column(col_idx, col_idx, 2)
                 worksheet.protect('', {
                     'objects':               True,
                     'scenarios':             True,
