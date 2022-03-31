@@ -60,6 +60,11 @@ class RepairSegmentation(Processor):
         Fix inconsistencies by shrinking segment polygons to their parents. Log
         errors that cannot be repaired automatically.
         
+        Next, if ``simplify`` is non-zero, then for each segment (top-level page or
+        recursive region, line, word, glyph), simplify the polygon points up to that
+        precision, while preserving its topology and parent-child consistency.
+        (This will usually reduce the number of points.)
+        
         \b
         Next, if ``plausibilize``, then for each segment (top-level page or recursive region)
         which contains any text regions, try to find all pairs of such regions in it that
@@ -96,6 +101,7 @@ class RepairSegmentation(Processor):
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
+        simplify = self.parameter['simplify']
         sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
         
@@ -165,6 +171,9 @@ class RepairSegmentation(Processor):
             # show remaining errors
             if not report.is_valid:
                 LOG.warning(report.to_xml())
+            # simplify
+            if simplify:
+                self.simplify_page(page, page_id)
             # delete/merge/split redundant text regions (or its text lines)
             if plausibilize:
                 self.plausibilize_page(page, page_id)
@@ -181,6 +190,25 @@ class RepairSegmentation(Processor):
                 local_filename=os.path.join(self.output_file_grp,
                                             file_id + '.xml'),
                 content=to_xml(pcgts))
+
+    def simplify_page(self, page, page_id):
+        if page.get_Border() is not None:
+            simplify(page.get_Border(), self.parameter['simplify'])
+        for region in page.get_AllRegions():
+            simplify(region, self.parameter['simplify'])
+            if isinstance(region, TextRegionType):
+                for line in region.get_TextLine():
+                    simplify(line, self.parameter['simplify'])
+                    for word in line.get_Word():
+                        simplify(word, self.parameter['simplify'])
+                        for glyph in word.get_Glyph():
+                            simplify(glyph, self.parameter['simplify'])
+                            ensure_consistent(glyph, at_parent=True)
+                        ensure_consistent(word, at_parent=True)
+                    ensure_consistent(line, at_parent=True)
+            ensure_consistent(region, at_parent=True)
+        if page.get_Border() is not None:
+            ensure_consistent(page)
     
     def plausibilize_page(self, page, page_id):
         ro = page.get_ReadingOrder()
@@ -425,12 +453,7 @@ def _merge_segments(seg, superseg, poly, superpoly, segpolys, reading_order):
     # show warnings when granularity is lost; but there might
     # be good reasons to do more here when we have better processors
     # and use-cases in the future
-    superpoly = superpoly.union(poly)
-    if superpoly.type == 'MultiPolygon':
-        superpoly = superpoly.convex_hull
-    if superpoly.minimum_clearance < 1.0:
-        superpoly = asPolygon(np.round(superpoly.exterior.coords))
-    superpoly = make_valid(superpoly)
+    superpoly = merge_poly(superpoly, poly)
     superpoly = superpoly.exterior.coords[:-1] # keep open
     superseg.get_Coords().set_points(points_from_polygon(superpoly))
     # FIXME should we merge/mix attributes and features?
@@ -574,49 +597,131 @@ def page_get_reading_order(ro, rogroup):
             # recursive reading order element (un/ordered group):
             page_get_reading_order(ro, elem)
 
+def simplify(segment, tolerance=0):
+    if tolerance <= 0:
+        return # nothing to do
+    coords = segment.get_Coords()
+    polygon = polygon_from_points(coords.points)
+    if len(polygon) < 10:
+        return # already simple enough
+    poly = Polygon(polygon)
+    if poly.is_empty:
+        return
+    if poly.length < tolerance * 4:
+        return # already too small
+    if poly.length > tolerance * len(polygon):
+        return # already fewer points
+    if np.sqrt(poly.area) < 0.1 * tolerance:
+        return # already relatively small
+    # simplify may easily clip out foreground
+    #poly = poly.simplify(tolerance)
+    # get equidistant list of points along hull
+    poly = Polygon([poly.exterior.interpolate(dist).coords[0] # .xy
+                    for dist in np.arange(0, poly.length, tolerance)])
+    if poly.minimum_clearance < 1.0:
+        # follow-up calculations will necessarily be integer;
+        # so anticipate rounding here and then ensure validity
+        poly = Polygon(np.round(poly.exterior.coords))
+    poly = make_valid(poly)
+    polygon = poly.exterior.coords[:-1]
+    coords.set_points(points_from_polygon(polygon))
+
+def merge_poly(poly1, poly2):
+    poly = poly1.union(poly2)
+    if poly.type == 'MultiPolygon':
+        poly = poly.convex_hull
+    if poly.minimum_clearance < 1.0:
+        poly = Polygon(np.round(poly.exterior.coords))
+    poly = make_valid(poly)
+    return poly
+
+def clip_poly(poly1, poly2):
+    poly = poly1.intersection(poly2)
+    if poly.is_empty or poly.area == 0.0:
+        return None
+    if poly.type == 'GeometryCollection':
+        # heterogeneous result: filter zero-area shapes (LineString, Point)
+        poly = unary_union([geom for geom in poly.geoms if geom.area > 0])
+    if poly.type == 'MultiPolygon':
+        # homogeneous result: construct convex hull to connect
+        # FIXME: construct concave hull / alpha shape
+        poly = poly.convex_hull
+    if poly.minimum_clearance < 1.0:
+        # follow-up calculations will necessarily be integer;
+        # so anticipate rounding here and then ensure validity
+        poly = Polygon(np.round(poly.exterior.coords))
+        poly = make_valid(poly)
+    return poly
+    
 # same as polygon_for_parent pattern in other processors
-def ensure_consistent(child):
-    """Clip segment element polygon to parent polygon range."""
-    points = child.get_Coords().points
-    polygon = polygon_from_points(points)
-    parent = child.parent_object_
-    childp = Polygon(polygon)
-    if isinstance(parent, PageType):
-        if parent.get_Border():
-            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
-        else:
-            parentp = Polygon([[0, 0], [0, parent.get_imageHeight()],
-                               [parent.get_imageWidth(), parent.get_imageHeight()],
-                               [parent.get_imageWidth(), 0]])
+def ensure_consistent(child, at_parent=False):
+    """Make segment coordinates fit into parent coordinates.
+    
+    Ensure that the coordinate polygon of ``child`` is fully
+    contained in the coordinate polygon of its parent.
+    
+    \b
+    To achieve that when necessary, either
+    - enlarge the parent to the union of both,
+      if ``at_parent``
+    - shrink the child to the intersection of both,
+      otherwise.
+    
+    In any case, ensure the resulting polygon is valid.
+    
+    If the parent is at page level, and there is no Border,
+    then use the page frame (and assume `at_parent=False`).
+    
+    If ``child`` is at page level, and there is a Border,
+    then use the page frame as parent (and assume `at_parent=False`).
+    """
+    def page_poly(page):
+        return Polygon([[0, 0],
+                        [0, page.get_imageHeight()],
+                        [page.get_imageWidth(), page.get_imageHeight()],
+                        [page.get_imageWidth(), 0]])
+    if isinstance(child, PageType):
+        if not child.get_Border():
+            return
+        childp = Polygon(polygon_from_points(child.get_Border().get_Coords().points))
+        parentp = page_poly(child)
+        at_parent = False # clip to page frame
+        parent = child
     else:
-        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+        points = child.get_Coords().points
+        polygon = polygon_from_points(points)
+        parent = child.parent_object_
+        childp = Polygon(polygon)
+        if isinstance(parent, PageType):
+            if parent.get_Border():
+                parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+            else:
+                parentp = page_poly(parent)
+                at_parent = False # clip to page frame
+        else:
+            parentp = Polygon(polygon_from_points(parent.get_Coords().points))
     # ensure input coords have valid paths (without self-intersection)
     # (this can happen when shapes valid in floating point are rounded)
     childp = make_valid(childp)
     parentp = make_valid(parentp)
-    # check if clipping is necessary
     if childp.within(parentp):
         return
-    # clip to parent
-    interp = childp.intersection(parentp)
-    if interp.is_empty or interp.area == 0.0:
-        raise Exception("Segment '%s' does not intersect its parent '%s'" % (
-            child.id, parent.id))
-    if interp.type == 'GeometryCollection':
-        # heterogeneous result: filter zero-area shapes (LineString, Point)
-        interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
-    if interp.type == 'MultiPolygon':
-        # homogeneous result: construct convex hull to connect
-        # FIXME: construct concave hull / alpha shape
-        interp = interp.convex_hull
-    if interp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        interp = asPolygon(np.round(interp.exterior.coords))
-        interp = make_valid(interp)
-    polygon = interp.exterior.coords[:-1] # keep open
-    points = points_from_polygon(polygon)
-    child.get_Coords().set_points(points)
+    # enlargement/clipping is necessary
+    if at_parent:
+        # enlarge at parent
+        unionp = merge_poly(childp, parentp)
+        polygon = unionp.exterior.coords[:-1] # keep open
+        points = points_from_polygon(polygon)
+        parent.get_Coords().set_points(points)
+    else:
+        # clip to parent
+        interp = clip_poly(childp, parentp)
+        if interp is None:
+            raise Exception("Segment '%s' does not intersect its parent '%s'" % (
+                child.id, parent.id))
+        polygon = interp.exterior.coords[:-1] # keep open
+        points = points_from_polygon(polygon)
+        child.get_Coords().set_points(points)
 
 def ensure_valid(element):
     changed = False

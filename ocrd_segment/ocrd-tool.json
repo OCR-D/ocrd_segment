@@ -15,6 +15,12 @@
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
+        "simplify": {
+          "type": "number",
+          "format": "float",
+          "default": 0,
+          "description": "Distance (in px) used to simplify all segment polygons. (Avoid values larger than xheight/scale, or corners will be chopped off.) Set to 0 to disable."
+        },
         "plausibilize": {
           "type": "boolean",
           "default": false,

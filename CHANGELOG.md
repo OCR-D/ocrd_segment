@@ -4,6 +4,9 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+ * repair: add option `simplify`
+ * ensure compatibility with Shapely 1.8
+
 ## [0.1.18] - 2022-03-30
 
  * extract-lines/words: move extra parameters where they belong
