@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import os.path
 from itertools import chain
 import numpy as np
-from shapely.geometry import asPolygon, Polygon
+from shapely.geometry import Polygon
 from shapely.ops import unary_union
 import alphashape
 
@@ -175,7 +175,7 @@ def join_polygons(polygons, loc='', scale=20):
     if jointp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
-        jointp = asPolygon(np.round(jointp.exterior.coords))
+        jointp = Polygon(np.round(jointp.exterior.coords))
         jointp = make_valid(jointp)
     return jointp
     
@@ -226,7 +226,7 @@ def make_intersection(poly1, poly2):
     if interp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
-        interp = asPolygon(np.round(interp.exterior.coords))
+        interp = Polygon(np.round(interp.exterior.coords))
         interp = make_valid(interp)
     return interp
 

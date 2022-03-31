@@ -5,7 +5,7 @@ from skimage import draw
 from scipy.ndimage import filters, morphology
 import cv2
 import numpy as np
-from shapely.geometry import asPolygon, Polygon
+from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from ocrd import Processor
@@ -335,7 +335,7 @@ class RepairSegmentation(Processor):
             if region_polygon is not None:
                 LOG.debug('Using new coordinates for region "%s"', region.id)
                 region.get_Coords().set_points(points_from_polygon(region_polygon))
-    
+
 def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_merging, min_overlap, page_id):
     """Determine redundancies in a pair of regions/lines
     
@@ -522,7 +522,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
             if poly.type == 'MultiPolygon':
                 poly = poly.convex_hull
             if poly.minimum_clearance < 1.0:
-                poly = asPolygon(np.round(poly.exterior.coords))
+                poly = Polygon(np.round(poly.exterior.coords))
             poly = make_valid(poly)
             poly = poly.exterior.coords[:-1] # keep open
             seg.get_Coords().set_points(points_from_polygon(poly))
