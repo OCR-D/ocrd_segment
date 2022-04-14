@@ -160,7 +160,7 @@ def join_polygons(polygons, loc='', scale=20):
               for poly in polygons
               for dist in np.arange(0, poly.length, scale / 2)]
     #alpha = alphashape.optimizealpha(points) # too slow
-    alpha = 0.03
+    alpha = 0.01
     jointp = alphashape.alphashape(points, alpha)
     tries = 0
     # from descartes import PolygonPatch

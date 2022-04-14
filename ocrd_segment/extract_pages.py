@@ -306,7 +306,7 @@ class ExtractPages(Processor):
                                                      self.parameter['plot_overlay'])
                     if not poly:
                         continue
-                    polygon = np.array(poly.exterior, np.int)[:-1].tolist()
+                    polygon = np.array(poly.exterior.coords, np.int)[:-1].tolist()
                     xywh = xywh_from_polygon(polygon)
                     area = poly.area
                     description.setdefault('regions', []).append(
@@ -328,7 +328,7 @@ class ExtractPages(Processor):
                         {'id': i, 'image_id': num_page_id,
                          'category_id': next((cat['id'] for cat in categories if cat['name'] == subrtype),
                                              next((cat['id'] for cat in categories if cat['name'] == rtype))),
-                         'segmentation': np.array(poly.exterior, np.int)[:-1].reshape(1, -1).tolist(),
+                         'segmentation': np.array(poly.exterior.coords, np.int)[:-1].reshape(1, -1).tolist(),
                          'area': area,
                          'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
                          'iscrowd': 0})
