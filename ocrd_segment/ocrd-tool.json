@@ -53,7 +53,7 @@
       "parameters": {
         "level-of-operation": {
           "type": "string",
-          "enum": ["page", "region", "line", "word"],
+          "enum": ["page", "table", "region", "line", "word"],
           "default": "page",
           "description": "hierarchy level which to assign new coordinates to"
         },

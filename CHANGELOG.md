@@ -4,6 +4,7 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+ * project: add `level-of-operation=table`
  * repair: add option `simplify`
  * ensure compatibility with Shapely 1.8
 

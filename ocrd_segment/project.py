@@ -81,9 +81,14 @@ class ProjectHull(Processor):
                            page.get_CustomRegion())
                 if len(regions):
                     self._process_segment(page, regions, page_id)
+            elif level == 'table':
+                for region in page.get_AllRegions(classes=['Table']):
+                    regions = region.get_TextRegion()
+                    if not len(regions):
+                        continue
+                    self._process_segment(region, regions, page_id)
             else:
-                textregions = page.get_AllRegions(classes=['Text'])
-                for region in textregions:
+                for region in page.get_AllRegions(classes=['Text']):
                     lines = region.get_TextLine()
                     if not len(lines):
                         continue
