@@ -41,6 +41,7 @@ from ocrd_validators.page_validator import (
     PageValidator
 )
 from .config import OCRD_TOOL
+from .project import join_polygons
 
 TOOL = 'ocrd-segment-repair'
 
@@ -629,7 +630,8 @@ def simplify(segment, tolerance=0):
 def merge_poly(poly1, poly2):
     poly = poly1.union(poly2)
     if poly.type == 'MultiPolygon':
-        poly = poly.convex_hull
+        #poly = poly.convex_hull
+        poly = join_polygons(poly.geoms)
     if poly.minimum_clearance < 1.0:
         poly = Polygon(np.round(poly.exterior.coords))
     poly = make_valid(poly)
@@ -644,8 +646,8 @@ def clip_poly(poly1, poly2):
         poly = unary_union([geom for geom in poly.geoms if geom.area > 0])
     if poly.type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
-        # FIXME: construct concave hull / alpha shape
-        poly = poly.convex_hull
+        #poly = poly.convex_hull
+        poly = join_polygons(poly.geoms)
     if poly.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
