@@ -25,7 +25,7 @@ Contains processors for various tasks:
     - [ocrd-segment-from-masks](ocrd_segment/import_image_segmentation.py) (for mask/label images, i.e. semantic segmentation)
     - [ocrd-segment-from-coco](ocrd_segment/import_coco_segmentation.py) (for [MS-COCO](https://cocodataset.org/) annotation)
   - post-processing or repairing layout segmentations:
-    - [ocrd-segment-repair](ocrd_segment/repair.py) (validity and consistency of coordinates, reducing overlaps/redundancy between neighbours, shrinking regions to the alpha shape of their lines)
+    - [ocrd-segment-repair](ocrd_segment/repair.py) (validity and consistency of all coordinates; also, for regions, reduce overlaps/redundancy between neighbours, and/or simplify polygons, and/or shrink to the alpha shape of foreground contours)
     - [ocrd-segment-project](ocrd_segment/project.py) (remake segment coordinates into the concave hull / alpha shape of their constituents)
     - [ocrd-segment-replace-original](ocrd_segment/replace_original.py) (rebase all segments on cropped+deskewed border frame as new full page)
     - [ocrd-segment-replace-page](ocrd_segment/replace_page.py) (2 input fileGrps; overwrite segmentation below page of first fileGrp by all segments of second fileGrp, rebasing all coordinates; "inverse" of `replace-original`)

@@ -4,11 +4,21 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.19] - 2022-04-15
+
+Changed:
+
+ * repair (`sanitize`): run on all region types
+ * repair (`sanitize`): add parameter `sanitize_padding`
+ * repair (`sanitize`): use binary foreground instead of text line coordinates
+ * repair (`plausibilize`): use true alpha shape instead of convex hull
  * project: add `level-of-operation=table`
  * repair: add option `simplify`
  * ensure compatibility with Shapely 1.8
 
 ## [0.1.18] - 2022-03-30
+
+Fixed:
 
  * extract-lines/words: move extra parameters where they belong
  * extract-lines: fix regressions in v0.1.15
@@ -172,6 +182,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.19]: ../../compare/v0.1.18...v0.1.19
 [0.1.18]: ../../compare/v0.1.17...v0.1.18
 [0.1.17]: ../../compare/v0.1.16...v0.1.17
 [0.1.16]: ../../compare/v0.1.15...v0.1.16
