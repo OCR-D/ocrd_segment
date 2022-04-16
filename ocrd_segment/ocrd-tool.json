@@ -35,7 +35,13 @@
         "sanitize": {
           "type": "boolean",
           "default": false,
-          "description": "Shrink/expand each text region such that its coordinates become the convex hull of its constituent text lines."
+          "description": "Shrink each region such that its coordinates become the minimal concave hull of its binary foreground. (Assumes that a perfect binarization is available.)"
+        },
+        "sanitize_padding": {
+          "type": "number",
+          "format": "integer",
+          "default": 5,
+          "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
         }
       }
     },

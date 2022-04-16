@@ -180,7 +180,12 @@ class RepairSegmentation(Processor):
                 self.plausibilize_page(page, page_id)
             # shrink/expand text regions to the hull of their text lines
             if sanitize:
-                self.sanitize_page(page, page_id)
+                page_image, page_coords, _ = self.workspace.image_from_page(
+                    page, page_id,
+                    feature_selector='binarized',
+                    feature_filter='clipped')
+                shrink_regions(page_image, page_coords, page, page_id,
+                               padding=self.parameter['sanitize_padding'])
             
             file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
@@ -281,90 +286,6 @@ class RepairSegmentation(Processor):
                                    marked_for_merging,
                                    marked_for_splitting)
     
-    def sanitize_page(self, page, page_id):
-        """Shrink each region outline to become the minimal convex hull of its constituent textlines."""
-        # FIXME: should probably be removed in favour of ocrd-segment-project entirely
-        LOG = getLogger('processor.RepairSegmentation')
-        regions = page.get_AllRegions(classes=['Text'])
-        page_image, page_coords, _ = self.workspace.image_from_page(
-            page, page_id)
-        for region in regions:
-            #LOG.info('Sanitizing region "%s"', region.id)
-            lines = region.get_TextLine()
-            if not lines:
-                LOG.warning('Page "%s" region "%s" contains no textlines', page_id, region.id)
-                continue
-            heights = []
-            tops = []
-            # get labels:
-            region_mask = np.zeros((page_image.height, page_image.width), dtype=np.uint8)
-            for line in lines:
-                line_polygon = coordinates_of_segment(line, page_image, page_coords)
-                line_xywh = xywh_from_polygon(line_polygon)
-                heights.append(line_xywh['h'])
-                tops.append(line_xywh['y'])
-                region_mask[draw.polygon(line_polygon[:, 1],
-                                         line_polygon[:, 0],
-                                         region_mask.shape)] = 1
-                region_mask[draw.polygon_perimeter(line_polygon[:, 1],
-                                                   line_polygon[:, 0],
-                                                   region_mask.shape)] = 1
-            # estimate scale:
-            heights = np.array(heights)
-            scale = int(np.max(heights))
-            tops = np.array(tops)
-            order = np.argsort(tops)
-            heights = heights[order]
-            tops = tops[order]
-            if len(lines) > 1:
-                # if interline spacing is larger than line height, use this
-                bottoms = tops + heights
-                deltas = tops[1:] - bottoms[:-1]
-                scale = max(scale, int(np.max(deltas)))
-            # close labels:
-            region_mask = np.pad(region_mask, scale) # protect edges
-            region_mask = np.array(morphology.binary_closing(region_mask, np.ones((scale, 1))), dtype=np.uint8)
-            region_mask = region_mask[scale:-scale, scale:-scale] # unprotect
-            # extend margins (to ensure simplified hull polygon is outside children):
-            region_mask = filters.maximum_filter(region_mask, 3) # 1px in each direction
-            # find outer contour (parts):
-            contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # determine areas of parts:
-            areas = [cv2.contourArea(contour) for contour in contours]
-            total_area = sum(areas)
-            if not total_area:
-                # ignore if too small
-                LOG.warning('Zero contour area in region "%s"', region.id)
-                continue
-            # pick contour and convert to absolute:
-            region_polygon = None
-            for i, contour in enumerate(contours):
-                area = areas[i]
-                if area / total_area < 0.1:
-                    LOG.warning('Ignoring contour %d too small (%d/%d) in region "%s"',
-                                i, area, total_area, region.id)
-                    continue
-                # simplify shape (until valid):
-                # can produce invalid (self-intersecting) polygons:
-                #polygon = cv2.approxPolyDP(contour, 2, False)[:, 0, ::] # already ordered x,y
-                polygon = contour[:, 0, ::] # already ordered x,y
-                polygon = Polygon(polygon).simplify(1)
-                polygon = make_valid(polygon)
-                polygon = polygon.exterior.coords[:-1] # keep open
-                if len(polygon) < 4:
-                    LOG.warning('Ignoring contour %d less than 4 points in region "%s"',
-                                i, region.id)
-                    continue
-                if region_polygon is not None:
-                    LOG.error('Skipping region "%s" due to non-contiguous contours',
-                              region.id)
-                    region_polygon = None
-                    break
-                region_polygon = coordinates_for_segment(polygon, page_image, page_coords)
-            if region_polygon is not None:
-                LOG.debug('Using new coordinates for region "%s"', region.id)
-                region.get_Coords().set_points(points_from_polygon(region_polygon))
-
 def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_merging, min_overlap, page_id):
     """Determine redundancies in a pair of regions/lines
     
@@ -598,6 +519,54 @@ def page_get_reading_order(ro, rogroup):
             # recursive reading order element (un/ordered group):
             page_get_reading_order(ro, elem)
 
+def shrink_regions(page_image, page_coords, page, page_id, padding=0):
+    """Shrink each region outline to become the minimal concave hull of its binary foreground."""
+    LOG = getLogger('processor.RepairSegmentation')
+    page_array = ~ np.array(page_image.convert('1'))
+    page_polygon = page_poly(page)
+    if page.get_Border():
+        page_polygon = Polygon(polygon_from_points(page.get_Border().get_Coords().points))
+    # estimate glyph scale (roughly)
+    _, components = cv2.connectedComponents(page_array.astype(np.uint8))
+    _, counts = np.unique(components, return_counts=True)
+    if counts.shape[0] > 1:
+        counts = np.sqrt(3 * counts)
+        counts = counts[(5 < counts) & (counts < 100)]
+        scale = int(np.median(counts))
+    else:
+        scale = 43
+    for region in page.get_AllRegions():
+        #LOG.info('Shrinking region "%s"', region.id)
+        region_mask = np.zeros_like(page_array, dtype=np.bool)
+        region_polygon = coordinates_of_segment(region, page_image, page_coords)
+        region_mask[draw.polygon(region_polygon[:, 1],
+                                 region_polygon[:, 0],
+                                 region_mask.shape)] = True
+        # find outer contour (parts):
+        region_array = page_array & region_mask
+        contours, _ = cv2.findContours(region_array.astype(np.uint8),
+                                       cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # determine areas of parts:
+        areas = [cv2.contourArea(contour) for contour in contours]
+        total_area = sum(areas)
+        if not total_area:
+            # ignore if too small
+            LOG.warning('Zero contour area in region "%s"', region.id)
+            continue
+        # pick contour and convert to absolute:
+        region_polygon = join_polygons([make_valid(Polygon(contour[:, 0, ::]))
+                                        for contour in contours
+                                        if len(contour) >= 3], loc=region.id, scale=scale)
+        if padding:
+            region_polygon = region_polygon.buffer(padding)
+        region_polygon = coordinates_for_segment(region_polygon.exterior.coords[:-1], page_image, page_coords)
+        region_polygon = Polygon(region_polygon)
+        if not region_polygon.within(page_polygon):
+            region_polygon = clip_poly(region_polygon, page_polygon)
+        if region_polygon is not None:
+            LOG.debug('Using new coordinates for region "%s"', region.id)
+            region.get_Coords().set_points(points_from_polygon(region_polygon.exterior.coords[:-1]))
+
 def simplify(segment, tolerance=0):
     if tolerance <= 0:
         return # nothing to do
@@ -655,6 +624,12 @@ def clip_poly(poly1, poly2):
         poly = make_valid(poly)
     return poly
     
+def page_poly(page):
+    return Polygon([[0, 0],
+                    [0, page.get_imageHeight()],
+                    [page.get_imageWidth(), page.get_imageHeight()],
+                    [page.get_imageWidth(), 0]])
+
 # same as polygon_for_parent pattern in other processors
 def ensure_consistent(child, at_parent=False):
     """Make segment coordinates fit into parent coordinates.
@@ -677,11 +652,6 @@ def ensure_consistent(child, at_parent=False):
     If ``child`` is at page level, and there is a Border,
     then use the page frame as parent (and assume `at_parent=False`).
     """
-    def page_poly(page):
-        return Polygon([[0, 0],
-                        [0, page.get_imageHeight()],
-                        [page.get_imageWidth(), page.get_imageHeight()],
-                        [page.get_imageWidth(), 0]])
     if isinstance(child, PageType):
         if not child.get_Border():
             return
