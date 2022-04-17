@@ -165,7 +165,7 @@ def join_polygons(polygons, loc='', scale=20):
     tries = 0
     # from descartes import PolygonPatch
     # import matplotlib.pyplot as plt
-    while jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors):
+    while jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors) or jointp.is_empty:
         # plt.figure()
         # plt.gca().scatter(*zip(*points))
         # for geom in jointp.geoms:
