@@ -283,25 +283,25 @@ class ExtractPages(Processor):
                         lines = region.get_TextLine()
                         for line in lines:
                             # produce line mask plot, if necessary
-                            poly = segment_poly(page_id, line, page_coords)
                             if 'line' in self.parameter['plot_segmasks']:
-                                plot_segment(page_id, line, poly, 'TextLine', classes,
+                                poly2 = segment_poly(page_id, line, page_coords)
+                                plot_segment(page_id, line, poly2, 'TextLine', classes,
                                              page_image_segmask, neighbors['line'],
                                              self.parameter['plot_overlay'])
                             words = line.get_Word()
                             for word in words:
                                 # produce line mask plot, if necessary
-                                poly = segment_poly(page_id, word, page_coords)
                                 if 'word' in self.parameter['plot_segmasks']:
-                                    plot_segment(page_id, word, poly, 'Word', classes,
+                                    poly2 = segment_poly(page_id, word, page_coords)
+                                    plot_segment(page_id, word, poly2, 'Word', classes,
                                                  page_image_segmask, neighbors['word'],
                                                  self.parameter['plot_overlay'])
                                 glyphs = word.get_Glyph()
                                 for glyph in glyphs:
                                     # produce line mask plot, if necessary
-                                    poly = segment_poly(page_id, glyph, page_coords)
                                     if 'glyph' in self.parameter['plot_segmasks']:
-                                        plot_segment(page_id, glyph, poly, 'Glyph', classes,
+                                        poly2 = segment_poly(page_id, glyph, page_coords)
+                                        plot_segment(page_id, glyph, poly2, 'Glyph', classes,
                                                      page_image_segmask, neighbors['glyph'],
                                                      self.parameter['plot_overlay'])
                     if not poly:
