@@ -4,6 +4,13 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.20] - 2022-04-27
+
+Fixed:
+
+ * extract-pages: fix extraction of region JSON
+ * repair/project: make alpha shape more robust
+
 ## [0.1.19] - 2022-04-15
 
 Changed:
@@ -182,6 +189,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.20]: ../../compare/v0.1.19...v0.1.20
 [0.1.19]: ../../compare/v0.1.18...v0.1.19
 [0.1.18]: ../../compare/v0.1.17...v0.1.18
 [0.1.17]: ../../compare/v0.1.16...v0.1.17
