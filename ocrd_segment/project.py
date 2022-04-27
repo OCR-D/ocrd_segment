@@ -158,14 +158,14 @@ def join_polygons(polygons, loc='', scale=20):
     # (otherwise alphashape will jump across the interior)
     points = [poly.exterior.interpolate(dist).coords[0] # .xy
               for poly in polygons
-              for dist in np.arange(0, poly.length, scale / 2)]
+              for dist in np.arange(0, poly.length, min(scale / 2, poly.length / 4))]
     #alpha = alphashape.optimizealpha(points) # too slow
     alpha = 0.01
     jointp = alphashape.alphashape(points, alpha)
     tries = 0
     # from descartes import PolygonPatch
     # import matplotlib.pyplot as plt
-    while jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors) or jointp.is_empty:
+    while jointp.is_empty or jointp.area == 0.0 or jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors):
         # plt.figure()
         # plt.gca().scatter(*zip(*points))
         # for geom in jointp.geoms:
