@@ -4,6 +4,63 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+## [0.1.20] - 2022-04-27
+
+Fixed:
+
+ * extract-pages: fix extraction of region JSON
+ * repair/project: make alpha shape more robust
+
+## [0.1.19] - 2022-04-15
+
+Changed:
+
+ * repair (`sanitize`): run on all region types
+ * repair (`sanitize`): add parameter `sanitize_padding`
+ * repair (`sanitize`): use binary foreground instead of text line coordinates
+ * repair (`plausibilize`): use true alpha shape instead of convex hull
+ * project: add `level-of-operation=table`
+ * repair: add option `simplify`
+ * ensure compatibility with Shapely 1.8
+
+## [0.1.18] - 2022-03-30
+
+Fixed:
+
+ * extract-lines/words: move extra parameters where they belong
+ * extract-lines: fix regressions in v0.1.15
+
+## [0.1.17] - 2022-03-12
+
+Changed:
+
+ * project: use true alpha shape instead of convex hull
+
+## [0.1.16] - 2022-02-21
+
+Fixed:
+
+ * repair: fix `plausibilize` scope of apply-list
+
+Changed:
+
+ * project: new processor for convex hull resegmentation
+
+## [0.1.15] - 2022-02-17
+
+Changed:
+
+ * repair: `plausibilize`: both analyse & apply iff enabled
+ * extract-lines: add parameters for output types and conditions for line extraction
+ * extract-lines: add `xlsx` output option for GT editing
+
+## [0.1.14] - 2022-02-17
+
+Changed:
+
+ * repair: for non-trivial region overlaps, recurse to line level
+ * repair: for non-trivial line overlaps, merge (if centric) or subtract
+
 ## [0.1.13] - 2021-12-11
 
 Fixed:
@@ -13,7 +70,7 @@ Fixed:
 Changed:
 
  * evaluate: improved report format (hierarchy and names)
- 
+
 Added:
 
  * evaluate: over-/undersegmentation metrics, pixel-wise metrics
@@ -109,7 +166,7 @@ Fixed:
 Changed:
 
   * repair: traverse all text regions recursively
-  
+
 Fixed:
 
   * repair: be robust against invalid input polygons
@@ -132,6 +189,13 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.20]: ../../compare/v0.1.19...v0.1.20
+[0.1.19]: ../../compare/v0.1.18...v0.1.19
+[0.1.18]: ../../compare/v0.1.17...v0.1.18
+[0.1.17]: ../../compare/v0.1.16...v0.1.17
+[0.1.16]: ../../compare/v0.1.15...v0.1.16
+[0.1.15]: ../../compare/v0.1.14...v0.1.15
+[0.1.14]: ../../compare/v0.1.13...v0.1.14
 [0.1.13]: ../../compare/v0.1.12...v0.1.13
 [0.1.12]: ../../compare/v0.1.11...v0.1.12
 [0.1.11]: ../../compare/v0.1.10...v0.1.11

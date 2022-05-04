@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 from shapely.geometry import Polygon
 from shapely.validation import explain_validity
 from shapely.prepared import prep
+import xlsxwriter
 
 from ocrd_utils import (
     getLogger,
@@ -282,30 +283,30 @@ class ExtractPages(Processor):
                         lines = region.get_TextLine()
                         for line in lines:
                             # produce line mask plot, if necessary
-                            poly = segment_poly(page_id, line, page_coords)
                             if 'line' in self.parameter['plot_segmasks']:
-                                plot_segment(page_id, line, poly, 'TextLine', classes,
+                                poly2 = segment_poly(page_id, line, page_coords)
+                                plot_segment(page_id, line, poly2, 'TextLine', classes,
                                              page_image_segmask, neighbors['line'],
                                              self.parameter['plot_overlay'])
                             words = line.get_Word()
                             for word in words:
                                 # produce line mask plot, if necessary
-                                poly = segment_poly(page_id, word, page_coords)
                                 if 'word' in self.parameter['plot_segmasks']:
-                                    plot_segment(page_id, word, poly, 'Word', classes,
+                                    poly2 = segment_poly(page_id, word, page_coords)
+                                    plot_segment(page_id, word, poly2, 'Word', classes,
                                                  page_image_segmask, neighbors['word'],
                                                  self.parameter['plot_overlay'])
                                 glyphs = word.get_Glyph()
                                 for glyph in glyphs:
                                     # produce line mask plot, if necessary
-                                    poly = segment_poly(page_id, glyph, page_coords)
                                     if 'glyph' in self.parameter['plot_segmasks']:
-                                        plot_segment(page_id, glyph, poly, 'Glyph', classes,
+                                        poly2 = segment_poly(page_id, glyph, page_coords)
+                                        plot_segment(page_id, glyph, poly2, 'Glyph', classes,
                                                      page_image_segmask, neighbors['glyph'],
                                                      self.parameter['plot_overlay'])
                     if not poly:
                         continue
-                    polygon = np.array(poly.exterior, np.int)[:-1].tolist()
+                    polygon = np.array(poly.exterior.coords, np.int)[:-1].tolist()
                     xywh = xywh_from_polygon(polygon)
                     area = poly.area
                     description.setdefault('regions', []).append(
@@ -327,7 +328,7 @@ class ExtractPages(Processor):
                         {'id': i, 'image_id': num_page_id,
                          'category_id': next((cat['id'] for cat in categories if cat['name'] == subrtype),
                                              next((cat['id'] for cat in categories if cat['name'] == rtype))),
-                         'segmentation': np.array(poly.exterior, np.int)[:-1].reshape(1, -1).tolist(),
+                         'segmentation': np.array(poly.exterior.coords, np.int)[:-1].reshape(1, -1).tolist(),
                          'area': area,
                          'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
                          'iscrowd': 0})

@@ -7,6 +7,7 @@ Installs:
     - maskrcnn-publaynet
     - maskrcnn-run
     - ocrd-segment-repair
+    - ocrd-segment-project
     - ocrd-segment-from-masks
     - ocrd-segment-from-coco
     - ocrd-segment-extract-pages
@@ -57,6 +58,7 @@ setup(
             'maskrcnn-publaynet=maskrcnn_cli.publaynet:main',
             'maskrcnn-run=maskrcnn_cli.run:cli',
             'ocrd-segment-repair=ocrd_segment.cli:ocrd_segment_repair',
+            'ocrd-segment-project=ocrd_segment.cli:ocrd_segment_project',
             'ocrd-segment-from-masks=ocrd_segment.cli:ocrd_segment_from_masks',
             'ocrd-segment-from-coco=ocrd_segment.cli:ocrd_segment_from_coco',
             'ocrd-segment-extract-pages=ocrd_segment.cli:ocrd_segment_extract_pages',

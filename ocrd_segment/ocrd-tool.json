@@ -1,5 +1,5 @@
 {
-  "version": "0.1.13",
+  "version": "0.1.20",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-extract-formdata": {
@@ -305,25 +305,63 @@
         "OCR-D-SEG-BLOCK"
       ],
       "output_file_grp": [
-        "OCR-D-EVAL-BLOCK"
+        "OCR-D-SEG-BLOCK"
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
-        "sanitize": {
-          "type": "boolean",
-          "default": false,
-          "description": "Shrink and/or expand a region in such a way that it coordinates include those of all its lines"
+        "simplify": {
+          "type": "number",
+          "format": "float",
+          "default": 0,
+          "description": "Distance (in px) used to simplify all segment polygons. (Avoid values larger than xheight/scale, or corners will be chopped off.) Set to 0 to disable."
         },
         "plausibilize": {
           "type": "boolean",
           "default": false,
-          "description": "Remove redundant (almost equal or almost contained) regions, and merge overlapping regions"
+          "description": "Identify and remove redundancies on text regions and text lines (deleting/merging/shrinking where overlaps occur)."
         },
         "plausibilize_merge_min_overlap": {
           "type": "number",
           "format": "float",
           "default": 0.90,
-          "description": "When merging a region almost contained in another, require at least this ratio of area is shared with the other"
+          "description": "When merging a region or line almost contained in another, require at least this ratio of area is shared with the other."
+        },
+        "sanitize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shrink each region such that its coordinates become the minimal concave hull of its binary foreground. (Assumes that a perfect binarization is available.)"
+        },
+        "sanitize_padding": {
+          "type": "number",
+          "format": "integer",
+          "default": 5,
+          "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
+        }
+      }
+    },
+    "ocrd-segment-project": {
+      "executable": "ocrd-segment-project",
+      "categories": ["Layout analysis"],
+      "description": "Project segment coordinates to their structural parents",
+      "input_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "output_file_grp": [
+        "OCR-D-SEG-BLOCK"
+      ],
+      "steps": ["layout/segmentation"],
+      "parameters": {
+        "level-of-operation": {
+          "type": "string",
+          "enum": ["page", "table", "region", "line", "word"],
+          "default": "page",
+          "description": "hierarchy level which to assign new coordinates to"
+        },
+        "padding": {
+          "type": "number",
+          "format": "integer",
+          "default": 10,
+          "description": "margin (in px) to extend the hull in every direction"
         }
       }
     },
@@ -563,7 +601,7 @@
     "ocrd-segment-extract-lines": {
       "executable": "ocrd-segment-extract-lines",
       "categories": ["Image preprocessing"],
-      "description": "Extract line segmentation as line images (deskewed according to `*/@orientation` and cropped+masked along `*/Coords` polygon and dewarped as in `*/AlternativeImage`) + text file (according to `*/TextEquiv`) + JSON (including line coordinates and meta-data).",
+      "description": "Extract line segmentation as line images + text file + JSON.",
       "input_file_grp": [
         "OCR-D-SEG-LINE",
         "OCR-D-GT-SEG-LINE"
@@ -588,6 +626,36 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "output-types": {
+          "type": "array",
+          "default": ["text", "json", "xlsx"],
+          "items": {
+            "type": "string",
+            "enum": ["text", "json", "xlsx"]
+          },
+          "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
+        },
+        "library-convention": {
+          "type": "string",
+          "enum": ["slub", "sbb", "none"],
+          "default": "none",
+          "description": "For xlsx extraction, to make line images hyperlinked, use this scheme in reconstructing presentation URLs of original pages. Libraries have different conventions in their METS files. Set to none to disable."
+        },
+        "min-line-length": {
+          "type": "number",
+          "default": 5,
+          "description": "Only extract lines with at least this many characters."
+        },
+        "min-line-width": {
+          "type": "number",
+          "default": 200,
+          "description": "Only extract lines that are at least this wide (in px)."
+        },
+        "min-line-height": {
+          "type": "number",
+          "default": 30,
+          "description": "Only extract lines that are at least this high (in px)."
         }
       }
     },
@@ -650,6 +718,36 @@
           "type": "boolean",
           "default": true,
           "description": "Add alpha channels with segment masks to the images"
+        },
+        "output-types": {
+          "type": "array",
+          "default": ["text", "json", "xslx"],
+          "items": {
+            "type": "string",
+            "enum": ["text", "json", "xslx"]
+          },
+          "description": "What kind of files to extract besides the line image itself (text/json files for  each line, xlsx per page)."
+        },
+        "library-convention": {
+          "type": "string",
+          "enum": ["slub", "sbb", "none"],
+          "default": "none",
+          "description": "For xlsx extraction, to make line images hyperlinked, use this scheme in reconstructing presentation URLs of original pages. Libraries have different conventions in their METS files. Set to none to disable."
+        },
+        "min-line-length": {
+          "type": "number",
+          "default": 5,
+          "description": "Only extract lines with at least this many characters."
+        },
+        "min-line-width": {
+          "type": "number",
+          "default": 200,
+          "description": "Only extract lines that are at least this wide (in px)."
+        },
+        "min-line-height": {
+          "type": "number",
+          "default": 30,
+          "description": "Only extract lines that are at least this high (in px)."
         }
       }
     },
