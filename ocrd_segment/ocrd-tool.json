@@ -1,5 +1,5 @@
 {
-  "version": "0.1.11",
+  "version": "0.1.13",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-extract-formdata": {
@@ -709,7 +709,7 @@
     "ocrd-segment-evaluate": {
       "executable": "ocrd-segment-evaluate",
       "categories": ["Layout analysis"],
-      "description": "Compare region segmentations",
+      "description": "Compare segmentations",
       "input_file_grp": [
         "OCR-D-GT-SEG-BLOCK",
         "OCR-D-SEG-BLOCK"
