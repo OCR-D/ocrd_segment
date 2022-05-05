@@ -76,24 +76,29 @@
         "num_processes": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 10,
           "description": "number of parallel processes when searching for address matches"
         },
         "glyph_conf_cutoff": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.01,
           "description": "minimum probability of glyph OCR hypotheses to consider in string search"
         },
         "glyph_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 5,
           "description": "maximum number of glyph OCR hypotheses to consider in string search"
         },
         "line_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 20,
           "description": "maximum number of line OCR hypotheses to consider in string search"
         }
@@ -122,12 +127,15 @@
         "images_per_gpu": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 1,
           "description": "number of images fed in parallel (also equals number of CPU workers)"
         },
         "min_confidence": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.5,
           "description": "minimum probability for region candidates"
         }
@@ -179,36 +187,44 @@
         "num_processes": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 4,
           "description": "number of parallel processes when searching for keyword matches"
         },
         "threshold": {
           "type": "number",
           "format": "integer",
+          "minimum": 0,
+          "maximum": 100,
           "default": 90,
           "description": "minimum percentage of character/word match against pre-defined keywords"
         },
         "glyph_conf_cutoff": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.01,
           "description": "minimum probability of glyph OCR hypotheses to consider in string search"
         },
         "glyph_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 5,
           "description": "maximum number of glyph OCR hypotheses to consider in string search"
         },
         "word_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 10,
           "description": "maximum number of word OCR hypotheses to consider in string search"
         },
         "line_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 100,
           "description": "maximum number of line OCR hypotheses to consider in string search"
         }
@@ -236,18 +252,22 @@
         "images_per_gpu": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 1,
           "description": "number of images fed in parallel (also equals number of CPU workers)"
         },
         "num_processes": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 8,
           "description": "number of parallel processes when post-processing"
         },
         "min_confidence": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.5,
           "description": "minimum probability for region candidates"
         }
@@ -268,24 +288,29 @@
         "glyph_conf_cutoff": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.01,
           "description": "minimum probability of glyph OCR hypotheses to consider in string search"
         },
         "glyph_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 5,
           "description": "maximum number of glyph OCR hypotheses to consider in string search"
         },
         "word_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 10,
           "description": "maximum number of word OCR hypotheses to consider in string search"
         },
         "line_topn_cutoff": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 100,
           "description": "maximum number of line OCR hypotheses to consider in string search"
         },
@@ -312,6 +337,7 @@
         "simplify": {
           "type": "number",
           "format": "float",
+          "minimum": 0,
           "default": 0,
           "description": "Distance (in px) used to simplify all segment polygons. (Avoid values larger than xheight/scale, or corners will be chopped off.) Set to 0 to disable."
         },
@@ -323,6 +349,8 @@
         "plausibilize_merge_min_overlap": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.90,
           "description": "When merging a region or line almost contained in another, require at least this ratio of area is shared with the other."
         },
@@ -334,6 +362,7 @@
         "sanitize_padding": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 5,
           "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
         }
@@ -360,6 +389,7 @@
         "padding": {
           "type": "number",
           "format": "integer",
+          "minimum": 0,
           "default": 10,
           "description": "margin (in px) to extend the hull in every direction"
         }
