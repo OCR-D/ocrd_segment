@@ -18,6 +18,7 @@
         "simplify": {
           "type": "number",
           "format": "float",
+          "minimum": 0,
           "default": 0,
           "description": "Distance (in px) used to simplify all segment polygons. (Avoid values larger than xheight/scale, or corners will be chopped off.) Set to 0 to disable."
         },
@@ -29,6 +30,8 @@
         "plausibilize_merge_min_overlap": {
           "type": "number",
           "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
           "default": 0.90,
           "description": "When merging a region or line almost contained in another, require at least this ratio of area is shared with the other."
         },
@@ -40,6 +43,7 @@
         "sanitize_padding": {
           "type": "number",
           "format": "integer",
+          "minimum": 1,
           "default": 5,
           "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
         }
@@ -66,6 +70,7 @@
         "padding": {
           "type": "number",
           "format": "integer",
+          "minimum": 0,
           "default": 10,
           "description": "margin (in px) to extend the hull in every direction"
         }
