@@ -66,6 +66,20 @@ class ExtractRegions(Processor):
         LOG = getLogger('processor.ExtractRegions')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
+        classes = dict(CLASSES)
+        # extract specific classes only
+        if self.parameter["classes"]:
+            if "," in self.parameter["classes"]:
+                provided_classes = self.parameter["classes"].split(",")
+            else:
+                provided_classes = self.parameter["classes"]
+
+            if isinstance(provided_classes, list):
+                for regionClass in provided_classes:
+                    classes = {regionClass: classes[regionClass]}
+            else:
+                # only 1 class provided
+                classes = {provided_classes: classes[provided_classes]}
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
@@ -86,7 +100,7 @@ class ExtractRegions(Processor):
             ptype = page.get_type()
 
             regions = dict()
-            for name in CLASSES.keys():
+            for name in classes.keys():
                 if not name or name == 'Border' or ':' in name:
                     # no subtypes here
                     continue
