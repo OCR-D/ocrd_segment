@@ -291,6 +291,27 @@
           "default": "",
           "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
         },
+        "classes": {
+          "type": "string",
+          "enum": [
+            "NoiseRegion",
+            "LineDrawingRegion",
+            "AdvertRegion",
+            "ImageRegion",
+            "ChartRegion",
+            "MusicRegion",
+            "GraphicRegion",
+            "UnknownRegion",
+            "CustomRegion",
+            "SeparatorRegion",
+            "MathsRegion",
+            "TextRegion",
+            "MapRegion",
+            "ChemRegion",
+            "TableRegion"
+          ],
+          "description": "Comma-separated string of classes to extract e.g. 'TextRegion, TableRegion, ImageRegion'"
+        },
         "mimetype": {
           "type": "string",
           "enum": ["image/bmp", "application/postscript", "image/gif", "image/jpeg", "image/jp2", "image/png", "image/x-portable-pixmap", "image/tiff"],
