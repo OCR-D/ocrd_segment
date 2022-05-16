@@ -66,6 +66,12 @@ class ExtractRegions(Processor):
         LOG = getLogger('processor.ExtractRegions')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
+        classes = dict(CLASSES)
+        LOG.info("Extracting %s region classes!" % self.parameter["classes"])
+        # extract specific classes only
+        if self.parameter["classes"]:
+            selected_classes = self.parameter["classes"]
+            classes = { region: classes[region] for region in selected_classes }
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
             page_id = input_file.pageId or input_file.ID
@@ -86,8 +92,8 @@ class ExtractRegions(Processor):
             ptype = page.get_type()
 
             regions = dict()
-            for name in CLASSES.keys():
-                if not name or name == 'Border' or ':' in name:
+            for name in classes.keys():
+                if not name or not name.endswith("Region"):
                     # no subtypes here
                     continue
                 regions[name] = getattr(page, 'get_' + name)()
@@ -164,7 +170,7 @@ class ExtractRegions(Processor):
                         region_image,
                         file_id,
                         self.output_file_grp,
-                        pageId=input_file.pageId,
+                        page_id=input_file.pageId,
                         mimetype=self.parameter['mimetype'])
                     self.workspace.add_file(
                         ID=file_id + '.json',
