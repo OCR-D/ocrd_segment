@@ -292,8 +292,28 @@
           "description": "Comma-separated list of forbidden image features (e.g. `binarized,despeckled`)."
         },
         "classes": {
-          "type": "string",
-          "enum": [
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "NoiseRegion",
+              "LineDrawingRegion",
+              "AdvertRegion",
+              "ImageRegion",
+              "ChartRegion",
+              "MusicRegion",
+              "GraphicRegion",
+              "UnknownRegion",
+              "CustomRegion",
+              "SeparatorRegion",
+              "MathsRegion",
+              "TextRegion",
+              "MapRegion",
+              "ChemRegion",
+              "TableRegion"
+            ]
+          },
+          "default": [
             "NoiseRegion",
             "LineDrawingRegion",
             "AdvertRegion",
@@ -309,8 +329,8 @@
             "MapRegion",
             "ChemRegion",
             "TableRegion"
-          ],
-          "description": "Comma-separated string of region types to extract e.g. 'TextRegion,TableRegion,ImageRegion'. If empty, all regions are allowed."
+          ],        
+          "description": "Array of region types to extract e.g. -P classes '[\"TextRegion\", \"TableRegion\", \"ImageRegion\"]' . If empty, all regions are allowed."
         },
         "mimetype": {
           "type": "string",
