@@ -310,7 +310,7 @@
             "ChemRegion",
             "TableRegion"
           ],
-          "description": "Comma-separated string of classes to extract e.g. 'TextRegion, TableRegion, ImageRegion'"
+          "description": "Comma-separated string of region types to extract e.g. 'TextRegion,TableRegion,ImageRegion'. If empty, all regions are allowed."
         },
         "mimetype": {
           "type": "string",
