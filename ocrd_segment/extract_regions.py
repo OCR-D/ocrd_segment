@@ -101,7 +101,7 @@ class ExtractRegions(Processor):
 
             regions = dict()
             for name in classes.keys():
-                if not name or name == 'Border' or ':' in name:
+                if not name or not name.endswith("Region"):
                     # no subtypes here
                     continue
                 regions[name] = getattr(page, 'get_' + name)()
