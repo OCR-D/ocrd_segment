@@ -162,7 +162,7 @@ class RepairSegmentation(Processor):
                             try:
                                 ensure_consistent(element)
                             except Exception as e:
-                                LOG.error(str(e))
+                                LOG.error(str(e)) # exc_info=e
                                 report.add_error(error)
                                 continue
                         else:
@@ -556,7 +556,7 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
         # pick contour and convert to absolute:
         region_polygon = join_polygons([make_valid(Polygon(contour[:, 0, ::]))
                                         for contour in contours
-                                        if len(contour) >= 3], loc=region.id, scale=scale)
+                                        if len(contour) >= 3], scale=scale)
         if padding:
             region_polygon = region_polygon.buffer(padding)
         region_polygon = coordinates_for_segment(region_polygon.exterior.coords[:-1], page_image, page_coords)

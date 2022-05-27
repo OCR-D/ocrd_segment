@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Fixed:
+
+ * repair/project: join polygons directly instead of alphashape
+
 ## [0.1.20] - 2022-04-27
 
 Fixed:
