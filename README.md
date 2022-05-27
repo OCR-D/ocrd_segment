@@ -16,8 +16,8 @@ In your [Python virtual environment](https://packaging.python.org/guides/install
 Contains processors for various tasks:
 
   - exporting segment images (including results from preprocessing like cropping/masking, deskewing, dewarping or binarization) along with polygon coordinates and metadata:
-    - [ocrd-segment-extract-pages](ocrd_segment/extract_pages.py) (for pages, also exports [MS-COCO](https://cocodataset.org/) format)
-    - [ocrd-segment-extract-regions](ocrd_segment/extract_regions.py) (for regions)
+    - [ocrd-segment-extract-pages](ocrd_segment/extract_pages.py) (for pages, also exports [MS-COCO](https://cocodataset.org/) format and pageview plots)
+    - [ocrd-segment-extract-regions](ocrd_segment/extract_regions.py) (for regions, also exports [MS-COCO](https://cocodataset.org/) format))
     - [ocrd-segment-extract-lines](ocrd_segment/extract_lines.py) (for lines, also exports text and .xlsx)
     - [ocrd-segment-extract-words](ocrd_segment/extract_words.py) (for words, also exports text)
     - [ocrd-segment-extract-glyphs](ocrd_segment/extract_glyphs.py) (for glyphs, also exports text)

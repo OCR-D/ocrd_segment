@@ -4,8 +4,11 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-Fixed:
+## [0.1.21] - 2022-05-27
 
+Changed:
+
+ * extract-regions: add parameter `classes` and output COCO, too
  * repair/project: join polygons directly instead of alphashape
 
 ## [0.1.20] - 2022-04-27
@@ -193,6 +196,7 @@ Changed:
   * further improve README
 
 <!-- link-labels -->
+[0.1.21]: ../../compare/v0.1.20...v0.1.21
 [0.1.20]: ../../compare/v0.1.19...v0.1.20
 [0.1.19]: ../../compare/v0.1.18...v0.1.19
 [0.1.18]: ../../compare/v0.1.17...v0.1.18
