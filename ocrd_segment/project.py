@@ -161,22 +161,20 @@ def join_polygons(polygons, scale=20):
         return polygons[0]
     # find min-dist path through all polygons (travelling salesman)
     pairs = itertools.combinations(range(npoly), 2)
-    dists = np.eye(npoly, dtype=float)
+    dists = np.zeros((npoly, npoly), dtype=float)
     for i, j in pairs:
         dists[i, j] = polygons[i].distance(polygons[j])
         dists[j, i] = dists[i, j]
     dists = minimum_spanning_tree(dists, overwrite=True)
-    # iteratively join to next nearest neighbour
-    jointp = []
+    # add bridge polygons (where necessary)
     for prevp, nextp in zip(*dists.nonzero()):
         prevp = polygons[prevp]
         nextp = polygons[nextp]
         nearest = nearest_points(prevp, nextp)
         bridgep = LineString(nearest).buffer(max(1, scale/5), resolution=1)
-        jointp.append(prevp)
-        jointp.append(nextp)
-        jointp.append(bridgep)
-    jointp = unary_union(jointp)
+        polygons.append(bridgep)
+    jointp = unary_union(polygons)
+    assert jointp.type == 'Polygon', jointp.wkt
     if jointp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
