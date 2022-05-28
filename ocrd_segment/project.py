@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os.path
 import itertools
 import numpy as np
+from scipy.sparse.csgraph import minimum_spanning_tree
 from shapely.geometry import Polygon, LineString
 from shapely.ops import unary_union, nearest_points
 
@@ -160,21 +161,22 @@ def join_polygons(polygons, scale=20):
         return polygons[0]
     # find min-dist path through all polygons (travelling salesman)
     pairs = itertools.combinations(range(npoly), 2)
-    paths = list(itertools.permutations(range(npoly)))
     dists = np.eye(npoly, dtype=float)
     for i, j in pairs:
         dists[i, j] = polygons[i].distance(polygons[j])
         dists[j, i] = dists[i, j]
-    dists = [sum(dists[i, j] for i, j in pairwise(path))
-             for path in paths]
-    path = paths[min(enumerate(dists), key=lambda x: x[1])[0]]
-    polygons = [polygons[i] for i in path]
+    dists = minimum_spanning_tree(dists, overwrite=True)
     # iteratively join to next nearest neighbour
-    jointp = polygons[0]
-    for thisp, nextp in pairwise(polygons):
-        nearest = nearest_points(jointp, nextp)
+    jointp = []
+    for prevp, nextp in zip(*dists.nonzero()):
+        prevp = polygons[prevp]
+        nextp = polygons[nextp]
+        nearest = nearest_points(prevp, nextp)
         bridgep = LineString(nearest).buffer(max(1, scale/5), resolution=1)
-        jointp = unary_union([jointp, bridgep, nextp])
+        jointp.append(prevp)
+        jointp.append(nextp)
+        jointp.append(bridgep)
+    jointp = unary_union(jointp)
     if jointp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity

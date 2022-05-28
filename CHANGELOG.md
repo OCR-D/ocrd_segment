@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Fixed:
+
+ * repair/project: use minimum spanning tree when joining polygons 
+
 ## [0.1.21] - 2022-05-27
 
 Changed:
