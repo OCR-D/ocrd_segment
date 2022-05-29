@@ -4,6 +4,10 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+Added:
+
+ * replace-text: new processor (inverse of extract-* for text)
+
 Fixed:
 
  * repair/project: use minimum spanning tree when joining polygons 

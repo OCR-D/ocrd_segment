@@ -527,6 +527,19 @@
           }
       }
     },
+    "ocrd-segment-replace-text": {
+      "executable": "ocrd-segment-replace-text",
+      "categories": ["Text recognition and optimization"],
+      "description": "Insert text from annotations in single-segment text files",
+      "steps": ["recognition/post-correction"],
+      "parameters": {
+        "file_glob": {
+          "type": "string",
+          "default": "*.gt.txt",
+          "description": "glob expression which expands to file names to match against page IDs and segment IDs in order to be ingested"
+        }
+      }
+    },
     "ocrd-segment-evaluate": {
       "executable": "ocrd-segment-evaluate",
       "categories": ["Layout analysis"],

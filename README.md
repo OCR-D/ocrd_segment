@@ -29,6 +29,7 @@ Contains processors for various tasks:
     - [ocrd-segment-project](ocrd_segment/project.py) (remake segment coordinates into the concave hull / alpha shape of their constituents)
     - [ocrd-segment-replace-original](ocrd_segment/replace_original.py) (rebase all segments on cropped+deskewed border frame as new full page)
     - [ocrd-segment-replace-page](ocrd_segment/replace_page.py) (2 input fileGrps; overwrite segmentation below page of first fileGrp by all segments of second fileGrp, rebasing all coordinates; "inverse" of `replace-original`)
+    - [ocrd-segment-replace-text](ocrd_segment/replace_text.py) (insert text below page from single-segment text files; "inverse" of `extract-*`)
   - comparing different layout segmentations:
     - [ocrd-segment-evaluate](ocrd_segment/evaluate.py) :construction: (2 input fileGrps; align, compare and evaluate page segmentations; early stage)
     - [page-segment-evaluate](ocrd_segment/evaluate.py) (same with standalone CLI)

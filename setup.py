@@ -13,6 +13,7 @@ Installs:
     - ocrd-segment-extract-glyphs
     - ocrd-segment-replace-original
     - ocrd-segment-replace-page
+    - ocrd-segment-replace-text
     - ocrd-segment-evaluate
     - page-segment-evaluate
 """
@@ -52,6 +53,7 @@ setup(
             'ocrd-segment-extract-glyphs=ocrd_segment.cli:ocrd_segment_extract_glyphs',
             'ocrd-segment-replace-original=ocrd_segment.cli:ocrd_segment_replace_original',
             'ocrd-segment-replace-page=ocrd_segment.cli:ocrd_segment_replace_page',
+            'ocrd-segment-replace-text=ocrd_segment.cli:ocrd_segment_replace_text',
             'ocrd-segment-evaluate=ocrd_segment.cli:ocrd_segment_evaluate',
             'page-segment-evaluate=ocrd_segment.evaluate:standalone_cli',
         ]
