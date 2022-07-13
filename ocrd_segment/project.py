@@ -163,8 +163,11 @@ def join_polygons(polygons, scale=20):
     pairs = itertools.combinations(range(npoly), 2)
     dists = np.zeros((npoly, npoly), dtype=float)
     for i, j in pairs:
-        dists[i, j] = polygons[i].distance(polygons[j])
-        dists[j, i] = dists[i, j]
+        dist = polygons[i].distance(polygons[j])
+        if dist == 0:
+            dist = 1e-5 # if pair merely touches, we still need to get an edge
+        dists[i, j] = dist
+        dists[j, i] = dist
     dists = minimum_spanning_tree(dists, overwrite=True)
     # add bridge polygons (where necessary)
     for prevp, nextp in zip(*dists.nonzero()):
@@ -181,7 +184,7 @@ def join_polygons(polygons, scale=20):
         jointp = Polygon(np.round(jointp.exterior.coords))
         jointp = make_valid(jointp)
     return jointp
-    
+
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
     

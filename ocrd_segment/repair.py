@@ -623,7 +623,7 @@ def clip_poly(poly1, poly2):
         poly = Polygon(np.round(poly.exterior.coords))
         poly = make_valid(poly)
     return poly
-    
+
 def page_poly(page):
     return Polygon([[0, 0],
                     [0, page.get_imageHeight()],
