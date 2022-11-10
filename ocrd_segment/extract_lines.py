@@ -83,6 +83,7 @@ class ExtractLines(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
         library_convention = self.parameter['library-convention']
+        textequiv_index = self.parameter['textequiv-index']
         min_line_length = self.parameter['min-line-length']
         min_line_width = self.parameter['min-line-width']
         min_line_height = self.parameter['min-line-height']
@@ -185,8 +186,16 @@ class ExtractLines(Processor):
                     if not ltext:
                         LOG.warning("Line '%s' contains no text content", line.id)
                         ltext = ''
+                    elif textequiv_index in ['first', 'last']:
+                        ltext = ltext[{'first': 0, 'last': -1}[textequiv_index]].Unicode
                     else:
-                        ltext = ltext[0].Unicode
+                        for textequiv in ltext:
+                            if textequiv.index == int(textequiv_index):
+                                ltext = textequiv.Unicode
+                                break
+                        if not isinstance(ltext, str):
+                            LOG.error("Page '%s' line '%s' has no TextEquiv/@index='%s'", page_id, line.id, textequiv_index)
+                            continue
                     if (len(ltext) < min_line_length or
                         line_image.width < min_line_width or
                         line_image.height < min_line_height):
