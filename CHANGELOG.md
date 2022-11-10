@@ -7,10 +7,11 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 Added:
 
  * replace-text: new processor (inverse of extract-* for text)
+ * extract-lines: new parameter `textequiv-index`
 
 Fixed:
 
- * repair/project: use minimum spanning tree when joining polygons 
+ * repair/project: use minimum spanning tree when joining polygons
 
 ## [0.1.21] - 2022-05-27
 
