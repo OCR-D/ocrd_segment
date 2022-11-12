@@ -191,21 +191,25 @@ def polygon_for_parent(polygon, parent):
     (Should be moved to ocrd_utils.coordinates_for_segment.)
     """
     childp = Polygon(polygon)
+    childp = make_valid(childp)
+    if not childp.is_valid:
+        return None
     if isinstance(parent, PageType):
-        if parent.get_Border():
-            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+        border = parent.get_Border()
+        if border and border.get_Coords():
+            parentp = Polygon(polygon_from_points(border.get_Coords().points))
         else:
             parentp = Polygon([[0,0], [0,parent.get_imageHeight()],
                                [parent.get_imageWidth(),parent.get_imageHeight()],
                                [parent.get_imageWidth(),0]])
     else:
-        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+        if parent.get_Coords():
+            parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+        else:
+            return childp.exterior.coords[:-1]
     # ensure input coords have valid paths (without self-intersection)
     # (this can happen when shapes valid in floating point are rounded)
-    childp = make_valid(childp)
     parentp = make_valid(parentp)
-    if not childp.is_valid:
-        return None
     if not parentp.is_valid:
         return None
     # check if clipping is necessary
