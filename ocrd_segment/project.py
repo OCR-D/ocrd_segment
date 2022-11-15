@@ -121,7 +121,7 @@ class ProjectHull(Processor):
     def _process_segment(self, segment, constituents, page_id):
         """Shrink segment outline to become the minimal convex hull of its constituent segments."""
         LOG = getLogger('processor.ProjectHull')
-        polygons = [Polygon(polygon_from_points(constituent.get_Coords().points))
+        polygons = [make_valid(Polygon(polygon_from_points(constituent.get_Coords().points)))
                     for constituent in constituents]
         polygon = join_polygons(polygons).buffer(self.parameter['padding']).exterior.coords[:-1]
         if isinstance(segment, PageType):

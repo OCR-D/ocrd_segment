@@ -234,7 +234,7 @@ class RepairSegmentation(Processor):
             # with the topological sort along containment/equivalence arcs
             # (so we can avoid substituting regions with superregions that have
             #  themselves been substituted/deleted):
-            regpolys = sorted([(region, Polygon(polygon_from_points(region.get_Coords().points)))
+            regpolys = sorted([(region, make_valid(Polygon(polygon_from_points(region.get_Coords().points))))
                                for region in regions],
                               key=lambda x: x[1].area)
             for i in range(0, len(regpolys)):
@@ -248,10 +248,10 @@ class RepairSegmentation(Processor):
                                          self.parameter['plausibilize_merge_min_overlap'],
                                          page_id):
                         # non-trivial overlap: mutually plausibilize lines
-                        linepolys1 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
+                        linepolys1 = sorted([(line, make_valid(Polygon(polygon_from_points(line.get_Coords().points))))
                                              for line in region1.get_TextLine()],
                                             key=lambda x: x[1].area)
-                        linepolys2 = sorted([(line, Polygon(polygon_from_points(line.get_Coords().points)))
+                        linepolys2 = sorted([(line, make_valid(Polygon(polygon_from_points(line.get_Coords().points))))
                                              for line in region2.get_TextLine()],
                                             key=lambda x: x[1].area)
                         for line1, linepoly1 in linepolys1:
@@ -451,7 +451,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
     for seg, poly in segpolys:
         if isinstance(seg, TextRegionType):
             # plausibilize lines first
-            _plausibilize_segments([(line, Polygon(polygon_from_points(line.get_Coords().points)))
+            _plausibilize_segments([(line, make_valid(Polygon(polygon_from_points(line.get_Coords().points))))
                                  for line in seg.get_TextLine()], None,
                                 marked_for_deletion, marked_for_merging, marked_for_splitting)
         delete = seg.id in marked_for_deletion
@@ -461,7 +461,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
             if merge:
                 # merge region with super region:
                 superseg = marked_for_merging[seg.id]
-                superpoly = Polygon(polygon_from_points(superseg.get_Coords().points))
+                superpoly = make_valid(Polygon(polygon_from_points(superseg.get_Coords().points)))
                 _merge_segments(seg, superseg, poly, superpoly, segpolys, reading_order)
             wait_for_deletion.append(seg)
             if seg.id in reading_order:
@@ -479,7 +479,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
             LOG.info('Shrinking %s "%s" in favour of %s "%s"', 
                      _tag_name(seg), seg.id, 
                      _tag_name(otherseg), otherseg.id)
-            otherpoly = Polygon(polygon_from_points(otherseg.get_Coords().points))
+            otherpoly = make_valid(Polygon(polygon_from_points(otherseg.get_Coords().points)))
             poly = poly.difference(otherpoly)
             if poly.type == 'MultiPolygon':
                 poly = join_polygons(poly.geoms)
@@ -525,7 +525,7 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
     page_array = ~ np.array(page_image.convert('1'))
     page_polygon = page_poly(page)
     if page.get_Border():
-        page_polygon = Polygon(polygon_from_points(page.get_Border().get_Coords().points))
+        page_polygon = make_valid(Polygon(polygon_from_points(page.get_Border().get_Coords().points)))
     # estimate glyph scale (roughly)
     _, components = cv2.connectedComponents(page_array.astype(np.uint8))
     _, counts = np.unique(components, return_counts=True)
@@ -560,7 +560,7 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
         if padding:
             region_polygon = region_polygon.buffer(padding)
         region_polygon = coordinates_for_segment(region_polygon.exterior.coords[:-1], page_image, page_coords)
-        region_polygon = Polygon(region_polygon)
+        region_polygon = make_valid(Polygon(region_polygon))
         if not region_polygon.within(page_polygon):
             region_polygon = clip_poly(region_polygon, page_polygon)
         if region_polygon is not None:
@@ -574,7 +574,7 @@ def simplify(segment, tolerance=0):
     polygon = polygon_from_points(coords.points)
     if len(polygon) < 10:
         return # already simple enough
-    poly = Polygon(polygon)
+    poly = make_valid(Polygon(polygon))
     if poly.is_empty:
         return
     if poly.length < tolerance * 4:

@@ -12,6 +12,7 @@ Added:
 Fixed:
 
  * repair/project: use minimum spanning tree when joining polygons
+ * repair/project: ever more robustness
 
 ## [0.1.21] - 2022-05-27
 
