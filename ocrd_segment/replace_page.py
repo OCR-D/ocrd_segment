@@ -32,29 +32,29 @@ class ReplacePage(Processor):
 
     def process(self):
         """Replace everything below the page level with another annotation.
-        
+
         Open and deserialize PAGE input files from both input file groups,
         then go to the page hierarchy level.
-        
+
         Replace all regions (and their reading order) from the page of
         the first input file group with all regions from the page of
         the second input file group. Keep page-level annotations unchanged
         (i.e. Border, orientation, type, AlternativeImage etc).
-        
+
         If ``transform_coordinates`` is true, then also retrieve the
         coordinate transform of the (cropped, deskewed, dewarped) page
         from the first input fileGrp, and use it to adjust all segment
         coordinates from the second input fileGrp, accordingly.
         (This assumes both are consistent, i.e. the second input was derived
         from the first input via ``ocrd-segment-replace-original`` or similar.)
-        
+
         Produce a new output file by serialising the resulting hierarchy.
         """
         LOG = getLogger('processor.ReplacePage')
         assert_file_grp_cardinality(self.input_file_grp, 2, 'original, page')
         assert_file_grp_cardinality(self.output_file_grp, 1)
         adapt_coords = self.parameter['transform_coordinates']
-        
+
         # collect input file tuples
         ifts = self.zip_input_files() # input file tuples
         # process input file tuples
@@ -62,9 +62,11 @@ class ReplacePage(Processor):
             input_file, page_file = ift
             if input_file is None or page_file is None:
                 continue
+            file_id = make_file_id(page_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
             pcgts2 = page_from_file(self.workspace.download_file(page_file))
@@ -120,7 +122,6 @@ class ReplacePage(Processor):
             page.set_CustomRegion(page2.get_CustomRegion())
 
             # update METS (add the PAGE file):
-            file_id = make_file_id(page_file, self.output_file_grp)
             out = self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

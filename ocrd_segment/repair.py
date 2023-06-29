@@ -95,7 +95,7 @@ class RepairSegmentation(Processor):
         Furthermore, if ``sanitize``, then for each text region, update
         the coordinates to become the minimal convex hull of its constituent
         text lines. (But consider running ocrd-segment-project instead.)
-        
+
         Finally, produce new output files by serialising the resulting hierarchy.
         """
         LOG = getLogger('processor.RepairSegmentation')
@@ -105,14 +105,16 @@ class RepairSegmentation(Processor):
         simplify = self.parameter['simplify']
         sanitize = self.parameter['sanitize']
         plausibilize = self.parameter['plausibilize']
-        
+
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
             self.add_metadata(pcgts)
+            pcgts.set_pcGtsId(file_id)
             page = pcgts.get_Page()
-            
+
             #
             # validate segmentation (warn of children extending beyond their parents)
             #
@@ -186,8 +188,7 @@ class RepairSegmentation(Processor):
                     feature_filter='clipped')
                 shrink_regions(page_image, page_coords, page, page_id,
                                padding=self.parameter['sanitize_padding'])
-            
-            file_id = make_file_id(input_file, self.output_file_grp)
+
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

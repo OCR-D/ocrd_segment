@@ -32,17 +32,17 @@ class ReplaceOriginal(Processor):
 
     def process(self):
         """Extract page image and replace original with it.
-        
+
         Open and deserialize PAGE input files and their respective images,
         then go to the page hierarchy level.
-        
+
         Retrieve the image of the (cropped, deskewed, dewarped) page, preferring
         the last annotated form (which, depending on the workflow, could be
         binarized or raw). Add that image file to the workspace with the fileGrp
         USE given in the output fileGrp.
         Reference that file in the page (not as AlternativeImage but) as original
         image. Adjust all segment coordinates accordingly.
-        
+
         Produce a new output file by serialising the resulting hierarchy.
         """
         LOG = getLogger('processor.ReplaceOriginal')
@@ -51,12 +51,14 @@ class ReplaceOriginal(Processor):
         feature_selector = self.parameter['feature_selector']
         feature_filter = self.parameter['feature_filter']
         adapt_coords = self.parameter['transform_coordinates']
-        
+
         # pylint: disable=attribute-defined-outside-init
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
             page_image, page_coords, page_image_info = self.workspace.image_from_page(
@@ -70,7 +72,6 @@ class ReplaceOriginal(Processor):
             else:
                 dpi = None
             # annotate extracted image
-            file_id = make_file_id(input_file, self.output_file_grp)
             file_path = self.workspace.save_image_file(page_image,
                                                        file_id + '-IMG',
                                                        self.output_file_grp,

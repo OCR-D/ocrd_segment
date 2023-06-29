@@ -13,6 +13,7 @@ Fixed:
 
  * repair/project: use minimum spanning tree when joining polygons
  * repair/project: ever more robustness
+ * all: set PAGE `@pcGtsId` from METS `file/@ID`
 
 ## [0.1.21] - 2022-05-27
 

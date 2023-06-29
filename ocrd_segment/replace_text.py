@@ -47,9 +47,11 @@ class ReplaceText(Processor):
         input_text_files = glob(file_glob)
         assert len(input_text_files), "file_glob '%s' does not match any path names" % file_glob
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId
             LOG.info("INPUT FILE %i / %s", n, input_file.pageId or input_file.ID)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
             regions = page.get_AllRegions(classes=['Text'])
@@ -100,7 +102,6 @@ class ReplaceText(Processor):
             assert len(segments) == 0
 
             # update METS (add the PAGE file):
-            file_id = make_file_id(input_file, self.output_file_grp)
             out = self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

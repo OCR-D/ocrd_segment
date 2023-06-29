@@ -78,8 +78,10 @@ class ImportImageSegmentation(Processor):
         # process input file tuples
         for ift in ifts:
             input_file, segmentation_file = ift
+            file_id = make_file_id(input_file, self.output_file_grp)
             LOG.info("processing page %s", input_file.pageId)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
 
@@ -174,7 +176,6 @@ class ImportImageSegmentation(Processor):
                         # add region
                         getattr(page, 'add_%s' % classname)(region)
 
-            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,

@@ -132,10 +132,12 @@ class ImportCOCOSegmentation(Processor):
         
         LOG.info('Converting %s annotations into PAGE-XML', coco_source)
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             num_page_id = int(page_id.strip(page_id.strip("0123456789")))
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
 
@@ -219,7 +221,6 @@ class ImportCOCOSegmentation(Processor):
             images_by_id.pop(num_page_id, None)
             images_by_filename.pop(page.imageFilename, None)
 
-            file_id = make_file_id(input_file, self.output_file_grp)
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
@@ -227,7 +228,7 @@ class ImportCOCOSegmentation(Processor):
                 mimetype=MIMETYPE_PAGE,
                 local_filename=os.path.join(self.output_file_grp, file_id + '.xml'),
                 content=to_xml(pcgts))
-        
+
         # warn of remaining COCO images
         if images_by_filename and not self.page_id:
             LOG.warning('%d images remain unaccounted for after processing', len(images_by_filename))

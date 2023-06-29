@@ -37,18 +37,18 @@ class ProjectHull(Processor):
 
     def process(self):
         """Make coordinates become the convex hull of their constituent segments with Shapely.
-        
+
         Open and deserialize PAGE input files and their respective images,
         then iterate over the segment hierarchy down to the requested hierarchy
         ``level-of-operation``.
-        
+
         For each segment (page border, region, line or word), update the coordinates
         to become the minimal convex hull of its constituent (lower-level) segments
         (regions, lines, words or glyphs), unless no such constituents exist.
-        
+
         (A change in coordinates will automatically invalidate any AlternativeImage
         references on the segment. Therefore, you may need to rebinarize etc.)
-        
+
         Finally, produce new output files by serialising the resulting hierarchy.
         """
         LOG = getLogger('processor.ProjectHull')
@@ -56,11 +56,13 @@ class ProjectHull(Processor):
         assert_file_grp_cardinality(self.output_file_grp, 1)
 
         level = self.parameter['level-of-operation']
-        
+
         for n, input_file in enumerate(self.input_files):
+            file_id = make_file_id(input_file, self.output_file_grp)
             page_id = input_file.pageId or input_file.ID
             LOG.info("INPUT FILE %i / %s", n, page_id)
             pcgts = page_from_file(self.workspace.download_file(input_file))
+            pcgts.set_pcGtsId(file_id)
             self.add_metadata(pcgts)
             page = pcgts.get_Page()
             if level == 'page':
@@ -107,8 +109,7 @@ class ProjectHull(Processor):
                             if not len(glyphs):
                                 continue
                             self._process_segment(word, glyphs, page_id)
-            
-            file_id = make_file_id(input_file, self.output_file_grp)
+
             self.workspace.add_file(
                 ID=file_id,
                 file_grp=self.output_file_grp,
@@ -117,7 +118,7 @@ class ProjectHull(Processor):
                 local_filename=os.path.join(self.output_file_grp,
                                             file_id + '.xml'),
                 content=to_xml(pcgts))
-    
+
     def _process_segment(self, segment, constituents, page_id):
         """Shrink segment outline to become the minimal convex hull of its constituent segments."""
         LOG = getLogger('processor.ProjectHull')
