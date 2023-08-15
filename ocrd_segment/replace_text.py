@@ -62,8 +62,10 @@ class ReplaceText(Processor):
             glyphs = list(chain.from_iterable(
                 [word.get_Glyph() for word in words]))
             segids = { seg.id: seg for seg in glyphs + words + lines + regions }
-            text_files = [path for path in input_text_files
-                          if page_id in path]
+            text_files = ([path for path in input_text_files
+                           if page_id in path] or
+                          [path for path in input_text_files
+                           if input_file.ID in path])
             if not len(text_files):
                 LOG.warning("no text file input for page %s", page_id)
             segments = set()
