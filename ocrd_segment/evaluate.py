@@ -527,7 +527,7 @@ def evaluate_coco(coco_gt, coco_dt, parameters, catIds=None):
 
     coco_eval.accumulate()
     coco_eval.summarize()
-    statInds = np.ones(12, np.bool)
+    statInds = np.ones(12, bool)
     statInds[7] = False # AR maxDet[1]
     statInds[8] = False # AR maxDet[2]
     coco_eval.stats = coco_eval.stats[statInds]

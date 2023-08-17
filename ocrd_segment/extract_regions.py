@@ -205,7 +205,7 @@ class ExtractRegions(Processor):
                             poly = segment_poly(page_id, subregion, region_coords)
                             if not poly:
                                 continue
-                            polygon = np.array(poly.exterior.coords, np.int)[:-1].tolist()
+                            polygon = np.array(poly.exterior.coords, int)[:-1].tolist()
                             xywh = xywh_from_polygon(polygon)
                             area = poly.area
                             if subrtype in ['TextRegion', 'ChartRegion', 'GraphicRegion']:
@@ -229,7 +229,7 @@ class ExtractRegions(Processor):
                                 {'id': i, 'image_id': j,
                                  'category_id': next((cat['id'] for cat in categories if cat['name'] == subsubrtype),
                                                      next((cat['id'] for cat in categories if cat['name'] == subrtype))),
-                                 'segmentation': np.array(poly.exterior.coords, np.int)[:-1].reshape(1, -1).tolist(),
+                                 'segmentation': np.array(poly.exterior.coords, int)[:-1].reshape(1, -1).tolist(),
                                  'area': area,
                                  'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
                                  'iscrowd': 0})

@@ -308,7 +308,7 @@ class ExtractPages(Processor):
                                                      self.parameter['plot_overlay'])
                     if not poly:
                         continue
-                    polygon = np.array(poly.exterior.coords, np.int)[:-1].tolist()
+                    polygon = np.array(poly.exterior.coords, int)[:-1].tolist()
                     xywh = xywh_from_polygon(polygon)
                     area = poly.area
                     description.setdefault('regions', []).append(
@@ -330,7 +330,7 @@ class ExtractPages(Processor):
                         {'id': i, 'image_id': num_page_id,
                          'category_id': next((cat['id'] for cat in categories if cat['name'] == subrtype),
                                              next((cat['id'] for cat in categories if cat['name'] == rtype))),
-                         'segmentation': np.array(poly.exterior.coords, np.int)[:-1].reshape(1, -1).tolist(),
+                         'segmentation': np.array(poly.exterior.coords, int)[:-1].reshape(1, -1).tolist(),
                          'area': area,
                          'bbox': [xywh['x'], xywh['y'], xywh['w'], xywh['h']],
                          'iscrowd': 0})
@@ -430,7 +430,7 @@ def plot_order(readingorder, classes, image, regions, alpha=False):
             poly = regiondict.get(regionref.get_regionRef(), None)
             if poly:
                 # we have seen this region
-                morepoints.append((level, tuple(np.array(poly.centroid, np.int))))
+                morepoints.append((level, tuple(np.array(poly.centroid, int))))
             if not isinstance(regionref, (RegionRefType, RegionRefIndexedType)):
                 # try to get subgroup regions instead
                 morepoints = get_points(regionref, level + 1) or morepoints
@@ -445,7 +445,7 @@ def plot_order(readingorder, classes, image, regions, alpha=False):
         points.extend(get_points(readingorder, 0))
     else:
         # use XML ordering
-        points.extend([(0, tuple(np.array(region.poly.centroid, np.int))) for region in regions])
+        points.extend([(0, tuple(np.array(region.poly.centroid, int))) for region in regions])
     for p1, p2 in zip(points[:-1], points[1:]):
         color = 'ReadingOrderLevel%s' % (str(p1[0]) if p1[0] < 2 else 'N')
         if color not in classes:

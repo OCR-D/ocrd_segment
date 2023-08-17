@@ -538,7 +538,7 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
         scale = 43
     for region in page.get_AllRegions():
         #LOG.info('Shrinking region "%s"', region.id)
-        region_mask = np.zeros_like(page_array, dtype=np.bool)
+        region_mask = np.zeros_like(page_array, dtype=bool)
         region_polygon = coordinates_of_segment(region, page_image, page_coords)
         region_mask[draw.polygon(region_polygon[:, 1],
                                  region_polygon[:, 0],
@@ -701,7 +701,7 @@ def ensure_valid(element):
     coords = element.get_Coords()
     points = coords.points
     polygon = polygon_from_points(points)
-    array = np.array(polygon, np.int)
+    array = np.array(polygon, int)
     if array.min() < 0:
         array = np.maximum(0, array)
         changed = True
