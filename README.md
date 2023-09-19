@@ -40,6 +40,12 @@ Contains processors for various tasks:
 For detailed behaviour, see `--help` on each processor CLI.
 For detailed description on input/output and parameters, see [ocrd-tool.json](ocrd_segment/ocrd-tool.json) or `--dump-json` on each processor CLI.
 
+## Development
+
+### Prerequisities
+
+Requires `libgeos-dev` library for building `shapely` binary requirement, see [Shapely Installation from source](https://shapely.readthedocs.io/en/stable/installation.html#installation-from-source-with-custom-geos-libary). Please ensure it's available before trying to install local requirements.
+
 ## Testing
 
 None yet.
