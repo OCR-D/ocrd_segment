@@ -12,8 +12,6 @@ opencv-python-headless
 #pycocotools@git+https://github.com/NVIDIA/cocoapi@v0.6.0
 #pycocotools@git+https://github.com/bertsky/pycocotools#subdirectory=PythonAPI
 ocrd-fork-pycocotools
-alphashape
-
 # We cannot use constructs like these when passing directly to setuptools.
 # So instead of explicating imgaug here, let's rely on mask-rcnn for it.
 # imgaug --no-binary imgaug # workaround imgaug#473 (opencv-python/headless)

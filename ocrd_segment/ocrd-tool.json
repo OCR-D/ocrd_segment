@@ -1,5 +1,5 @@
 {
-  "version": "0.1.20",
+  "version": "0.1.21",
   "git_url": "https://github.com/OCR-D/ocrd_segment",
   "tools": {
     "ocrd-segment-extract-formdata": {
@@ -653,7 +653,7 @@
             "MapRegion",
             "ChemRegion",
             "TableRegion"
-          ],        
+          ],
           "description": "Array of region types to extract e.g. -P classes '[\"TextRegion\", \"TableRegion\", \"ImageRegion\"]' . If empty, all regions are allowed."
         },
         "mimetype": {
@@ -733,6 +733,12 @@
           "minimum": 1,
           "default": 1,
           "description": "Only extract lines that are at least this high (in px)."
+        },
+        "textequiv-index": {
+          "type": "string",
+          "enum": ["first", "last", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+          "default": "first",
+          "description": "Only extract lines with the specified TextEquiv/@index entries; 'first' and 'last' denote the first and last TextEquiv elements, regardless of their @index, respectively."
         }
       }
     },
@@ -849,6 +855,19 @@
               "default": true,
               "description": "re-calculate coordinates for all segments of the structural hierarchy to be consistent with the coordinate system of the first input file group (vital after cropping, deskewing etc; disable only if input coordinates can be assumed to be consistent with the second input file group)"
           }
+      }
+    },
+    "ocrd-segment-replace-text": {
+      "executable": "ocrd-segment-replace-text",
+      "categories": ["Text recognition and optimization"],
+      "description": "Insert text from annotations in single-segment text files",
+      "steps": ["recognition/post-correction"],
+      "parameters": {
+        "file_glob": {
+          "type": "string",
+          "default": "*.gt.txt",
+          "description": "glob expression which expands to file names to match against page IDs and segment IDs in order to be ingested"
+        }
       }
     },
     "ocrd-segment-evaluate": {

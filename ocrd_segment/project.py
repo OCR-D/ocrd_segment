@@ -1,11 +1,11 @@
 from __future__ import absolute_import
 
 import os.path
-from itertools import chain
+import itertools
 import numpy as np
-from shapely.geometry import Polygon
-from shapely.ops import unary_union
-import alphashape
+from scipy.sparse.csgraph import minimum_spanning_tree
+from shapely.geometry import Polygon, LineString
+from shapely.ops import unary_union, nearest_points
 
 from ocrd import Processor
 from ocrd_utils import (
@@ -144,67 +144,72 @@ class ProjectHull(Processor):
             else:
                 segment.set_Coords(coords)
 
-def join_polygons(polygons, loc='', scale=20):
-    """construct concave hull (alpha shape) from input polygons"""
-    LOG = getLogger('processor.ProjectHull')
+def pairwise(iterable):
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+def join_polygons(polygons, scale=20):
+    """construct concave hull (alpha shape) from input polygons by connecting their pairwise nearest points"""
     # ensure input polygons are simply typed
-    polygons = list(chain.from_iterable([
+    polygons = list(itertools.chain.from_iterable([
         poly.geoms if poly.type in ['MultiPolygon', 'GeometryCollection']
         else [poly]
         for poly in polygons]))
-    if len(polygons) == 1:
+    npoly = len(polygons)
+    if npoly == 1:
         return polygons[0]
-    # get equidistant list of points along hull
-    # (otherwise alphashape will jump across the interior)
-    points = [poly.exterior.interpolate(dist).coords[0] # .xy
-              for poly in polygons
-              for dist in np.arange(0, poly.length, min(scale / 2, poly.length / 4))]
-    #alpha = alphashape.optimizealpha(points) # too slow
-    alpha = 0.01
-    jointp = alphashape.alphashape(points, alpha)
-    tries = 0
-    # from descartes import PolygonPatch
-    # import matplotlib.pyplot as plt
-    while jointp.is_empty or jointp.area == 0.0 or jointp.type in ['MultiPolygon', 'GeometryCollection'] or len(jointp.interiors):
-        # plt.figure()
-        # plt.gca().scatter(*zip(*points))
-        # for geom in jointp.geoms:
-        #     plt.gca().add_patch(PolygonPatch(geom, alpha=0.2))
-        # plt.show()
-        alpha *= 0.7
-        tries += 1
-        if tries > 10:
-            LOG.warning("cannot find alpha for concave hull on '%s'", loc)
-            alpha = 0
-        jointp = alphashape.alphashape(points, alpha)
+    # find min-dist path through all polygons (travelling salesman)
+    pairs = itertools.combinations(range(npoly), 2)
+    dists = np.zeros((npoly, npoly), dtype=float)
+    for i, j in pairs:
+        dist = polygons[i].distance(polygons[j])
+        if dist == 0:
+            dist = 1e-5 # if pair merely touches, we still need to get an edge
+        dists[i, j] = dist
+        dists[j, i] = dist
+    dists = minimum_spanning_tree(dists, overwrite=True)
+    # add bridge polygons (where necessary)
+    for prevp, nextp in zip(*dists.nonzero()):
+        prevp = polygons[prevp]
+        nextp = polygons[nextp]
+        nearest = nearest_points(prevp, nextp)
+        bridgep = LineString(nearest).buffer(max(1, scale/5), resolution=1)
+        polygons.append(bridgep)
+    jointp = unary_union(polygons)
+    assert jointp.type == 'Polygon', jointp.wkt
     if jointp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
         jointp = Polygon(np.round(jointp.exterior.coords))
         jointp = make_valid(jointp)
     return jointp
-    
+
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
     
     (Should be moved to ocrd_utils.coordinates_for_segment.)
     """
     childp = Polygon(polygon)
+    childp = make_valid(childp)
+    if not childp.is_valid:
+        return None
     if isinstance(parent, PageType):
-        if parent.get_Border():
-            parentp = Polygon(polygon_from_points(parent.get_Border().get_Coords().points))
+        border = parent.get_Border()
+        if border and border.get_Coords():
+            parentp = Polygon(polygon_from_points(border.get_Coords().points))
         else:
             parentp = Polygon([[0,0], [0,parent.get_imageHeight()],
                                [parent.get_imageWidth(),parent.get_imageHeight()],
                                [parent.get_imageWidth(),0]])
     else:
-        parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+        if parent.get_Coords():
+            parentp = Polygon(polygon_from_points(parent.get_Coords().points))
+        else:
+            return childp.exterior.coords[:-1]
     # ensure input coords have valid paths (without self-intersection)
     # (this can happen when shapes valid in floating point are rounded)
-    childp = make_valid(childp)
     parentp = make_valid(parentp)
-    if not childp.is_valid:
-        return None
     if not parentp.is_valid:
         return None
     # check if clipping is necessary
@@ -226,8 +231,7 @@ def make_intersection(poly1, poly2):
         interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
     if interp.type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
-        # FIXME: construct concave hull / alpha shape
-        interp = interp.convex_hull
+        interp = join_polygons(interp.geoms)
     if interp.minimum_clearance < 1.0:
         # follow-up calculations will necessarily be integer;
         # so anticipate rounding here and then ensure validity
@@ -236,15 +240,16 @@ def make_intersection(poly1, poly2):
     return interp
 
 def make_valid(polygon):
-    for split in range(1, len(polygon.exterior.coords)-1):
+    points = list(polygon.exterior.coords)
+    for split in range(1, len(points)):
         if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
             break
         # simplification may not be possible (at all) due to ordering
         # in that case, try another starting point
-        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
-    for tolerance in range(1, int(polygon.area)):
+        polygon = Polygon(points[-split:]+points[:-split])
+    for tolerance in range(int(polygon.area)):
         if polygon.is_valid:
             break
         # simplification may require a larger tolerance
-        polygon = polygon.simplify(tolerance)
+        polygon = polygon.simplify(tolerance + 1)
     return polygon

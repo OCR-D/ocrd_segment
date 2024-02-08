@@ -127,6 +127,7 @@ class ExtractPages(Processor):
         Create two JSON files with region types and coordinates: one (page-wise) in
         our custom format and one (global) in MS-COCO.
         
+        \b
         The output file group may be given as a comma-separated list to separate
         these 3 kinds of images. If fewer than 3 fileGrps are specified, they will
         share the same fileGrp (and directory). In particular, write files as follows:
@@ -147,8 +148,9 @@ class ExtractPages(Processor):
             each layer and segment is superimposed (alpha blended) onto the previous one,
             starting with the above raw image.
         
+        \b
         In addition, write a file for all pages at once:
-        * in the third (or first) output file group (directory):
+        * in the third (or second or only) output file group (directory):
           - output_file_grp + '.coco.json': region coordinates/classes (MS-COCO format)
           - output_file_grp + '.colordict.json': the used ``colordict``
         

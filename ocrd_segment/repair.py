@@ -162,7 +162,7 @@ class RepairSegmentation(Processor):
                             try:
                                 ensure_consistent(element)
                             except Exception as e:
-                                LOG.error(str(e))
+                                LOG.error(str(e)) # exc_info=e
                                 report.add_error(error)
                                 continue
                         else:
@@ -457,21 +457,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
         delete = seg.id in marked_for_deletion
         merge = seg.id in marked_for_merging
         split = seg.id in marked_for_splitting
-        if split:
-            otherseg = marked_for_splitting[seg.id]
-            LOG.info('Shrinking %s "%s" in favour of %s "%s"', 
-                     _tag_name(seg), seg.id, 
-                     _tag_name(otherseg), otherseg.id)
-            otherpoly = Polygon(polygon_from_points(otherseg.get_Coords().points))
-            poly = poly.difference(otherpoly)
-            if poly.type == 'MultiPolygon':
-                poly = poly.convex_hull
-            if poly.minimum_clearance < 1.0:
-                poly = Polygon(np.round(poly.exterior.coords))
-            poly = make_valid(poly)
-            poly = poly.exterior.coords[:-1] # keep open
-            seg.get_Coords().set_points(points_from_polygon(poly))
-        elif delete or merge:
+        if delete or merge:
             if merge:
                 # merge region with super region:
                 superseg = marked_for_merging[seg.id]
@@ -488,6 +474,20 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
                 if hasattr(regionref, 'index'):
                     # re-index the reading order group!
                     regionref.parent_object_.sort_AllIndexed()
+        elif split:
+            otherseg = marked_for_splitting[seg.id]
+            LOG.info('Shrinking %s "%s" in favour of %s "%s"', 
+                     _tag_name(seg), seg.id, 
+                     _tag_name(otherseg), otherseg.id)
+            otherpoly = Polygon(polygon_from_points(otherseg.get_Coords().points))
+            poly = poly.difference(otherpoly)
+            if poly.type == 'MultiPolygon':
+                poly = join_polygons(poly.geoms)
+            if poly.minimum_clearance < 1.0:
+                poly = Polygon(np.round(poly.exterior.coords))
+            poly = make_valid(poly)
+            poly = poly.exterior.coords[:-1] # keep open
+            seg.get_Coords().set_points(points_from_polygon(poly))
     # apply actual deletions in the hierarchy
     for seg in wait_for_deletion:
         if seg.parent_object_:
@@ -556,7 +556,7 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
         # pick contour and convert to absolute:
         region_polygon = join_polygons([make_valid(Polygon(contour[:, 0, ::]))
                                         for contour in contours
-                                        if len(contour) >= 3], loc=region.id, scale=scale)
+                                        if len(contour) >= 3], scale=scale)
         if padding:
             region_polygon = region_polygon.buffer(padding)
         region_polygon = coordinates_for_segment(region_polygon.exterior.coords[:-1], page_image, page_coords)
@@ -623,7 +623,7 @@ def clip_poly(poly1, poly2):
         poly = Polygon(np.round(poly.exterior.coords))
         poly = make_valid(poly)
     return poly
-    
+
 def page_poly(page):
     return Polygon([[0, 0],
                     [0, page.get_imageHeight()],
