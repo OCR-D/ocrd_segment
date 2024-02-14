@@ -23,10 +23,10 @@ help:
 #  see https://github.com/NVIDIA/tensorflow/blob/r1.15.5%2Bnv22.11/tensorflow/tools/pip_package/setup.py)
 deps-tf1:
 	if $(PYTHON) -c 'import sys; print("%u.%u" % (sys.version_info.major, sys.version_info.minor))' | fgrep 3.8 && \
-	! pip show -q tensorflow-gpu; then \
-	  pip install nvidia-pyindex && \
+	! $(PIP) show -q tensorflow-gpu; then \
+	  $(PIP) install nvidia-pyindex && \
 	  pushd $$(mktemp -d) && \
-	  pip download --no-deps nvidia-tensorflow==1.15.5+nv22.11 && \
+	  $(PIP) download --no-deps nvidia-tensorflow==1.15.5+nv22.11 && \
 	  for name in nvidia_tensorflow-*.whl; do name=$${name%.whl}; done && \
 	  $(PYTHON) -m wheel unpack $$name.whl && \
 	  for name in nvidia_tensorflow-*/; do name=$${name%/}; done && \
@@ -36,9 +36,11 @@ deps-tf1:
 	  sed -i s/nvidia_tensorflow/tensorflow_gpu/g $$name/tensorflow_core/tools/pip_package/setup.py && \
 	  pushd $$name && for path in $$name*; do mv $$path $${path/$$name/$$newname}; done && popd && \
 	  $(PYTHON) -m wheel pack $$name && \
-	  pip install $$newname*.whl && popd && rm -fr $$OLDPWD; \
-	  pip install "numpy<1.24"; \
-	fi
+	  $(PIP) install $$newname*.whl && popd && rm -fr $$OLDPWD; \
+	  $(PIP) install "numpy<1.24"; \
+	  $(PIP) install imageio==2.14.1 "tifffile<2022"; \
+	  $(PIP) install --no-binary imgaug imgaug
+fi
 
 deps: deps-tf1
 	$(PIP) install -r requirements.txt
