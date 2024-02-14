@@ -2,6 +2,7 @@
 
 This repository aims to provide a number of [OCR-D](https://ocr-d.de) [compliant](https://ocr-d.de/en/spec) [processors](https://ocr-d.de/en/spec/cli) for layout analysis and evaluation.
 
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/OCR-D/ocrd_segment/tree/master.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/OCR-D/ocrd_segment/tree/master)
 [![image](https://img.shields.io/pypi/v/ocrd_segment.svg)](https://pypi.org/project/ocrd_segment/)
 [![Docker Automated build](https://img.shields.io/docker/automated/ocrd/segment.svg)](https://hub.docker.com/r/ocrd/segment/tags/)
 
