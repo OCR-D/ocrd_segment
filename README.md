@@ -3,6 +3,7 @@
 This repository aims to provide a number of [OCR-D](https://ocr-d.de) [compliant](https://ocr-d.de/en/spec) [processors](https://ocr-d.de/en/spec/cli) for layout analysis and evaluation.
 
 [![image](https://img.shields.io/pypi/v/ocrd_segment.svg)](https://pypi.org/project/ocrd_segment/)
+[![Docker Automated build](https://img.shields.io/docker/automated/ocrd/segment.svg)](https://hub.docker.com/r/ocrd/segment/tags/)
 
 ## Installation
 
