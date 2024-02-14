@@ -39,7 +39,7 @@ deps-tf1:
 	  $(PIP) install $$newname*.whl && popd && rm -fr $$OLDPWD; \
 	  $(PIP) install "numpy<1.24"; \
 	  $(PIP) install imageio==2.14.1 "tifffile<2022"; \
-	  $(PIP) install --no-binary imgaug imgaug
+	  $(PIP) install --no-binary imgaug imgaug; \
 fi
 
 deps: deps-tf1
