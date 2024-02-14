@@ -40,7 +40,7 @@ deps-tf1:
 	  $(PIP) install "numpy<1.24"; \
 	  $(PIP) install imageio==2.14.1 "tifffile<2022"; \
 	  $(PIP) install --no-binary imgaug imgaug; \
-fi
+	fi
 
 deps: deps-tf1
 	$(PIP) install -r requirements.txt
