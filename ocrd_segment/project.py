@@ -120,22 +120,22 @@ class ProjectHull(Processor):
                 content=to_xml(pcgts))
 
     def _process_segment(self, segment, constituents, page_id):
-        """Shrink segment outline to become the minimal convex hull of its constituent segments."""
+        """Overwrite segment outline to become the minimal convex hull of its constituent segments."""
         LOG = getLogger('processor.ProjectHull')
         polygons = [make_valid(Polygon(polygon_from_points(constituent.get_Coords().points)))
                     for constituent in constituents]
         polygon = join_polygons(polygons).buffer(self.parameter['padding']).exterior.coords[:-1]
+        # make sure the segment still fits into its parent's parent
         if isinstance(segment, PageType):
-            oldborder = segment.Border
-            segment.Border = None # ensure interim parent is the page frame itself
-        # make sure the segment still fits into its own parent
-        polygon2 = polygon_for_parent(polygon, segment)
-        if polygon2 is None:
-            LOG.info('Ignoring extant segment: %s', segment.id)
-            if isinstance(segment, PageType):
-                segment.Border = oldborder
+            # ensure interim parent is the page frame itself
+            parent = PageType(**segment.__dict__)
+            parent.Border = None
         else:
-            polygon = polygon2
+            parent = segment.parent_object_
+        polygon = polygon_for_parent(polygon, parent)
+        if polygon is None:
+            LOG.info('Ignoring extant segment: %s', segment.id)
+        else:
             points = points_from_polygon(polygon)
             coords = CoordsType(points=points)
             LOG.debug('Using new coordinates from %d constituents for segment "%s"',
