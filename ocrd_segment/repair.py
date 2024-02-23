@@ -41,7 +41,7 @@ from ocrd_validators.page_validator import (
     PageValidator
 )
 from .config import OCRD_TOOL
-from .project import join_polygons
+from .project import join_polygons, make_valid
 
 TOOL = 'ocrd-segment-repair'
 
@@ -556,8 +556,8 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
             continue
         # pick contour and convert to absolute:
         region_polygon = join_polygons([make_valid(Polygon(contour[:, 0, ::]))
-                                        for contour in contours
-                                        if len(contour) >= 3], scale=scale)
+                                        for area, contour in zip(areas, contours)
+                                        if len(contour) >= 3 and area > 0], scale=scale)
         if padding:
             region_polygon = region_polygon.buffer(padding)
         region_polygon = coordinates_for_segment(region_polygon.exterior.coords[:-1], page_image, page_coords)
@@ -718,21 +718,6 @@ def ensure_valid(element):
     if changed:
         points = points_from_polygon(polygon)
         coords.set_points(points)
-
-def make_valid(polygon):
-    """Ensures shapely.geometry.Polygon object is valid by repeated simplification"""
-    for split in range(1, len(polygon.exterior.coords)-1):
-        if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
-            break
-        # simplification may not be possible (at all) due to ordering
-        # in that case, try another starting point
-        polygon = Polygon(polygon.exterior.coords[-split:]+polygon.exterior.coords[:-split])
-    for tolerance in range(1, int(polygon.area)):
-        if polygon.is_valid:
-            break
-        # simplification may require a larger tolerance
-        polygon = polygon.simplify(tolerance)
-    return polygon
 
 def _tag_name(element):
     return element.__class__.__name__[0:-4]
