@@ -4,6 +4,15 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+ * repair/project: adapt to Shapely deprecations
+
+### Changed
+
+ * project: clip coords to parent's parent instead of parent
+ * repair/project: make make_valid even more robust
+
 ## [0.1.22] - 2023-06-29
 
 ### Added
