@@ -482,7 +482,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
                      _tag_name(otherseg), otherseg.id)
             otherpoly = make_valid(Polygon(polygon_from_points(otherseg.get_Coords().points)))
             poly = poly.difference(otherpoly)
-            if poly.type == 'MultiPolygon':
+            if poly.geom_type == 'MultiPolygon':
                 poly = join_polygons(poly.geoms)
             if poly.minimum_clearance < 1.0:
                 poly = Polygon(np.round(poly.exterior.coords))
@@ -599,7 +599,7 @@ def simplify(segment, tolerance=0):
 
 def merge_poly(poly1, poly2):
     poly = poly1.union(poly2)
-    if poly.type == 'MultiPolygon':
+    if poly.geom_type == 'MultiPolygon':
         #poly = poly.convex_hull
         poly = join_polygons(poly.geoms)
     if poly.minimum_clearance < 1.0:
@@ -611,10 +611,10 @@ def clip_poly(poly1, poly2):
     poly = poly1.intersection(poly2)
     if poly.is_empty or poly.area == 0.0:
         return None
-    if poly.type == 'GeometryCollection':
+    if poly.geom_type == 'GeometryCollection':
         # heterogeneous result: filter zero-area shapes (LineString, Point)
         poly = unary_union([geom for geom in poly.geoms if geom.area > 0])
-    if poly.type == 'MultiPolygon':
+    if poly.geom_type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
         #poly = poly.convex_hull
         poly = join_polygons(poly.geoms)
