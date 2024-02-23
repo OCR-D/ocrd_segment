@@ -241,16 +241,26 @@ def make_intersection(poly1, poly2):
     return interp
 
 def make_valid(polygon):
+    """Ensures shapely.geometry.Polygon object is valid by repeated rearrangement/simplification/enlargement."""
     points = list(polygon.exterior.coords)
+    # try by re-arranging points
     for split in range(1, len(points)):
         if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
             break
         # simplification may not be possible (at all) due to ordering
         # in that case, try another starting point
         polygon = Polygon(points[-split:]+points[:-split])
-    for tolerance in range(int(polygon.area)):
+    # try by simplification
+    for tolerance in range(int(polygon.area + 1.5)):
         if polygon.is_valid:
             break
         # simplification may require a larger tolerance
         polygon = polygon.simplify(tolerance + 1)
+    # try by enlarging
+    for tolerance in range(1, int(polygon.area + 2.5)):
+        if polygon.is_valid:
+            break
+        # enlargement may require a larger tolerance
+        polygon = polygon.buffer(tolerance)
+    assert polygon.is_valid, polygon.wkt
     return polygon
