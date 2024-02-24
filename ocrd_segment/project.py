@@ -5,6 +5,8 @@ import itertools
 import numpy as np
 from scipy.sparse.csgraph import minimum_spanning_tree
 from shapely.geometry import Polygon, LineString
+from shapely.geometry.polygon import orient
+from shapely import set_precision
 from shapely.ops import unary_union, nearest_points
 
 from ocrd import Processor
@@ -152,11 +154,13 @@ def pairwise(iterable):
 
 def join_polygons(polygons, scale=20):
     """construct concave hull (alpha shape) from input polygons by connecting their pairwise nearest points"""
-    # ensure input polygons are simply typed
-    polygons = list(itertools.chain.from_iterable([
-        poly.geoms if poly.geom_type in ['MultiPolygon', 'GeometryCollection']
-        else [poly]
-        for poly in polygons]))
+    # ensure input polygons are simply typed and all oriented equally
+    polygons = [orient(poly)
+                for poly in itertools.chain.from_iterable(
+                        [poly.geoms
+                         if poly.geom_type in ['MultiPolygon', 'GeometryCollection']
+                         else [poly]
+                         for poly in polygons])]
     npoly = len(polygons)
     if npoly == 1:
         return polygons[0]
@@ -175,15 +179,11 @@ def join_polygons(polygons, scale=20):
         prevp = polygons[prevp]
         nextp = polygons[nextp]
         nearest = nearest_points(prevp, nextp)
-        bridgep = LineString(nearest).buffer(max(1, scale/5), resolution=1)
+        bridgep = orient(LineString(nearest).buffer(max(1, scale/5), resolution=1), -1)
         polygons.append(bridgep)
     jointp = unary_union(polygons)
     assert jointp.geom_type == 'Polygon', jointp.wkt
-    if jointp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        jointp = Polygon(np.round(jointp.exterior.coords))
-        jointp = make_valid(jointp)
+    jointp = set_precision(jointp, 1.0)
     return jointp
 
 def polygon_for_parent(polygon, parent):
