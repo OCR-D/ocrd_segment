@@ -183,6 +183,8 @@ def join_polygons(polygons, scale=20):
         polygons.append(bridgep)
     jointp = unary_union(polygons)
     assert jointp.geom_type == 'Polygon', jointp.wkt
+    # follow-up calculations will necessarily be integer;
+    # so anticipate rounding here and then ensure validity
     jointp = set_precision(jointp, 1.0)
     return jointp
 
@@ -233,11 +235,9 @@ def make_intersection(poly1, poly2):
     if interp.geom_type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
         interp = join_polygons(interp.geoms)
-    if interp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        interp = Polygon(np.round(interp.exterior.coords))
-        interp = make_valid(interp)
+    # follow-up calculations will necessarily be integer;
+    # so anticipate rounding here and then ensure validity
+    interp = set_precision(interp, 1.0)
     return interp
 
 def make_valid(polygon):
