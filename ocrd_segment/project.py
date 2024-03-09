@@ -5,6 +5,8 @@ import itertools
 import numpy as np
 from scipy.sparse.csgraph import minimum_spanning_tree
 from shapely.geometry import Polygon, LineString
+from shapely.geometry.polygon import orient
+from shapely import set_precision
 from shapely.ops import unary_union, nearest_points
 
 from ocrd import Processor
@@ -120,22 +122,22 @@ class ProjectHull(Processor):
                 content=to_xml(pcgts))
 
     def _process_segment(self, segment, constituents, page_id):
-        """Shrink segment outline to become the minimal convex hull of its constituent segments."""
+        """Overwrite segment outline to become the minimal convex hull of its constituent segments."""
         LOG = getLogger('processor.ProjectHull')
         polygons = [make_valid(Polygon(polygon_from_points(constituent.get_Coords().points)))
                     for constituent in constituents]
         polygon = join_polygons(polygons).buffer(self.parameter['padding']).exterior.coords[:-1]
+        # make sure the segment still fits into its parent's parent
         if isinstance(segment, PageType):
-            oldborder = segment.Border
-            segment.Border = None # ensure interim parent is the page frame itself
-        # make sure the segment still fits into its own parent
-        polygon2 = polygon_for_parent(polygon, segment)
-        if polygon2 is None:
-            LOG.info('Ignoring extant segment: %s', segment.id)
-            if isinstance(segment, PageType):
-                segment.Border = oldborder
+            # ensure interim parent is the page frame itself
+            parent = PageType(**segment.__dict__)
+            parent.Border = None
         else:
-            polygon = polygon2
+            parent = segment.parent_object_
+        polygon = polygon_for_parent(polygon, parent)
+        if polygon is None:
+            LOG.info('Ignoring extant segment: %s', segment.id)
+        else:
             points = points_from_polygon(polygon)
             coords = CoordsType(points=points)
             LOG.debug('Using new coordinates from %d constituents for segment "%s"',
@@ -152,11 +154,13 @@ def pairwise(iterable):
 
 def join_polygons(polygons, scale=20):
     """construct concave hull (alpha shape) from input polygons by connecting their pairwise nearest points"""
-    # ensure input polygons are simply typed
-    polygons = list(itertools.chain.from_iterable([
-        poly.geoms if poly.type in ['MultiPolygon', 'GeometryCollection']
-        else [poly]
-        for poly in polygons]))
+    # ensure input polygons are simply typed and all oriented equally
+    polygons = [orient(poly)
+                for poly in itertools.chain.from_iterable(
+                        [poly.geoms
+                         if poly.geom_type in ['MultiPolygon', 'GeometryCollection']
+                         else [poly]
+                         for poly in polygons])]
     npoly = len(polygons)
     if npoly == 1:
         return polygons[0]
@@ -175,16 +179,18 @@ def join_polygons(polygons, scale=20):
         prevp = polygons[prevp]
         nextp = polygons[nextp]
         nearest = nearest_points(prevp, nextp)
-        bridgep = LineString(nearest).buffer(max(1, scale/5), resolution=1)
+        bridgep = orient(LineString(nearest).buffer(max(1, scale/5), resolution=1), -1)
         polygons.append(bridgep)
     jointp = unary_union(polygons)
-    assert jointp.type == 'Polygon', jointp.wkt
-    if jointp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        jointp = Polygon(np.round(jointp.exterior.coords))
-        jointp = make_valid(jointp)
-    return jointp
+    assert jointp.geom_type == 'Polygon', jointp.wkt
+    # follow-up calculations will necessarily be integer;
+    # so anticipate rounding here and then ensure validity
+    jointp2 = set_precision(jointp, 1.0)
+    if jointp2.geom_type != 'Polygon' or not jointp2.is_valid:
+        jointp2 = Polygon(np.round(jointp.exterior.coords))
+        jointp2 = make_valid(jointp2)
+    assert jointp2.geom_type == 'Polygon', jointp2.wkt
+    return jointp2
 
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
@@ -227,30 +233,38 @@ def make_intersection(poly1, poly2):
     # post-process
     if interp.is_empty or interp.area == 0.0:
         return None
-    if interp.type == 'GeometryCollection':
+    if interp.geom_type == 'GeometryCollection':
         # heterogeneous result: filter zero-area shapes (LineString, Point)
         interp = unary_union([geom for geom in interp.geoms if geom.area > 0])
-    if interp.type == 'MultiPolygon':
+    if interp.geom_type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
         interp = join_polygons(interp.geoms)
-    if interp.minimum_clearance < 1.0:
-        # follow-up calculations will necessarily be integer;
-        # so anticipate rounding here and then ensure validity
-        interp = Polygon(np.round(interp.exterior.coords))
-        interp = make_valid(interp)
+    # follow-up calculations will necessarily be integer;
+    # so anticipate rounding here and then ensure validity
+    interp = set_precision(interp, 1.0)
     return interp
 
 def make_valid(polygon):
+    """Ensures shapely.geometry.Polygon object is valid by repeated rearrangement/simplification/enlargement."""
     points = list(polygon.exterior.coords)
+    # try by re-arranging points
     for split in range(1, len(points)):
         if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
             break
         # simplification may not be possible (at all) due to ordering
         # in that case, try another starting point
         polygon = Polygon(points[-split:]+points[:-split])
-    for tolerance in range(int(polygon.area)):
+    # try by simplification
+    for tolerance in range(int(polygon.area + 1.5)):
         if polygon.is_valid:
             break
         # simplification may require a larger tolerance
         polygon = polygon.simplify(tolerance + 1)
+    # try by enlarging
+    for tolerance in range(1, int(polygon.area + 2.5)):
+        if polygon.is_valid:
+            break
+        # enlargement may require a larger tolerance
+        polygon = polygon.buffer(tolerance)
+    assert polygon.is_valid, polygon.wkt
     return polygon

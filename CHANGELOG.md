@@ -4,6 +4,17 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+ * repair/project: adapt to Shapely deprecations, 
+ * repair/project: more robust `join_polygons`, `make_intersections`, `make_valid`
+
+### Changed
+
+ * :fire: require Shapely 2
+ * project: clip coords to parent's parent instead of parent
+ * repair (`sanitize`): shrink before attempting repair (hierarchical consistency)
+
 ## [0.1.22] - 2023-06-29
 
 ### Added
