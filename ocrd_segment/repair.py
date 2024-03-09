@@ -115,6 +115,14 @@ class RepairSegmentation(Processor):
             pcgts.set_pcGtsId(file_id)
             page = pcgts.get_Page()
 
+            # shrink/expand text regions to the hull of their text lines
+            if sanitize:
+                page_image, page_coords, _ = self.workspace.image_from_page(
+                    page, page_id,
+                    feature_selector='binarized',
+                    feature_filter='clipped')
+                shrink_regions(page_image, page_coords, page, page_id,
+                               padding=self.parameter['sanitize_padding'])
             #
             # validate segmentation (warn of children extending beyond their parents)
             #
@@ -180,14 +188,6 @@ class RepairSegmentation(Processor):
             # delete/merge/split redundant text regions (or its text lines)
             if plausibilize:
                 self.plausibilize_page(page, page_id)
-            # shrink/expand text regions to the hull of their text lines
-            if sanitize:
-                page_image, page_coords, _ = self.workspace.image_from_page(
-                    page, page_id,
-                    feature_selector='binarized',
-                    feature_filter='clipped')
-                shrink_regions(page_image, page_coords, page, page_id,
-                               padding=self.parameter['sanitize_padding'])
 
             self.workspace.add_file(
                 ID=file_id,
