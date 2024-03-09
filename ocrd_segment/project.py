@@ -185,8 +185,12 @@ def join_polygons(polygons, scale=20):
     assert jointp.geom_type == 'Polygon', jointp.wkt
     # follow-up calculations will necessarily be integer;
     # so anticipate rounding here and then ensure validity
-    jointp = set_precision(jointp, 1.0)
-    return jointp
+    jointp2 = set_precision(jointp, 1.0)
+    if jointp2.geom_type != 'Polygon' or not jointp2.is_valid:
+        jointp2 = Polygon(np.round(jointp.exterior.coords))
+        jointp2 = make_valid(jointp2)
+    assert jointp2.geom_type == 'Polygon', jointp2.wkt
+    return jointp2
 
 def polygon_for_parent(polygon, parent):
     """Clip polygon to parent polygon range.
