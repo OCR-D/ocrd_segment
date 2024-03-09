@@ -4,6 +4,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.23] - 2024-03-10
+
 ### Fixed
 
  * repair/project: adapt to Shapely deprecations, 
@@ -220,7 +222,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
   * further improve README
 
 <!-- link-labels -->
-[unreleased]: ../../compare/v0.1.21...master
+[unreleased]: ../../compare/v0.1.23...master
+[0.1.23]: ../../compare/v0.1.22...v0.1.23
 [0.1.22]: ../../compare/v0.1.21...v0.1.22
 [0.1.21]: ../../compare/v0.1.20...v0.1.21
 [0.1.20]: ../../compare/v0.1.19...v0.1.20
