@@ -78,6 +78,9 @@ class ImportImageSegmentation(Processor):
         # process input file tuples
         for ift in ifts:
             input_file, segmentation_file = ift
+            if segmentation_file is None:
+                LOG.warning("skipping page %s without segmentation", input_file.pageId)
+                continue
             file_id = make_file_id(input_file, self.output_file_grp)
             LOG.info("processing page %s", input_file.pageId)
             pcgts = page_from_file(self.workspace.download_file(input_file))
