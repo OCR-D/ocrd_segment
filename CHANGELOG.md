@@ -4,11 +4,26 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.24] - 2024-04-25
+
+### Fixed
+
+- project/repair `join_polygons`: fix rare case of adjacent rings
+- from_masks: skip if no segmentation input file
+
+### Added
+
+- repair: add params `spread` / `spread_level`, update/improve docs
+
+### Changed
+
+- repair: validate/repair polygons with 0 px tolerance
+
 ## [0.1.23] - 2024-03-10
 
 ### Fixed
 
- * repair/project: adapt to Shapely deprecations, 
+ * repair/project: adapt to Shapely deprecations,
  * repair/project: more robust `join_polygons`, `make_intersections`, `make_valid`
 
 ### Changed
@@ -222,7 +237,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
   * further improve README
 
 <!-- link-labels -->
-[unreleased]: ../../compare/v0.1.23...master
+[unreleased]: ../../compare/v0.1.24...master
+[0.1.24]: ../../compare/v0.1.23...v0.1.24
 [0.1.23]: ../../compare/v0.1.22...v0.1.23
 [0.1.22]: ../../compare/v0.1.21...v0.1.22
 [0.1.21]: ../../compare/v0.1.20...v0.1.21
