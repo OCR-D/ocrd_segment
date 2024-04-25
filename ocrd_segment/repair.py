@@ -23,6 +23,7 @@ from ocrd_utils import (
 from ocrd_modelfactory import page_from_file
 from ocrd_models.ocrd_page import (
     PageType,
+    BorderType,
     TextRegionType,
     to_xml
 )
@@ -55,18 +56,18 @@ class RepairSegmentation(Processor):
 
     def process(self):
         """Perform generic post-processing of page segmentation with Shapely and OpenCV.
-        
+
         Open and deserialize PAGE input files and their respective images,
         then validate syntax and semantics, checking for invalid or inconsistent
         segmentation. Fix invalidities by simplifying and/or re-ordering polygon paths.
         Fix inconsistencies by shrinking segment polygons to their parents. Log
         errors that cannot be repaired automatically.
-        
+
         Next, if ``simplify`` is non-zero, then for each segment (top-level page or
         recursive region, line, word, glyph), simplify the polygon points up to that
         precision, while preserving its topology and parent-child consistency.
         (This will usually reduce the number of points.)
-        
+
         \b
         Next, if ``plausibilize``, then for each segment (top-level page or recursive region)
         which contains any text regions, try to find all pairs of such regions in it that
@@ -88,14 +89,21 @@ class RepairSegmentation(Processor):
              (a fraction of more than ``plausibilize_merge_min_overlap``),
              then the one line can be merged into the other.
            * If another overlap, and
-             - if either line's centroid is in the other, 
+             - if either line's centroid is in the other,
                then the smaller line can be merged into the larger,
              - otherwise the smaller line can be subtracted from the larger.
         Apply those repairs and update the reading order.
-        
-        Furthermore, if ``sanitize``, then for each text region, update
-        the coordinates to become the minimal convex hull of its constituent
-        text lines. (But consider running ocrd-segment-project instead.)
+
+        Next, if ``spread`` is non-zero, then enlarge each ``spread_level`` segment
+        by this many pixels (without causing additional overlap between neighbours).
+
+        However, if ``sanitize``, then as a first step (prior to everything else
+        including repairs), for each text region, update the coordinates to become
+        the minimal convex hull of its binary foreground. (So in contrast to
+        ocrd-segment-project, this ignores constituent lines. It uses the binarized
+        image and generates a tight outline properly contained within the old
+        region outline, as if extended by ``sanitize_padding``. If ``spread`` is
+        non-zero and ``spread_level=region``, then this still applies to the result.)
 
         Finally, produce new output files by serialising the resulting hierarchy.
         """
@@ -188,6 +196,8 @@ class RepairSegmentation(Processor):
             # delete/merge/split redundant text regions (or its text lines)
             if self.parameter['plausibilize']:
                 self.plausibilize_page(page, page_id)
+            if self.parameter['spread']:
+                self.spread_segments(page, page_id)
 
             self.workspace.add_file(
                 ID=file_id,
@@ -216,7 +226,7 @@ class RepairSegmentation(Processor):
             ensure_consistent(region, at_parent=True)
         if page.get_Border() is not None:
             ensure_consistent(page)
-    
+
     def plausibilize_page(self, page, page_id):
         ro = page.get_ReadingOrder()
         if ro:
@@ -286,10 +296,42 @@ class RepairSegmentation(Processor):
                                    marked_for_deletion,
                                    marked_for_merging,
                                    marked_for_splitting)
-    
+
+    def spread_segments(self, page, page_id):
+        level = self.parameter['spread_level']
+        if level == 'page':
+            border = page.get_Border()
+            if border is not None:
+                spread_segments([border], self.parameter['spread'])
+            return
+        if level == 'table':
+            for table in page.get_TableRegion():
+                cells = table.get_TextRegion()
+                spread_segments(cells, self.parameter['spread'])
+            return
+        regions = page.get_AllRegions(depth=1)
+        if level == 'region':
+            spread_segments(regions, self.parameter['spread'])
+            return
+        for region in regions:
+            if not isinstance(region, TextRegionType):
+                continue
+            lines = region.get_TextLine()
+            if level == 'line':
+                spread_segments(lines, self.parameter['spread'])
+                continue
+            for line in lines:
+                words = line.get_Word()
+                if level == 'word':
+                    spread_segments(words, self.parameter['spread'])
+                    continue
+                for word in words:
+                    glyphs = word.get_Glyph()
+                    spread_segments(glyphs, self.parameter['spread'])
+
 def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_merging, min_overlap, page_id):
     """Determine redundancies in a pair of regions/lines
-    
+
     \b
     For segments ``seg1`` (with coordinates ``poly1``) and ``seg2`` (with coordinates ``poly2``),
     - if their coordinates are nearly identical, then just mark ``seg2`` for deletion
@@ -297,7 +339,7 @@ def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_
     - if they overlap, then mark the most overlapped side in favour of the other – unless
       - the union is larger than the sum (i.e. covers area outside of both) and
       - the intersection is smaller than ``min_overlap`` fraction of either side
-    
+
     Return whether something else besides deletion must be done about the redundancy,
     i.e. true iff they overlap, but neither side could be marked for deletion.
     """
@@ -347,7 +389,7 @@ def _compare_segments(seg1, seg2, poly1, poly2, marked_for_deletion, marked_for_
 
 def _merge_segments(seg, superseg, poly, superpoly, segpolys, reading_order):
     """Merge one segment into another and update reading order refs.
-    
+
     \b
     Given a region/line ``seg`` that should be dissolved into a
     region/line ``superseg``, update the latter's
@@ -432,17 +474,17 @@ def _merge_segments(seg, superseg, poly, superpoly, segpolys, reading_order):
         LOG.warning('Merging "{}" with TextEquiv {} into "{}" with {}'.format(
             seg.id, seg.get_TextEquiv(), # FIXME needs repr...
             superseg.id, superseg.get_TextEquiv())) # ...to be informative
-        
+
 def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_merging, marked_for_splitting):
     """Remove redundancy among a set of segments by applying deletion/merging/splitting
-    
+
     \b
     Given the segment-polygon tuples ``segpolys`` and analysis of actions to be taken:
     - ``marked_for_deletion``: list of segment identifiers that can be removed,
     - ``marked_for_merging``: dict of segment identifiers that can be dissolved into some other,
     - ``marked_for_splitting``: dict of segment identifiers that can be shrinked in favour of some other,
     apply these one by one (possibly recursing from regions to lines).
-    
+
     Finally, update the reading order ``rogroup`` accordingly.
     """
     LOG = getLogger('processor.RepairSegmentation')
@@ -498,7 +540,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
 
 def page_get_reading_order(ro, rogroup):
     """Add all elements from the given reading order group to the given dictionary.
-    
+
     Given a dict ``ro`` from layout element IDs to ReadingOrder element objects,
     and an object ``rogroup`` with additional ReadingOrder element objects,
     add all references to the dict, traversing the group recursively.
@@ -568,6 +610,17 @@ def shrink_regions(page_image, page_coords, page, page_id, padding=0):
             LOG.debug('Using new coordinates for region "%s"', region.id)
             region.get_Coords().set_points(points_from_polygon(region_polygon.exterior.coords[:-1]))
 
+def spread_segments(segments, distance=0):
+    polygons = [Polygon(polygon_from_points(segment.get_Coords().points))
+                for segment in segments]
+    all_poly = unary_union(polygons)
+    for segment, polygon in zip(segments, polygons):
+        # enlarge by spread, then remove any existing segments except for original outline
+        polygon = merge_poly(polygon, polygon.buffer(distance).difference(all_poly))
+        polygon = polygon.exterior.coords[:-1]
+        segment.get_Coords().set_points(points_from_polygon(polygon))
+        ensure_consistent(segment, at_parent=True)
+
 def simplify(segment, tolerance=0):
     if tolerance <= 0:
         return # nothing to do
@@ -634,22 +687,22 @@ def page_poly(page):
 # same as polygon_for_parent pattern in other processors
 def ensure_consistent(child, at_parent=False):
     """Make segment coordinates fit into parent coordinates.
-    
+
     Ensure that the coordinate polygon of ``child`` is fully
     contained in the coordinate polygon of its parent.
-    
+
     \b
     To achieve that when necessary, either
     - enlarge the parent to the union of both,
       if ``at_parent``
     - shrink the child to the intersection of both,
       otherwise.
-    
+
     In any case, ensure the resulting polygon is valid.
-    
+
     If the parent is at page level, and there is no Border,
     then use the page frame (and assume `at_parent=False`).
-    
+
     If ``child`` is at page level, and there is a Border,
     then use the page frame as parent (and assume `at_parent=False`).
     """
@@ -660,6 +713,11 @@ def ensure_consistent(child, at_parent=False):
         parentp = page_poly(child)
         at_parent = False # clip to page frame
         parent = child
+    elif isinstance(child, BorderType):
+        childp = Polygon(polygon_from_points(child.get_Coords().points))
+        parentp = page_poly(child.parent_object_)
+        at_parent = False # clip to page frame
+        parent = child.parent_object_
     else:
         points = child.get_Coords().points
         polygon = polygon_from_points(points)

@@ -15,6 +15,18 @@
       ],
       "steps": ["layout/segmentation/region"],
       "parameters": {
+        "sanitize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shrink each region such that its coordinates become the minimal concave hull of its binary foreground. (Assumes that a perfect binarization is available.)"
+        },
+        "sanitize_padding": {
+          "type": "number",
+          "format": "integer",
+          "minimum": 1,
+          "default": 5,
+          "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
+        },
         "simplify": {
           "type": "number",
           "format": "float",
@@ -35,17 +47,17 @@
           "default": 0.90,
           "description": "When merging a region or line almost contained in another, require at least this ratio of area is shared with the other."
         },
-        "sanitize": {
-          "type": "boolean",
-          "default": false,
-          "description": "Shrink each region such that its coordinates become the minimal concave hull of its binary foreground. (Assumes that a perfect binarization is available.)"
-        },
-        "sanitize_padding": {
+        "spread": {
           "type": "number",
           "format": "integer",
-          "minimum": 1,
-          "default": 5,
-          "description": "When shrinking a region, enlarge the resulting hull by this amount of pixels in each direction."
+          "default": 0,
+          "description": "After all other steps, enlarge segments by this many pixels into the background."
+        },
+        "spread_level": {
+          "type": "string",
+          "enum": ["page", "table", "region", "line", "word"],
+          "default": "region",
+          "description": "Hierarchy level spread operates on"
         }
       }
     },
