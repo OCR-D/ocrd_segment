@@ -35,6 +35,7 @@ from ocrd_models.ocrd_page_generateds import (
     UnorderedGroupIndexedType,
     ReadingOrderType
 )
+import ocrd_validators.page_validator
 from ocrd_validators.page_validator import (
     CoordinateConsistencyError,
     CoordinateValidityError,
@@ -101,10 +102,8 @@ class RepairSegmentation(Processor):
         LOG = getLogger('processor.RepairSegmentation')
         assert_file_grp_cardinality(self.input_file_grp, 1)
         assert_file_grp_cardinality(self.output_file_grp, 1)
-
-        simplify = self.parameter['simplify']
-        sanitize = self.parameter['sanitize']
-        plausibilize = self.parameter['plausibilize']
+        # be strict regarding polygon path validity (so this can be repaired)
+        ocrd_validators.page_validator.POLY_TOLERANCE = 0
 
         for n, input_file in enumerate(self.input_files):
             file_id = make_file_id(input_file, self.output_file_grp)
@@ -116,7 +115,7 @@ class RepairSegmentation(Processor):
             page = pcgts.get_Page()
 
             # shrink/expand text regions to the hull of their text lines
-            if sanitize:
+            if self.parameter['sanitize']:
                 page_image, page_coords, _ = self.workspace.image_from_page(
                     page, page_id,
                     feature_selector='binarized',
@@ -126,7 +125,7 @@ class RepairSegmentation(Processor):
             #
             # validate segmentation (warn of children extending beyond their parents)
             #
-            report = PageValidator.validate(ocrd_page=pcgts, 
+            report = PageValidator.validate(ocrd_page=pcgts,
                                             page_textequiv_consistency='off',
                                             check_baseline=False)
             if not report.is_valid:
@@ -182,11 +181,12 @@ class RepairSegmentation(Processor):
             # show remaining errors
             if not report.is_valid:
                 LOG.warning(report.to_xml())
+
             # simplify
-            if simplify:
+            if self.parameter['simplify']:
                 self.simplify_page(page, page_id)
             # delete/merge/split redundant text regions (or its text lines)
-            if plausibilize:
+            if self.parameter['plausibilize']:
                 self.plausibilize_page(page, page_id)
 
             self.workspace.add_file(
