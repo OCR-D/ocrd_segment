@@ -1,4 +1,4 @@
-FROM ocrd/core:v2.67.1 AS base
+FROM docker.io/ocrd/core:v2.67.1 AS base
 ARG VCS_REF
 ARG BUILD_DATE
 LABEL \
