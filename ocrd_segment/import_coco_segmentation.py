@@ -61,6 +61,7 @@ class ImportCOCOSegmentation(Processor):
         Open and deserialize the COCO JSON file from the second input file group.
         (It lists region categories/subtypes, file names and segmentations for all pages.)
 
+        \b
         Open and deserialize each PAGE input file (or generate from image input file)
         from the first input file group. Now find this page in COCO:
         - try to match the PAGE ``imageFilename`` or METS file path matches to some
@@ -164,7 +165,7 @@ class ImportCOCOSegmentation(Processor):
                               page_id, page.imageHeight, image['height'])
 
         # todo: remove existing segmentation first?
-        for region in image['regions']:
+        for region in image.get('regions', []):
             assert isinstance(region['segmentation'], list), "importing RLE/mask segmentation not implemented"
             polygon = np.array(region['segmentation'])
             polygon = np.reshape(polygon, (polygon.shape[1]//2, 2))
