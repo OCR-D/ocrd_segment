@@ -152,6 +152,8 @@ class ImportCOCOSegmentation(Processor):
         # find COCO image
         if page.imageFilename in self.images_by_filename:
             image = self.images_by_filename[page.imageFilename]
+        elif os.path.basename(page.imageFilename) in self.images_by_filename:
+            image = self.images_by_filename[os.path.basename(page.imageFilename)]
         elif num_page_id in self.images_by_id:
             image = self.images_by_id[num_page_id]
         else:
