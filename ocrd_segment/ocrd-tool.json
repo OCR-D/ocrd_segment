@@ -154,6 +154,17 @@
       "output_file_grp_cardinality": 1,
       "steps": ["layout/segmentation/region"],
       "parameters": {
+        "categorydict": {
+          "type": "object",
+          "description": "How to map COCO category names to PAGE segment types (except if 'source=PAGE'). Format is category[:subcategory] to type[:subtype], e.g. \"text:title\": \"TextRegion:heading\". Defaults to recommended PubLayNet rules.",
+          "default": {
+            "text": "TextRegion:paragraph",
+            "title": "TextRegion:heading",
+            "list": "TextRegion:list-label",
+            "table": "TableRegion",
+            "figure": "ImageRegion"
+          }
+        }
       }
     },
     "ocrd-segment-extract-pages": {

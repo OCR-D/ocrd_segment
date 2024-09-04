@@ -109,12 +109,12 @@ class ImportCOCOSegmentation(Processor):
                  len(coco['images']), len(coco['annotations']), len(coco['categories']))
         # Convert to usable dicts
         # classes:
-        self.coco_source = 'PubLayNet'
+        self.coco_source = 'custom'
         self.categories = {}
         self.subcategories = {}
         for cat in coco['categories']:
-            if cat['source'] == 'PAGE':
-                self.coco_source = 'PAGE'
+            if 'source' in cat:
+                self.coco_source = cat['source']
             if 'supercategory' in cat and cat['supercategory']:
                 self.categories[cat['id']] = cat['supercategory']
                 self.subcategories[cat['id']] = cat['name']
@@ -177,51 +177,41 @@ class ImportCOCOSegmentation(Processor):
                 subcategory = self.subcategories[region['category_id']]
             else:
                 subcategory = None
+            if subcategory == category:
+                subcategory = None
+            mapping = self.parameter['categorydict']
             region_id = f"r{region['id']}"
             self.logger.info('Adding region %s:%s [area %d]', category, subcategory or '', region['area'])
-            if self.coco_source == 'PubLayNet':
-                if category == 'text':
-                    region_obj = TextRegionType(id=region_id, Coords=coords,
-                                                type_=TextTypeSimpleType.PARAGRAPH)
-                    page.add_TextRegion(region_obj)
-                elif category == 'title':
-                    region_obj = TextRegionType(id=region_id, Coords=coords,
-                                                type_=TextTypeSimpleType.HEADING) # CAPTION?
-                    page.add_TextRegion(region_obj)
-                elif category == 'list':
-                    region_obj = TextRegionType(id=region_id, Coords=coords,
-                                                type_=TextTypeSimpleType.LISTLABEL) # OTHER?
-                    page.add_TextRegion(region_obj)
-                elif category == 'table':
-                    region_obj = TableRegionType(id=region_id, Coords=coords)
-                    page.add_TableRegion(region_obj)
-                elif category == 'figure':
-                    region_obj = ImageRegionType(id=region_id, Coords=coords)
-                    page.add_ImageRegion(region_obj)
-                else:
-                    raise Exception('unknown region category: %s' % category)
-            else: # 'PAGE'
-                args = {'id': region_id,
-                        'Coords': coords}
+            args = {'id': region_id,
+                    'Coords': coords}
+            if self.coco_source != 'PAGE':
                 if subcategory:
-                    if category in TYPEDICT:
-                        subtype = membername(TYPEDICT[category], subcategory)
-                        if subtype == subcategory:
-                            # not predefined in PAGE: use other + custom
-                            args['custom'] = "subtype:%s" % subcategory
-                            args['type_'] = "other"
-                        else:
-                            args['type_'] = subcategory
-                    else:
-                        args['custom'] = "subtype:%s" % subcategory
-                if category + 'Type' not in globals():
-                    raise Exception('unknown region category: %s' % category)
-                region_type = globals()[category + 'Type']
-                if region_type is BorderType:
-                    page.set_Border(BorderType(Coords=coords))
+                    category = mapping[category + ':' + subcategory]
                 else:
-                    region_obj = region_type(**args)
-                    getattr(page, 'add_%s' % category)(region_obj)
+                    category = mapping[category]
+                if ':' in category:
+                    category, subcategory = category.split(':')
+                else:
+                    subcategory = None
+            if subcategory:
+                if category in TYPEDICT:
+                    subtype = membername(TYPEDICT[category], subcategory)
+                    if subtype == subcategory:
+                        # not predefined in PAGE: use other + custom
+                        args['custom'] = "subtype:%s" % subcategory
+                        args['type_'] = "other"
+                    else:
+                        args['type_'] = subcategory
+                else:
+                    args['custom'] = "subtype:%s" % subcategory
+            if category + 'Type' not in globals():
+                raise Exception('unknown region category: %s' % category)
+            region_type = globals()[category + 'Type']
+            if region_type is BorderType:
+                page.set_Border(BorderType(Coords=coords))
+            else:
+                region_obj = region_type(**args)
+                getattr(page, 'add_%s' % category)(region_obj)
 
         # remove image from dicts (so lookup becomes faster and we know if anything remains unaccounted for)
         self.images_by_id.pop(num_page_id, None)
