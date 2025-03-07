@@ -1,17 +1,18 @@
 SHELL = /bin/bash
 PYTHON ?= python
 PIP ?= pip
-TAG ?= ocrd/segment
-
-# BEGIN-EVAL makefile-parser --make-help Makefile
+DOCKER_TAG ?= 'ocrd/segment'
+DOCKER_BASE_IMAGE ?= docker.io/ocrd/core:v3.1.0
 
 help:
 	@echo ""
 	@echo "  Targets"
 	@echo ""
-	@echo "    deps     (install required Python packages)"
-	@echo "    install  (install this Python package)"
-	@echo "    docker   (build Docker image)"
+	@echo "    deps          (install required Python packages)"
+	@echo "    install       (install this Python package)"
+	@echo "    install-dev   (install in editable mode)"
+	@echo "    build         (build source and binary distribution)"
+	@echo "    docker        (build Docker image)"
 	@echo ""
 
 # END-EVAL
@@ -32,10 +33,18 @@ deps:
 install: deps
 	$(PIP) install .
 
+install-dev: deps
+	$(PIP) install -e .
+
+build:
+	$(PIP) install build
+	$(PYTHON) -m build .
+
 docker:
 	docker build \
-	-t $(TAG) \
+	-t $(DOCKER_TAG) \
+	--build-arg DOCKER_BASE_IMAGE=$(DOCKER_BASE_IMAGE) \
 	--build-arg VCS_REF=$(git rev-parse --short HEAD) \
 	--build-arg BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ") .
 
-.PHONY: help deps install docker # deps-test test
+.PHONY: help deps install install-dev build docker # deps-test test

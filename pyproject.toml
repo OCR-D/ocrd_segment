@@ -1,0 +1,107 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel", "setuptools-ocrd"]
+
+[project]
+name = "ocrd_segment"
+authors = [
+    {name = "Kay-Michael Würzner", email = "wuerzner@gmail.com"},
+    {name = "Robert Sachunsky", email = "sachunsky@informatik.uni-leipzig.de"},
+    {name = "Konstantin Baierer", email = "unixprog@gmail.com"},
+]
+description = "Page segmentation and segmentation evaluation in the OCR-D framework"
+readme = "README.md"
+license = {text = "Apache License 2.0"}
+requires-python = ">=3.8"
+keywords = ["ocr", "ocr-d"]
+
+dynamic = ["version", "dependencies"]
+
+# https://pypi.org/classifiers/
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Other Audience",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Text Processing",
+]
+
+[project.scripts]
+ocrd-segment-repair = "ocrd_segment.cli:ocrd_segment_repair"
+ocrd-segment-project = "ocrd_segment.cli:ocrd_segment_project"
+ocrd-segment-from-masks = "ocrd_segment.cli:ocrd_segment_from_masks"
+ocrd-segment-from-coco = "ocrd_segment.cli:ocrd_segment_from_coco"
+ocrd-segment-extract-pages = "ocrd_segment.cli:ocrd_segment_extract_pages"
+ocrd-segment-extract-regions = "ocrd_segment.cli:ocrd_segment_extract_regions"
+ocrd-segment-extract-lines = "ocrd_segment.cli:ocrd_segment_extract_lines"
+ocrd-segment-extract-words = "ocrd_segment.cli:ocrd_segment_extract_words"
+ocrd-segment-extract-glyphs = "ocrd_segment.cli:ocrd_segment_extract_glyphs"
+ocrd-segment-replace-original = "ocrd_segment.cli:ocrd_segment_replace_original"
+ocrd-segment-replace-page = "ocrd_segment.cli:ocrd_segment_replace_page"
+ocrd-segment-replace-text = "ocrd_segment.cli:ocrd_segment_replace_text"
+ocrd-segment-evaluate = "ocrd_segment.cli:ocrd_segment_evaluate"
+page-segment-evaluate = "ocrd_segment.evaluate:standalone_cli"
+
+
+[project.urls]
+Homepage = "https://github.com/OCR-D/ocrd_segment"
+Repository = "https://github.com/OCR-D/ocrd_segment.git"
+
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools]
+packages = ["ocrd_segment"]
+package-data = {"*" = ["ocrd-tool.json"]}
+
+[tool.pytest.ini_options]
+minversion = 6.0
+addopts = "--strict-markers"
+markers = [
+    "integration: integration tests",
+]
+
+
+[tool.mypy]
+plugins = ["numpy.typing.mypy_plugin"]
+
+ignore_missing_imports = true
+
+
+strict = true
+
+disallow_subclassing_any = false
+# ❗ error: Class cannot subclass "Processor" (has type "Any")
+disallow_any_generics = false
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+
+[tool.coverage.run]
+branch = true
+source = [
+    "ocrd_segment"
+]
+concurrency = [
+    "thread",
+    "multiprocessing"
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if self\\.debug",
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+ignore_errors = true
+omit = [
+    "ocrd_segment/cli.py"
+]
