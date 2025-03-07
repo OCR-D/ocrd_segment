@@ -4,6 +4,20 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-03-07
+
+Changed:
+
+- adapt to (and require) `ocrd>=3.0`
+- switched to `pyproject.toml` build, tracking version via `ocrd-tool.json`
+- `from_coco`: allow file path as basename (directory part inferred)
+- `from_coco`: add parameter `categorydict` (instead of fixed `PubLayNet` mapping),
+  but keep `source=PAGE` override in place
+
+Fixed:
+
+- `from_coco`: allow empty (unannotated) pages
+
 ## [0.1.24] - 2024-04-25
 
 ### Fixed
@@ -237,7 +251,8 @@ Versioned according to [Semantic Versioning](http://semver.org/).
   * further improve README
 
 <!-- link-labels -->
-[unreleased]: ../../compare/v0.1.24...master
+[unreleased]: ../../compare/v0.2.0...master
+[0.2.0]: ../../compare/v0.1.24...v0.2.0
 [0.1.24]: ../../compare/v0.1.23...v0.1.24
 [0.1.23]: ../../compare/v0.1.22...v0.1.23
 [0.1.22]: ../../compare/v0.1.21...v0.1.22
