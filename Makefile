@@ -8,9 +8,11 @@ help:
 	@echo ""
 	@echo "  Targets"
 	@echo ""
-	@echo "    deps     (install required Python packages)"
-	@echo "    install  (install this Python package)"
-	@echo "    docker   (build Docker image)"
+	@echo "    deps          (install required Python packages)"
+	@echo "    install       (install this Python package)"
+	@echo "    install-dev   (install in editable mode)"
+	@echo "    build         (build source and binary distribution)"
+	@echo "    docker        (build Docker image)"
 	@echo ""
 
 # END-EVAL
