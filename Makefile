@@ -2,7 +2,8 @@ SHELL = /bin/bash
 PYTHON ?= python
 PIP ?= pip
 DOCKER_TAG ?= 'ocrd/segment'
-DOCKER_BASE_IMAGE ?= docker.io/ocrd/core:v3.1.0
+DOCKER_BASE_IMAGE ?= docker.io/ocrd/core:latest
+DOCKER ?= docker
 
 help:
 	@echo ""
@@ -41,7 +42,7 @@ build:
 	$(PYTHON) -m build .
 
 docker:
-	docker build \
+	$(DOCKER) build \
 	-t $(DOCKER_TAG) \
 	--build-arg DOCKER_BASE_IMAGE=$(DOCKER_BASE_IMAGE) \
 	--build-arg VCS_REF=$(git rev-parse --short HEAD) \
