@@ -32,8 +32,11 @@ ENV XDG_CONFIG_HOME /usr/local/share/ocrd-resources
 
 WORKDIR /build/ocrd_segment
 COPY . .
+COPY ocrd-tool.json .
 # prepackage ocrd-tool.json as ocrd-all-tool.json
-RUN ocrd ocrd-tool ocrd_segment/ocrd-tool.json dump-tools > $(dirname $(ocrd bashlib filename))/ocrd-all-tool.json
+RUN ocrd ocrd-tool ocrd-tool.json dump-tools > $(dirname $(ocrd bashlib filename))/ocrd-all-tool.json
+# prepackage ocrd-all-module-dir.json
+RUN ocrd ocrd-tool ocrd-tool.json dump-module-dirs > $(dirname $(ocrd bashlib filename))/ocrd-all-module-dir.json
 # install everything and reduce image size
 RUN pip install . && rm -rf /build/ocrd_segment
 
