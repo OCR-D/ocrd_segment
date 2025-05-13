@@ -4,6 +4,12 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-05-13
+
+Fixed:
+
+- repair/plausibilize: typo introduced in 8d1cbc4a
+
 ## [0.2.0] - 2025-03-07
 
 Changed:
