@@ -273,7 +273,7 @@ class RepairSegmentation(Processor):
                                    marked_for_deletion,
                                    marked_for_merging,
                                    marked_for_splitting,
-                                   log)
+                                   self.logger)
 
     def spread_segments(self, page, page_id):
         level = self.parameter['spread_level']
