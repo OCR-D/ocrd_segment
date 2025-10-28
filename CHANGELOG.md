@@ -4,6 +4,11 @@ Versioned according to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-10-28
+
+Fixed:
+- extract_regions/page: broken identifier scope since 0.2.0
+
 ## [0.2.1] - 2025-05-13
 
 Fixed:

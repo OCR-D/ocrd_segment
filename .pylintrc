@@ -6,7 +6,6 @@ disable =
     super-with-arguments,
     trailing-whitespace,
     missing-docstring,
-    no-self-use,
     superfluous-parens,
     invalid-name,
     line-too-long,
@@ -17,8 +16,6 @@ disable =
     too-few-public-methods,
     duplicate-code
 
-# allow indented whitespace (as required by interpreter):
-no-space-check=empty-line
-
 # allow non-snake-case identifiers:
 good-names=n,i
+
