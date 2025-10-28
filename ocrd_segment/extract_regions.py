@@ -69,18 +69,18 @@ class ExtractRegions(Processor):
         * ID + '.json': region metadata.
         * output_file_grp + '.coco.json'
         """
-        classes = dict(CLASSES)
+        self.classes = dict(CLASSES)
         self.logger.info("Extracting %s region classes!", str(self.parameter["classes"]))
         # extract specific classes only
         if self.parameter["classes"]:
             selected_classes = self.parameter["classes"]
-            classes = { region: classes[region] for region in selected_classes }
+            self.classes = { region: self.classes[region] for region in selected_classes }
         # COCO: init data structures
         self.images = []
         self.annotations = []
         self.categories = []
         cat_id = 0
-        for cat, color in classes.items():
+        for cat, color in self.classes.items():
             # COCO format does not allow alpha channel
             color = (int(color[0:2], 16),
                      int(color[2:4], 16),
@@ -140,7 +140,7 @@ class ExtractRegions(Processor):
         ptype = page.get_type()
 
         regions = {}
-        for name in classes:
+        for name in self.classes:
             if not name or not name.endswith("Region"):
                 # only top-level regions here
                 continue
@@ -214,7 +214,7 @@ class ExtractRegions(Processor):
                 else:
                     extension = '.raw'
                 subregions = dict()
-                for name in classes:
+                for name in self.classes:
                     if not name or ':' in name:
                         # no subtypes here
                         continue

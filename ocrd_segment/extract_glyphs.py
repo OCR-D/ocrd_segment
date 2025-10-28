@@ -7,7 +7,6 @@ import itertools
 from ocrd_utils import (
     config,
     make_file_id,
-    assert_file_grp_cardinality,
     coordinates_of_segment,
     polygon_from_points,
     MIME_TO_EXT
@@ -199,7 +198,8 @@ class ExtractGlyphs(Processor):
                             force=config.OCRD_EXISTING_OUTPUT == 'OVERWRITE',
                         )
                         file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
-                        json.dump(description, open(file_path, 'w'), indent=2)
+                        with open(file_path, 'w') as f:
+                            json.dump(description, f, indent=2)
                         file_path = file_path.replace('.json', '.gt.txt')
                         with open(file_path, 'wb') as f:
                             f.write((ltext + '\n').encode('utf-8'))

@@ -38,7 +38,7 @@ class ReplaceOriginal(Processor):
         pcgts = input_pcgts[0]
         result = OcrdPageResult(pcgts)
         page = pcgts.get_Page()
-        page_image, page_coords, page_image_info = self.workspace.image_from_page(
+        page_image, page_coords, _ = self.workspace.image_from_page(
             page, page_id,
             feature_filter=self.parameter['feature_filter'],
             feature_selector=self.parameter['feature_selector'],
@@ -75,4 +75,3 @@ class ReplaceOriginal(Processor):
                                 glyph.get_Coords().set_points(points_from_polygon(glyph_polygon))
                                 ensure_valid(glyph)
         return result
-

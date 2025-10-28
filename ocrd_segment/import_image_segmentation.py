@@ -8,7 +8,6 @@ import cv2
 
 from ocrd_utils import (
     points_from_polygon,
-    pushd_popd,
     membername
 )
 # pragma pylint: disable=unused-import

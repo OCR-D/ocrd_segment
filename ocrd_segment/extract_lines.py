@@ -275,7 +275,8 @@ class ExtractLines(Processor):
                         'object_position': 1, 'url': url, 'y_scale': scale, 'x_scale': scale})
                 file_path = file_path.replace(extension + MIME_TO_EXT[self.parameter['mimetype']], '.json')
                 if 'json' in out_types:
-                    json.dump(description, open(file_path, 'w'), indent=2)
+                    with open(file_path, 'w') as f:
+                        json.dump(description, f, indent=2)
                 file_path = file_path.replace('.json', '.gt.txt')
                 if 'text' in out_types:
                     with open(file_path, 'wb') as f:

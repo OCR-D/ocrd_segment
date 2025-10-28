@@ -9,7 +9,6 @@ import numpy as np
 
 from ocrd_utils import (
     points_from_polygon,
-    MIMETYPE_PAGE,
     membername
 )
 # pragma pylint: disable=unused-import

@@ -138,9 +138,9 @@ def join_polygons(polygons, scale=20):
     pairs = itertools.combinations(range(npoly), 2)
     dists = np.zeros((npoly, npoly), dtype=float)
     for i, j in pairs:
-        dist = polygons[i].distance(polygons[j])
-        if dist < 1e-5:
-            dist = 1e-5 # if pair merely touches, we still need to get an edge
+        dist = max(polygons[i].distance(polygons[j]),
+                   # if pair merely touches, we still need to get an edge
+                   1e-5)
         dists[i, j] = dist
         dists[j, i] = dist
     dists = minimum_spanning_tree(dists, overwrite=True)

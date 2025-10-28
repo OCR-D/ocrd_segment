@@ -23,7 +23,6 @@ from ocrd_utils import (
 from ocrd_modelfactory import page_from_file
 from ocrd_models.ocrd_file import OcrdFileType
 from ocrd_models.ocrd_page import (
-    OcrdPage,
     OrderedGroupType,
     OrderedGroupIndexedType,
     RegionRefType,
@@ -37,7 +36,6 @@ from ocrd import Workspace, Processor
 #  but added alpha channel to also discern subtype, if not visually;
 #  ordered such that overlaps still allows maximum separation)
 # (Not used any more; now as default to ocrd-tool.json parameter.)
-# pragma pylint: disable=bad-whitespace
 CLASSES = {
     '':                                     'FFFFFF00',
     'Glyph':                                '2E8B08FF',
@@ -98,7 +96,6 @@ CLASSES = {
     'ReadingOrderLevel1':                   '9400D3FF',
     'ReadingOrderLevelN':                   '8B0000FF',
 }
-# pragma pylint: enable=bad-whitespace
 
 
 class ExtractPages(Processor):
@@ -174,12 +171,14 @@ class ExtractPages(Processor):
         # reduce to just a single fileGrp, so core's process_page_file can be reused
         self.output_file_grp = file_groups[0]
 
+        self.classes = self.parameter['colordict']
+
         # COCO: init data structures
         self.images = []
         self.annotations = []
         self.categories = []
         cat_id = 0
-        for cat, color in self.parameter['colordict'].items():
+        for cat, color in self.classes.items():
             # COCO format does not allow alpha channel
             color = (int(color[0:2], 16),
                      int(color[2:4], 16),
@@ -220,12 +219,11 @@ class ExtractPages(Processor):
         # FIXME: add to METS as well?
         with open(os.path.join(workspace.directory, file_id), 'w') as out:
             json.dump(dict((col, name)
-                           for name, col in classes.items()
+                           for name, col in self.classes.items()
                            if name),
                       out, indent=2)
 
     def process_page_file(self, *input_files : Optional[OcrdFileType]) -> None:
-        classes = self.parameter['colordict']
         input_file = input_files[0]
         page_id = input_file.pageId
         try:
@@ -296,12 +294,12 @@ class ExtractPages(Processor):
         else:
             poly = Polygon(polygon_from_bbox(0, 0, page_image.width, page_image.height))
         if 'page' in self.parameter['plot_segmasks']:
-            plot_segment(self.logger, page_id, page.get_Border(), poly, 'Border', classes,
+            plot_segment(self.logger, page_id, page.get_Border(), poly, 'Border', self.classes,
                          page_image_segmask, [], self.parameter['plot_overlay'])
         # get regions and aggregate masks on all hierarchy levels
         description = {'angle': page.get_orientation()}
         regions = {}
-        for name in classes:
+        for name in self.classes:
             if not name or not name.endswith('Region'):
                 # no region subtypes or non-region types here
                 continue
@@ -320,7 +318,7 @@ class ExtractPages(Processor):
                 poly = segment_poly(self.logger, page_id, region, page_coords)
                 # produce region mask plot, if necessary
                 if 'region' in self.parameter['plot_segmasks']:
-                    plot_segment(self.logger, page_id, region, poly, rtype0, classes,
+                    plot_segment(self.logger, page_id, region, poly, rtype0, self.classes,
                                  page_image_segmask, neighbors['region'],
                                  self.parameter['plot_overlay'])
                 if rtype == 'TextRegion':
@@ -329,7 +327,7 @@ class ExtractPages(Processor):
                         # produce line mask plot, if necessary
                         if 'line' in self.parameter['plot_segmasks']:
                             poly2 = segment_poly(self.logger, page_id, line, page_coords)
-                            plot_segment(self.logger, page_id, line, poly2, 'TextLine', classes,
+                            plot_segment(self.logger, page_id, line, poly2, 'TextLine', self.classes,
                                          page_image_segmask, neighbors['line'],
                                          self.parameter['plot_overlay'])
                         words = line.get_Word()
@@ -337,7 +335,7 @@ class ExtractPages(Processor):
                             # produce line mask plot, if necessary
                             if 'word' in self.parameter['plot_segmasks']:
                                 poly2 = segment_poly(self.logger, page_id, word, page_coords)
-                                plot_segment(self.logger, page_id, word, poly2, 'Word', classes,
+                                plot_segment(self.logger, page_id, word, poly2, 'Word', self.classes,
                                              page_image_segmask, neighbors['word'],
                                              self.parameter['plot_overlay'])
                             glyphs = word.get_Glyph()
@@ -345,7 +343,7 @@ class ExtractPages(Processor):
                                 # produce line mask plot, if necessary
                                 if 'glyph' in self.parameter['plot_segmasks']:
                                     poly2 = segment_poly(self.logger, page_id, glyph, page_coords)
-                                    plot_segment(self.logger, page_id, glyph, poly2, 'Glyph', classes,
+                                    plot_segment(self.logger, page_id, glyph, poly2, 'Glyph', self.classes,
                                                  page_image_segmask, neighbors['glyph'],
                                                  self.parameter['plot_overlay'])
                 if not poly:
@@ -378,7 +376,7 @@ class ExtractPages(Processor):
                      'iscrowd': 0})
 
         if 'order' in self.parameter['plot_segmasks']:
-            plot_order(self.logger, page.get_ReadingOrder(), classes, page_image_segmask,
+            plot_order(self.logger, page.get_ReadingOrder(), self.classes, page_image_segmask,
                        neighbors['region'], self.parameter['plot_overlay'])
         if self.parameter['plot_segmasks']:
             self.workspace.save_image_file(
