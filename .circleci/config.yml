@@ -23,6 +23,14 @@ jobs:
           name: Login to Docker Hub
           command: echo "$DOCKERHUB_PASS" | docker login --username "$DOCKERHUB_USER" --password-stdin
       - run: docker push ocrd/segment
+  deploy-pypi:
+    docker:
+      - image: ocrd/segment
+    steps:
+      - checkout
+      - run: pip install twine build
+      - run: python -m build .
+      - run: twine upload dist/*
 
 workflows:
   version: 2
@@ -32,6 +40,12 @@ workflows:
   deploy:
     jobs:
       - deploy-docker:
+          filters:
+            branches:
+              only: master
+      - deploy-pypi:
+          requires:
+            - deploy-docker
           filters:
             branches:
               only: master
