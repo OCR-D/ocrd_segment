@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from typing import Optional
+from collections import OrderedDict as odict
 
 from skimage import draw
 from scipy.ndimage import filters, morphology
@@ -464,7 +465,7 @@ def _plausibilize_segments(segpolys, rogroup, marked_for_deletion, marked_for_me
     Finally, update the reading order ``rogroup`` accordingly.
     """
     wait_for_deletion = list()
-    reading_order = dict()
+    reading_order = odict()
     page_get_reading_order(reading_order, rogroup)
     for seg, poly in segpolys:
         if isinstance(seg, TextRegionType):
@@ -532,12 +533,15 @@ def page_get_reading_order(ro, rogroup):
         regionrefs = (rogroup.get_RegionRefIndexed() +
                       rogroup.get_OrderedGroupIndexed() +
                       rogroup.get_UnorderedGroupIndexed())
+        regionrefs = sorted(regionrefs, key=lambda x: x.index)
     if isinstance(rogroup, (UnorderedGroupType, UnorderedGroupIndexedType)):
         regionrefs = (rogroup.get_RegionRef() +
                       rogroup.get_OrderedGroup() +
                       rogroup.get_UnorderedGroup())
     for elem in regionrefs:
-        ro[elem.get_regionRef()] = elem
+        ref = elem.get_regionRef()
+        if ref is not None:
+            ro[ref] = elem
         if not isinstance(elem, (RegionRefType, RegionRefIndexedType)):
             # recursive reading order element (un/ordered group):
             page_get_reading_order(ro, elem)

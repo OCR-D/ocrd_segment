@@ -518,7 +518,7 @@
       "categories": ["Layout analysis"],
       "description": "Compare segmentations",
       "input_file_grp_cardinality": 2,
-      "output_file_grp_cardinality": 1,
+      "output_file_grp_cardinality": [1, 2],
       "steps": ["layout/analysis"],
       "parameters": {
         "level-of-operation": {

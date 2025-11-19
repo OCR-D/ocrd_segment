@@ -152,10 +152,12 @@ def join_polygons(polygons, scale=20):
         bridgep = orient(LineString(nearest).buffer(max(1, scale/5), resolution=1), -1)
         polygons.append(bridgep)
     jointp = unary_union(polygons)
+    if jointp.geom_type == 'MultiPolygon':
+        jointp = unary_union(jointp.geoms)
     assert jointp.geom_type == 'Polygon', jointp.wkt
     # follow-up calculations will necessarily be integer;
     # so anticipate rounding here and then ensure validity
-    jointp2 = set_precision(jointp, 1.0)
+    jointp2 = set_precision(jointp, 1.0, mode="keep_collapsed")
     if jointp2.geom_type != 'Polygon' or not jointp2.is_valid:
         jointp2 = Polygon(np.round(jointp.exterior.coords))
         jointp2 = make_valid(jointp2)
@@ -209,14 +211,15 @@ def make_intersection(poly1, poly2):
     if interp.geom_type == 'MultiPolygon':
         # homogeneous result: construct convex hull to connect
         interp = join_polygons(interp.geoms)
-    # follow-up calculations will necessarily be integer;
-    # so anticipate rounding here and then ensure validity
-    interp = set_precision(interp, 1.0)
+    assert interp.geom_type == 'Polygon', interp.wkt
+    interp = make_valid(interp)
     return interp
 
 def make_valid(polygon):
     """Ensures shapely.geometry.Polygon object is valid by repeated rearrangement/simplification/enlargement."""
-    points = list(polygon.exterior.coords)
+    def isint(x):
+        return isinstance(x, int) or int(x) == x
+    points = list(polygon.exterior.coords[:-1])
     # try by re-arranging points
     for split in range(1, len(points)):
         if polygon.is_valid or polygon.simplify(polygon.area).is_valid:
