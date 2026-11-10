@@ -82,8 +82,7 @@ METRICS = ['precision',
 ]
 
 # PRImA constants
-ALLOWANCE = 10 # pixels bboxes may overlap in direction of merge/split to still be allowable
-ALLOWANCE = 15
+ALLOWANCE = 25 # pixels bboxes may overlap in direction of merge/split to still be allowable
 
 # aesthetic constants (must be allowed in XML ID)
 MATCHING_SYM = '·'
