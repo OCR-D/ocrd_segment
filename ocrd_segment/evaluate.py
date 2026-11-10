@@ -361,11 +361,17 @@ def evaluate_files(gt_files, dt_files, img_files=None, level='region', typed=Tru
         page_dt = pcgts_dt.get_Page()
         if img_file:
             page_image = Image.open(img_file)
-            assert page_image.mode == '1', "input images must already be binarized"
-            assert page_image.width - 2 < page_gt.get_imageWidth() < page_image.width + 2, \
-                "mismatch between width of binary image and PAGE description"
-            assert page_image.height - 2 < page_gt.get_imageHeight() < page_image.height + 2, \
-                "mismatch between height of binary image and PAGE description"
+            if page_image.mode == 'L' and len(list(filter(None, page_image.histogram()))) == 2:
+                page_image = page_image.convert('1')
+            assert page_image.mode == '1', (
+                "input images must already be binarized",
+                img_file)
+            assert page_image.width - 2 < page_gt.get_imageWidth() < page_image.width + 2, (
+                "mismatch between width of binary image and PAGE description",
+                img_file, gt_file)
+            assert page_image.height - 2 < page_gt.get_imageHeight() < page_image.height + 2, (
+                "mismatch between height of binary image and PAGE description",
+                img_file, gt_file)
             page_mask = ~ np.array(page_image)
             page_coords = {"transform": np.eye(3), "angle": 0, "features": "binarized"}
         imgid = len(images)
